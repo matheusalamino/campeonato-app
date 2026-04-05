@@ -165,7 +165,7 @@ export function Sidebar({ role }: { role: string | null }) {
           </Link>
 
           <Link
-            href="/draft"
+            href="/draft-night"
             className={`px-4 py-2 rounded-lg ${
               isActive("/draft")
                 ? "bg-blue-600 text-white"
@@ -190,6 +190,13 @@ export function Sidebar({ role }: { role: string | null }) {
             className="px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-800 rounded"
           >
             Jogadores
+          </Link>
+
+          <Link
+            href="/managers"
+            className="px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-800 rounded"
+          >
+            Cartolas
           </Link>
         </nav>
 

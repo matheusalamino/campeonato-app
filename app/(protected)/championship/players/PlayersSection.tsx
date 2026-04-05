@@ -50,6 +50,10 @@ export default function PlayersSection({
     "all",
   );
 
+  const [importErrors, setImportErrors] = useState<
+    { line: number; error: string }[]
+  >([]);
+
   const [page, setPage] = useState(1);
 
   const playersPerPage = 5;
@@ -137,40 +141,39 @@ export default function PlayersSection({
   async function handleImport(file: File) {
     startLoading();
     setImporting(true);
-    setProgress(10);
 
     const formData = new FormData();
     formData.append("file", file);
     formData.append("championshipId", championshipId);
-
-    setProgress(30);
 
     const res = await fetch("/api/import-players", {
       method: "POST",
       body: formData,
     });
 
+    const data = await res.json();
+
     if (!res.ok) {
-      const err = await res.json();
-      toast.error(err.error || "Erro ao importar");
+      toast.error(data.error || "Erro ao importar");
       stopLoading();
       return;
     }
 
-    setProgress(90);
+    if (data.errorCount > 0) {
+      console.log("Erros:", data.errors);
 
-    setTimeout(() => {
-      setProgress(100);
-      setImporting(false);
-      router.refresh();
+      toast.warning(
+        `${data.successCount} importados, ${data.errorCount} com erro`,
+      );
 
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+      // 👉 aqui você pode salvar no state pra exibir
+      setImportErrors(data.errors);
+    } else {
+      toast.success(`Importados ${data.successCount} jogadores`);
+    }
 
-      setTimeout(() => setProgress(0), 1000);
-    }, 500);
-
+    setImporting(false);
+    router.refresh();
     stopLoading();
   }
 
@@ -204,6 +207,22 @@ export default function PlayersSection({
             <span className="text-xs text-zinc-400">
               Importar inscrições em massa
             </span>
+
+            {importErrors.length > 0 && (
+              <div className="bg-red-900/40 border border-red-500 rounded-lg p-4 space-y-2">
+                <h3 className="text-red-400 font-semibold">
+                  Erros na importação ({importErrors.length})
+                </h3>
+
+                <div className="max-h-40 overflow-auto text-sm space-y-1">
+                  {importErrors.map((err, i) => (
+                    <div key={i} className="text-red-300">
+                      Linha {err.line}: {err.error}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* BARRA DE PROGRESSO */}
