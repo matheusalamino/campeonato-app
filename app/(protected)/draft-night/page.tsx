@@ -7,12 +7,15 @@ import { useEffect, useState } from "react";
 type PotPlayer = {
   id: string;
   name: string;
+  overall: number;
+  photo: string | null;
 };
 
 type Pot = {
   pot_number: number;
   position: string;
   players: PotPlayer[];
+  average_overall: number;
 };
 
 export default function DraftNightPage() {
@@ -26,27 +29,30 @@ export default function DraftNightPage() {
   async function handleGeneratePots() {
     if (!championship?.id) return;
 
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    const res = await fetch("/api/draft/generate-pots", {
-      method: "POST",
-      body: JSON.stringify({ championshipId: championship.id }),
-    });
+      const res = await fetch("/api/draft/generate-pots", {
+        method: "POST",
+        body: JSON.stringify({ championshipId: championship.id }),
+      });
 
-    const data = await res.json();
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || "Erro ao gerar potes");
+      }
 
-    setLoading(false);
-
-    if (!res.ok) {
-      alert(data.error);
-      return;
+      const potsData = await loadPots(championship.id);
+      if (potsData) setPots(potsData);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro inesperado";
+      alert(message);
+    } finally {
+      setLoading(false);
     }
-
-    // 🔥 reload depois de gerar
-    await loadPots(championship.id);
   }
 
-  // ── FUNÇÃO SEGURA (fora do effect NÃO chama setState direto) ──
+  // ── LOAD POTS ─────────────────────────────
   async function loadPots(championshipId: string) {
     const res = await fetch(
       `/api/draft/get-pots?championshipId=${championshipId}`,
@@ -81,6 +87,21 @@ export default function DraftNightPage() {
       isMounted = false;
     };
   }, [championship?.id]);
+
+  // ── HELPERS ─────────────────────────────
+  function getOverallColor(overall: number) {
+    if (overall >= 90) return "text-green-400";
+    if (overall >= 85) return "text-yellow-400";
+    return "text-zinc-400";
+  }
+
+  function getInitials(name: string) {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .slice(0, 2)
+      .join("");
+  }
 
   // ── RENDER ─────────────────────────────
   return (
@@ -121,7 +142,7 @@ export default function DraftNightPage() {
             </button>
           </div>
 
-          {/* LISTA DE POTES */}
+          {/* LISTA */}
           <div className="space-y-2">
             {pots.length === 0 && (
               <p className="text-sm text-zinc-500">Nenhum pote gerado ainda.</p>
@@ -135,9 +156,11 @@ export default function DraftNightPage() {
                   setExpandedPot(expandedPot === index ? null : index)
                 }
               >
+                {/* HEADER */}
                 <div className="flex justify-between items-center">
                   <span className="font-medium">
-                    Pote {String.fromCharCode(65 + index)} • {pot.position}
+                    Pote {String.fromCharCode(65 + index)} • {pot.position} •
+                    Média: {pot.average_overall}
                   </span>
 
                   <span className="text-xs text-zinc-400">
@@ -145,11 +168,37 @@ export default function DraftNightPage() {
                   </span>
                 </div>
 
+                {/* PLAYERS */}
                 {expandedPot === index && (
-                  <div className="mt-3 space-y-1 border-t border-zinc-700 pt-2">
+                  <div className="mt-3 space-y-2 border-t border-zinc-700 pt-2">
                     {pot.players.map((player) => (
-                      <div key={player.id} className="text-sm text-zinc-300">
-                        • {player.name}
+                      <div
+                        key={player.id}
+                        className="text-sm flex justify-between items-center"
+                      >
+                        <div className="flex items-center gap-2">
+                          {player.photo ? (
+                            <img
+                              src={player.photo}
+                              alt={player.name}
+                              className="w-7 h-7 rounded-full object-cover border border-zinc-600"
+                            />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-zinc-700 flex items-center justify-center text-xs">
+                              {getInitials(player.name)}
+                            </div>
+                          )}
+
+                          <span className="text-zinc-300">{player.name}</span>
+                        </div>
+
+                        <span
+                          className={`font-semibold ${getOverallColor(
+                            player.overall,
+                          )}`}
+                        >
+                          {player.overall}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -159,7 +208,7 @@ export default function DraftNightPage() {
           </div>
         </div>
 
-        {/* FUTUROS CARDS */}
+        {/* FUTURO */}
         <div className="bg-zinc-900 p-5 rounded-2xl shadow-lg flex items-center justify-center text-zinc-500">
           Outras configurações em breve...
         </div>

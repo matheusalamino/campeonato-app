@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useRef } from "react";
 import MenuLeilao from "@/components/draftNight/MenuDraft";
-import CartolasSlideshow from "@/components/draftNight/ManagersSlideShow";
+import ManagersSlideshow from "@/components/draftNight/ManagersSlideShow";
+import TeamsSlideshow from "@/components/draftNight/TeamsSlideShow";
+import ChaveamentoSlideshow from "@/components/draftNight/Chaveamentoslideshow";
 import { useSearchParams } from "next/navigation";
 
 type Step =
@@ -41,7 +43,6 @@ function GoldParticles() {
       opacityDelta: number;
       color: string;
     };
-
     const colors = [
       "rgba(255,200,50,",
       "rgba(255,160,20,",
@@ -49,7 +50,6 @@ function GoldParticles() {
       "rgba(255,240,120,",
       "rgba(180,100,0,",
     ];
-
     const particles: Particle[] = Array.from({ length: 180 }, () => ({
       x: Math.random() * window.innerWidth,
       y: Math.random() * window.innerHeight,
@@ -59,7 +59,7 @@ function GoldParticles() {
       opacity: Math.random(),
       opacityDelta:
         (Math.random() * 0.008 + 0.002) * (Math.random() > 0.5 ? 1 : -1),
-      color: colors[Math.floor(Math.random() * colors.length)],
+      color: colors[Math.floor(Math.random() * colors.length)]!,
     }));
 
     let animId: number;
@@ -114,7 +114,7 @@ function GoldParticles() {
   );
 }
 
-// ── SLIDE CONTENT (non-cartola slides) ─────────────────────
+// ── SLIDE CONTENT ──────────────────────────────────────────
 type SlideData = { eyebrow?: string; title: string; body?: string };
 const slideContent: Partial<Record<Step, SlideData>> = {
   apresentacao: {
@@ -144,7 +144,7 @@ const slideContent: Partial<Record<Step, SlideData>> = {
   },
 };
 
-// ── MENU ICON ───────────────────────────────────────────────
+// ── ICONS ──────────────────────────────────────────────────
 const MenuGridIcon = () => (
   <svg
     width="18"
@@ -163,17 +163,17 @@ const MenuGridIcon = () => (
   </svg>
 );
 
-// ── CONSTANTS ───────────────────────────────────────────────
-// The main flow: cartolas_intro is the "title slide" for cartolas,
-// cartolas_show is where the CartolasSlideshow renders.
+// ── INTERNAL STEPS ─────────────────────────────────────────
 type InternalStep =
   | "intro"
   | "apresentacao"
   | "menu"
   | "cartolas_intro"
   | "cartolas_show"
-  | "times"
-  | "chaveamento"
+  | "times_intro"
+  | "times_show"
+  | "chaveamento_intro"
+  | "chaveamento_show"
   | "jogadores";
 
 const FLOW: InternalStep[] = [
@@ -182,40 +182,48 @@ const FLOW: InternalStep[] = [
   "menu",
   "cartolas_intro",
   "cartolas_show",
-  "times",
-  "chaveamento",
+  "times_intro",
+  "times_show",
+  "chaveamento_intro",
+  "chaveamento_show",
   "jogadores",
 ];
 
-// Which steps map to Step for the menu
 const MENU_MAP: Record<Step, InternalStep> = {
   intro: "intro",
   apresentacao: "apresentacao",
   menu: "menu",
   cartolas: "cartolas_intro",
-  times: "times",
-  chaveamento: "chaveamento",
+  times: "times_intro",
+  chaveamento: "chaveamento_intro",
   jogadores: "jogadores",
 };
 
 const MENU_STEPS: InternalStep[] = [
   "cartolas_intro",
   "cartolas_show",
-  "times",
-  "chaveamento",
+  "times_intro",
+  "times_show",
+  "chaveamento_intro",
+  "chaveamento_show",
   "jogadores",
 ];
 
-// Slide data indexed by internal step
+const SLIDESHOW_STEPS: InternalStep[] = [
+  "cartolas_show",
+  "times_show",
+  "chaveamento_show",
+];
+
 const internalSlideContent: Partial<Record<InternalStep, SlideData>> = {
   apresentacao: slideContent.apresentacao,
   cartolas_intro: slideContent.cartolas,
-  times: slideContent.times,
-  chaveamento: slideContent.chaveamento,
+  times_intro: slideContent.times,
+  chaveamento_intro: slideContent.chaveamento,
   jogadores: slideContent.jogadores,
 };
 
-// ── MAIN ────────────────────────────────────────────────────
+// ── MAIN ───────────────────────────────────────────────────
 export default function DraftPresentation() {
   const searchParams = useSearchParams();
   const championshipId = searchParams.get("championshipId");
@@ -225,19 +233,19 @@ export default function DraftPresentation() {
   const goToMenuStep = (menuStep: Step) => setStep(MENU_MAP[menuStep]);
 
   function next() {
-    // cartolas_show advances internally via CartolasSlideshow; here we skip
     const i = FLOW.indexOf(step);
-    if (FLOW[i + 1]) setStep(FLOW[i + 1]);
+    if (FLOW[i + 1]) setStep(FLOW[i + 1]!);
   }
   function prev(e?: React.MouseEvent) {
     e?.stopPropagation();
     const i = FLOW.indexOf(step);
-    if (FLOW[i - 1]) setStep(FLOW[i - 1]);
+    if (FLOW[i - 1]) setStep(FLOW[i - 1]!);
   }
 
-  // Global keyboard (only for non-cartolas_show steps)
+  const isSlideshowStep = SLIDESHOW_STEPS.includes(step);
+
   useEffect(() => {
-    if (step === "cartolas_show") return; // CartolasSlideshow handles its own keys
+    if (isSlideshowStep) return;
     function handleKey(e: KeyboardEvent) {
       if (e.key === "ArrowRight") next();
       if (e.key === "ArrowLeft") prev();
@@ -248,102 +256,52 @@ export default function DraftPresentation() {
   }, [step]);
 
   if (!championshipId) {
-    return <div className="text-white">Campeonato não informado</div>;
+    return <div className="text-white p-8">Campeonato não informado</div>;
   }
 
   const isFirst = FLOW.indexOf(step) === 0;
   const isLast = FLOW.indexOf(step) === FLOW.length - 1;
   const isMenuStep = MENU_STEPS.includes(step);
   const slide = internalSlideContent[step];
-
-  // For the main click-to-advance, disable during menu and cartolas_show
-  const clickAdvances = step !== "menu" && step !== "cartolas_show";
+  const clickAdvances = step !== "menu" && !isSlideshowStep;
 
   return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=EB+Garamond:ital,wght@0,400;0,600;1,400&display=swap');
 
-        .gold-text {
-          background: linear-gradient(160deg,#fff0a0 0%,#f5c842 18%,#c8860a 36%,#f5c842 52%,#ffe066 68%,#b8720a 84%,#f5c842 100%);
-          -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
-          filter:drop-shadow(0 0 18px rgba(255,180,30,.55));
-        }
-        .gold-text-subtle {
-          background:linear-gradient(135deg,#e8c84a 0%,#f5d76e 50%,#c9952a 100%);
-          -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
-        }
+        .gold-text{background:linear-gradient(160deg,#fff0a0 0%,#f5c842 18%,#c8860a 36%,#f5c842 52%,#ffe066 68%,#b8720a 84%,#f5c842 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 0 18px rgba(255,180,30,.55))}
+        .gold-text-subtle{background:linear-gradient(135deg,#e8c84a 0%,#f5d76e 50%,#c9952a 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 
-        @keyframes fadeIn       { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes fadeInScale  { from{opacity:0;transform:scale(.88)} to{opacity:1;transform:scale(1)} }
-        @keyframes float        { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-18px)} }
-        @keyframes glowPulse    { 0%,100%{opacity:.6} 50%{opacity:1} }
-        @keyframes spin         { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        @keyframes fadeIn      {from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes fadeInScale {from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
+        @keyframes float       {0%,100%{transform:translateY(0)}50%{transform:translateY(-18px)}}
+        @keyframes glowPulse   {0%,100%{opacity:.6}50%{opacity:1}}
 
-        .animate-fadeIn      { animation:fadeIn .7s ease both; }
-        .animate-fadeInScale { animation:fadeInScale .8s cubic-bezier(.22,1,.36,1) both; }
-        .animate-float       { animation:float 4s ease-in-out infinite; }
-        .animate-glowPulse   { animation:glowPulse 2.5s ease-in-out infinite; }
+        .animate-fadeIn      {animation:fadeIn .7s ease both}
+        .animate-fadeInScale {animation:fadeInScale .8s cubic-bezier(.22,1,.36,1) both}
+        .animate-float       {animation:float 4s ease-in-out infinite}
+        .animate-glowPulse   {animation:glowPulse 2.5s ease-in-out infinite}
 
-        .slide-title {
-          font-family:'Cinzel',serif;
-          letter-spacing:.12em;
-          text-transform:uppercase;
-          line-height:1.1;
-          white-space:pre-line;
-        }
+        .slide-title{font-family:'Cinzel',serif;letter-spacing:.12em;text-transform:uppercase;line-height:1.1;white-space:pre-line}
+        .divider{display:flex;align-items:center;gap:16px;width:100%;max-width:520px;margin:0 auto}
+        .div-line{flex:1;height:1px;background:linear-gradient(90deg,transparent,#c8a84a,transparent)}
+        .div-gem{width:8px;height:8px;background:#c8a84a;transform:rotate(45deg);flex-shrink:0}
 
-        .divider { display:flex; align-items:center; gap:16px; width:100%; max-width:520px; margin:0 auto; }
-        .div-line { flex:1; height:1px; background:linear-gradient(90deg,transparent,#c8a84a,transparent); }
-        .div-gem  { width:8px;height:8px;background:#c8a84a;transform:rotate(45deg);flex-shrink:0; }
+        .step-dot{width:8px;height:8px;border-radius:50%;background:rgba(200,168,74,.3);border:1px solid rgba(200,168,74,.5);transition:all .3s;cursor:pointer}
+        .step-dot:hover{background:rgba(200,168,74,.5)}
+        .step-dot.active{background:#c8a84a;box-shadow:0 0 10px rgba(200,168,74,.8);transform:scale(1.35)}
 
-        .step-dot {
-          width:8px;height:8px;border-radius:50%;
-          background:rgba(200,168,74,.3);border:1px solid rgba(200,168,74,.5);
-          transition:all .3s;cursor:pointer;
-        }
-        .step-dot:hover { background:rgba(200,168,74,.5); }
-        .step-dot.active {
-          background:#c8a84a;
-          box-shadow:0 0 10px rgba(200,168,74,.8);
-          transform:scale(1.35);
-        }
+        .nav-btn{background:rgba(0,0,0,.45);border:1px solid rgba(200,168,74,.35);color:#c8a84a;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;transition:all .2s;backdrop-filter:blur(8px)}
+        .nav-btn:hover{background:rgba(200,168,74,.2);border-color:#c8a84a;box-shadow:0 0 16px rgba(200,168,74,.4)}
+        .nav-btn:disabled{opacity:.25;cursor:default}
 
-        .nav-btn {
-          background:rgba(0,0,0,.45);
-          border:1px solid rgba(200,168,74,.35);
-          color:#c8a84a;
-          width:44px;height:44px;border-radius:50%;
-          display:flex;align-items:center;justify-content:center;
-          font-size:18px;cursor:pointer;
-          transition:all .2s;backdrop-filter:blur(8px);
-        }
-        .nav-btn:hover { background:rgba(200,168,74,.2); border-color:#c8a84a; box-shadow:0 0 16px rgba(200,168,74,.4); }
-        .nav-btn:disabled { opacity:.25;cursor:default; }
+        .menu-btn{background:rgba(0,0,0,.45);border:1px solid rgba(200,168,74,.35);color:#c8a84a;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s;backdrop-filter:blur(8px)}
+        .menu-btn:hover{background:rgba(200,168,74,.2);border-color:#c8a84a;box-shadow:0 0 16px rgba(200,168,74,.4)}
+        .menu-btn.is-active{background:rgba(200,168,74,.25);border-color:#c8a84a;box-shadow:0 0 20px rgba(200,168,74,.5)}
 
-        .menu-btn {
-          background:rgba(0,0,0,.45);
-          border:1px solid rgba(200,168,74,.35);
-          color:#c8a84a;
-          width:44px;height:44px;border-radius:50%;
-          display:flex;align-items:center;justify-content:center;
-          cursor:pointer;transition:all .2s;backdrop-filter:blur(8px);
-        }
-        .menu-btn:hover { background:rgba(200,168,74,.2); border-color:#c8a84a; box-shadow:0 0 16px rgba(200,168,74,.4); }
-        .menu-btn.is-active { background:rgba(200,168,74,.25); border-color:#c8a84a; box-shadow:0 0 20px rgba(200,168,74,.5); }
-
-        .back-badge {
-          position:fixed; top:20px; left:50%; transform:translateX(-50%);
-          display:flex; align-items:center; gap:8px;
-          background:rgba(0,0,0,.45); border:1px solid rgba(200,168,74,.35);
-          border-radius:99px; padding:6px 16px;
-          backdrop-filter:blur(8px); cursor:pointer;
-          transition:all .2s; z-index:50;
-          font-family:'Cinzel',serif; font-size:.65rem; letter-spacing:.2em;
-          text-transform:uppercase; color:rgba(200,168,74,.7);
-          animation:fadeIn .4s ease both;
-        }
-        .back-badge:hover { background:rgba(200,168,74,.15); border-color:#c8a84a; color:#c8a84a; }
+        .back-badge{position:fixed;top:20px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.45);border:1px solid rgba(200,168,74,.35);border-radius:99px;padding:6px 16px;backdrop-filter:blur(8px);cursor:pointer;transition:all .2s;z-index:50;font-family:'Cinzel',serif;font-size:.65rem;letter-spacing:.2em;text-transform:uppercase;color:rgba(200,168,74,.7);animation:fadeIn .4s ease both}
+        .back-badge:hover{background:rgba(200,168,74,.15);border-color:#c8a84a;color:#c8a84a}
       `}</style>
 
       <div
@@ -412,8 +370,8 @@ export default function DraftPresentation() {
           }}
         />
 
-        {/* ── TROPHY (hidden during cartolas_show to give room) ── */}
-        {step !== "intro" && step !== "cartolas_show" && (
+        {/* Trophy */}
+        {step !== "intro" && !isSlideshowStep && (
           <img
             src="/images/taca.png"
             alt="Taça"
@@ -430,7 +388,7 @@ export default function DraftPresentation() {
           />
         )}
 
-        {/* ── BACK TO MENU badge ── */}
+        {/* Back to menu badge */}
         {isMenuStep && (
           <button
             className="back-badge"
@@ -483,16 +441,32 @@ export default function DraftPresentation() {
 
           {step === "menu" && <MenuLeilao onNavigate={goToMenuStep} />}
 
-          {/* CARTOLAS SLIDESHOW */}
           {step === "cartolas_show" && (
-            <CartolasSlideshow
+            <ManagersSlideshow
               championshipId={championshipId}
-              onFinished={() => goTo("times")}
+              onFinished={() => goTo("times_intro")}
+              onGoToMenu={() => goTo("menu")}
             />
           )}
 
-          {/* GENERIC SLIDE */}
-          {slide && step !== "menu" && step !== "cartolas_show" && (
+          {step === "times_show" && (
+            <TeamsSlideshow
+              championshipId={championshipId}
+              onFinished={() => goTo("chaveamento_intro")}
+              onGoToMenu={() => goTo("menu")}
+            />
+          )}
+
+          {step === "chaveamento_show" && (
+            <ChaveamentoSlideshow
+              championshipId={championshipId}
+              onFinished={() => goTo("jogadores")}
+              onGoToMenu={() => goTo("menu")}
+            />
+          )}
+
+          {/* Generic title slides */}
+          {slide && step !== "menu" && !isSlideshowStep && (
             <div className="animate-fadeIn flex flex-col items-center gap-8">
               {slide.eyebrow && (
                 <p
@@ -538,13 +512,13 @@ export default function DraftPresentation() {
           )}
         </div>
 
-        {/* ── STEP DOTS (hidden during cartolas_show — it has its own) ── */}
-        {step !== "cartolas_show" && (
+        {/* Step dots */}
+        {!isSlideshowStep && (
           <div
             className="fixed bottom-6 left-1/2 -translate-x-1/2 flex gap-3"
             style={{ zIndex: 50 }}
           >
-            {FLOW.filter((s) => s !== "cartolas_show").map((s) => (
+            {FLOW.filter((s) => !SLIDESHOW_STEPS.includes(s)).map((s) => (
               <div
                 key={s}
                 className={`step-dot ${step === s ? "active" : ""}`}
@@ -558,8 +532,8 @@ export default function DraftPresentation() {
           </div>
         )}
 
-        {/* ── NAV (hidden during cartolas_show — it has its own) ── */}
-        {step !== "cartolas_show" && (
+        {/* Nav */}
+        {!isSlideshowStep && (
           <div
             className="fixed bottom-4 left-4 flex gap-2"
             style={{ zIndex: 50 }}
@@ -590,8 +564,8 @@ export default function DraftPresentation() {
           </div>
         )}
 
-        {/* ── HINT ── */}
-        {step !== "cartolas_show" && (
+        {/* Hint */}
+        {!isSlideshowStep && (
           <div
             className="fixed bottom-5 right-5"
             style={{

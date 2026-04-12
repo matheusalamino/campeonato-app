@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+// ✅ Same shared client used in useTeams — adjust path if needed
+import { createClient } from "@/lib/supabase/client";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-);
+const supabase = createClient();
 
 // ── Types ──────────────────────────────────────────────────
 export type PreviousTitle = {
@@ -32,10 +30,9 @@ type ChampionshipManagerEntry = {
   };
 };
 
-// Must match the Supabase join key exactly — plural because that's the table name
 type HistoryEntry = {
   championship_id: string;
-  championships: { id: string; name: string } | null; // ✅ plural
+  championships: { id: string; name: string } | null;
 };
 
 // ── Hook ───────────────────────────────────────────────────
@@ -82,7 +79,7 @@ export function useManagers(championshipId: string) {
 
             const titleMap: Record<string, number> = {};
             (history ?? []).forEach((h) => {
-              const name = h.championships?.name; // ✅ plural — matches Supabase join key
+              const name = h.championships?.name;
               if (name) titleMap[name] = (titleMap[name] ?? 0) + 1;
             });
 

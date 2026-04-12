@@ -132,6 +132,17 @@ export function Sidebar({ role }: { role: string | null }) {
           </Link>
 
           <Link
+            href="/championship/settings"
+            className={`px-4 py-2 rounded-lg ${
+              isActive("/settings")
+                ? "bg-blue-600 text-white"
+                : "text-zinc-400 hover:bg-zinc-800"
+            }`}
+          >
+            Configurações
+          </Link>
+
+          <Link
             href="/championship/teams"
             className={`px-4 py-2 rounded-lg ${
               isActive("/championship/teams")
