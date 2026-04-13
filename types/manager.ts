@@ -12,6 +12,9 @@ export interface ChampionshipManager {
   championship_id: string;
   inspirational_phrase?: string;
   team_id?: string | null;
+  initial_balance: number;
+  current_balance: number;
+  draft_sort_order?: number | null;
 }
 
 export interface ChampionshipManagerWithRelations extends ChampionshipManager {

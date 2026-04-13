@@ -4,34 +4,34 @@ overview: "Design and create new Supabase tables to support the full Copa do Mun
 todos:
   - id: alter-championship-managers
     content: ALTER championship_managers to add initial_balance, current_balance, draft_sort_order columns
-    status: pending
+    status: completed
   - id: create-balance-transactions
     content: CREATE draft_balance_transactions table (general balance ledger)
-    status: pending
+    status: completed
   - id: create-qualification-bids
     content: CREATE draft_qualification_bids table (blind bids for pot habilitacao)
-    status: pending
+    status: completed
   - id: create-pot-budgets
     content: CREATE draft_pot_budgets table (per-pot budget tracking)
-    status: pending
+    status: completed
   - id: create-special-card-uses
     content: CREATE draft_special_card_uses table (special card activations)
-    status: pending
+    status: completed
   - id: create-special-card-bids
     content: CREATE draft_special_card_bids table (blind bids during special card auction)
-    status: pending
+    status: completed
   - id: create-player-purchases
     content: CREATE draft_player_purchases table (player purchases with prices)
-    status: pending
+    status: completed
   - id: create-fines
     content: CREATE draft_fines table (all fine types)
-    status: pending
+    status: completed
   - id: create-transfers
     content: CREATE draft_transfers table (transfer window 1:1 swaps)
-    status: pending
+    status: completed
   - id: update-typescript-types
     content: Update TypeScript type definitions in types/ to match new tables
-    status: pending
+    status: completed
 isProject: false
 ---
 
