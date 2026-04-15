@@ -125,7 +125,7 @@ export default function SquadPage() {
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-zinc-950/90 backdrop-blur-sm border-b border-zinc-800 px-4 py-3">
+      <header className="sticky top-14 z-30 bg-zinc-950/90 backdrop-blur-sm border-b border-zinc-800 px-4 py-3">
         <div className="flex items-center gap-3 max-w-2xl mx-auto">
           <button
             onClick={() => router.back()}

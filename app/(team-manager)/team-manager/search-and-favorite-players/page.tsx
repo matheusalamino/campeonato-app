@@ -117,7 +117,7 @@ export default function SearchAndFavoritePlayersPage() {
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-zinc-950/90 backdrop-blur-sm border-b border-zinc-800 px-4 py-3">
+      <header className="sticky top-14 z-30 bg-zinc-950/90 backdrop-blur-sm border-b border-zinc-800 px-4 py-3">
         <div className="flex items-center gap-3 max-w-2xl mx-auto">
           <button
             onClick={() => router.back()}
@@ -130,7 +130,7 @@ export default function SearchAndFavoritePlayersPage() {
       </header>
 
       {/* Search + Filters */}
-      <div className="sticky top-[53px] z-20 bg-zinc-950/90 backdrop-blur-sm px-4 py-3 border-b border-zinc-800 space-y-3">
+      <div className="sticky top-28 z-20 bg-zinc-950/90 backdrop-blur-sm px-4 py-3 border-b border-zinc-800 space-y-3">
         <div className="max-w-2xl mx-auto space-y-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />

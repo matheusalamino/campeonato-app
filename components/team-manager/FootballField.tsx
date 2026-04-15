@@ -123,7 +123,7 @@ export function FootballField({ players }: FootballFieldProps) {
       <div className="relative z-10 h-full flex flex-col justify-between py-6 px-2">
         <PositionRow players={grouped.ATA} slots={Math.max(grouped.ATA.length, 3)} />
         <PositionRow players={grouped.MEI} slots={Math.max(grouped.MEI.length, 3)} />
-        <PositionRow players={grouped.ZAG} slots={Math.max(grouped.ZAG.length, 2)} />
+        <PositionRow players={grouped.ZAG} slots={Math.max(grouped.ZAG.length, 3)} />
         <PositionRow players={grouped.GOL} slots={1} />
       </div>
     </div>

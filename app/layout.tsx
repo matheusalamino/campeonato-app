@@ -10,7 +10,7 @@ export default function RootLayout({
     <html lang="pt-BR" className="dark">
       <body className="bg-zinc-950 text-zinc-100 min-h-screen">
         <div className="flex h-screen">
-          <main className="flex-1 overflow-y-auto p-10">{children}</main>
+          <main className="flex-1 overflow-y-auto pb-10 pr-10 pl-10 pt-0">{children}</main>
         </div>
       </body>
     </html>

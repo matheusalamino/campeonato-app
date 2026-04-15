@@ -34,7 +34,7 @@ export default function TeamManagerDashboard() {
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-zinc-950/90 backdrop-blur-sm border-b border-zinc-800 px-4 py-3 safe-top">
+      <header className="sticky top-14 z-30 bg-zinc-950/90 backdrop-blur-sm border-b border-zinc-800 px-4 py-3">
         <div className="flex items-center gap-3 max-w-2xl mx-auto">
           {ctx.teamLogoUrl ? (
             <img
