@@ -46,9 +46,9 @@ export async function GET(req: NextRequest) {
         .select("id")
         .eq("championship_id", championshipId)
         .eq("team_id", cmRes.data.team_id)
-        .single();
+        .maybeSingle();
 
-      if (ctRow) {
+      if (ctRow?.id) {
         const { count } = await supabase
           .from("championship_team_players")
           .select("id", { count: "exact", head: true })

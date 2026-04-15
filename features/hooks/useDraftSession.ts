@@ -45,42 +45,21 @@ export function useDraftSession(
 
   const fetchSession = useCallback(async () => {
     try {
-      const [cmRes, budgetRes, teamRes, cardRes] = await Promise.all([
+      const [cmRes, budgetRes, cardRes] = await Promise.all([
         supabase
           .from("championship_managers")
-          .select("current_balance, initial_balance")
+          .select("current_balance, initial_balance, team_id")
           .eq("id", championshipManagerId)
           .single(),
         supabase
           .from("draft_pot_budgets")
-          .select("pot_number, pot_position, initial_budget, remaining_budget, settled")
+          .select(
+            "pot_number, pot_position, initial_budget, remaining_budget, settled",
+          )
           .eq("championship_manager_id", championshipManagerId)
           .eq("settled", false)
           .order("created_at", { ascending: false })
           .limit(1),
-        supabase
-          .from("championship_team_players")
-          .select("id", { count: "exact", head: true })
-          .eq(
-            "championship_team_id",
-            (
-              await supabase
-                .from("championship_teams")
-                .select("id")
-                .eq("championship_id", championshipId)
-                .eq(
-                  "team_id",
-                  (
-                    await supabase
-                      .from("championship_managers")
-                      .select("team_id")
-                      .eq("id", championshipManagerId)
-                      .single()
-                  ).data?.team_id ?? "",
-                )
-                .single()
-            ).data?.id ?? "",
-          ),
         supabase
           .from("draft_special_card_uses")
           .select("id")
@@ -88,6 +67,26 @@ export function useDraftSession(
           .eq("activated_by_cm_id", championshipManagerId)
           .limit(1),
       ]);
+
+      let teamCount = 0;
+      const teamId = cmRes.data?.team_id;
+      if (teamId) {
+        const { data: ctRow } = await supabase
+          .from("championship_teams")
+          .select("id")
+          .eq("championship_id", championshipId)
+          .eq("team_id", teamId)
+          .maybeSingle();
+
+        if (ctRow?.id) {
+          const { count } = await supabase
+            .from("championship_team_players")
+            .select("id", { count: "exact", head: true })
+            .eq("championship_team_id", ctRow.id);
+
+          teamCount = count ?? 0;
+        }
+      }
 
       if (!mountedRef.current) return;
 
@@ -106,7 +105,7 @@ export function useDraftSession(
               settled: activeBudget.settled,
             }
           : null,
-        teamCount: teamRes.count ?? 0,
+        teamCount,
         hasUsedSpecialCard: (cardRes.data?.length ?? 0) > 0,
         isLoading: false,
         error: null,
