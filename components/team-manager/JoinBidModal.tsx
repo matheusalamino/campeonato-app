@@ -1,0 +1,137 @@
+"use client";
+
+import { useState } from "react";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Slider } from "@/components/ui/slider";
+
+type JoinBidModalProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  currentBalance: number;
+  championshipId: string;
+  championshipManagerId: string;
+  onSuccess: () => void;
+};
+
+function formatCC(value: number) {
+  return `CC$ ${value.toLocaleString("pt-BR")}`;
+}
+
+export function JoinBidModal({
+  open,
+  onOpenChange,
+  currentBalance,
+  championshipId,
+  championshipManagerId,
+  onSuccess,
+}: JoinBidModalProps) {
+  const minBid = 1000;
+  const maxBid = Math.floor(currentBalance / 1000) * 1000;
+  const canBid = maxBid >= minBid;
+
+  const [bidAmount, setBidAmount] = useState(minBid);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit() {
+    if (!canBid || submitting) return;
+
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/draft/join-pot-bid", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          championshipId,
+          championshipManagerId,
+          bidAmount,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error ?? "Erro ao enviar lance");
+        return;
+      }
+
+      toast.success("Lance de habilitação enviado!");
+      onOpenChange(false);
+      setBidAmount(minBid);
+      onSuccess();
+    } catch {
+      toast.error("Erro de conexão. Tente novamente.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-zinc-900 border-zinc-800 text-white max-w-md">
+        <DialogHeader>
+          <DialogTitle>Lance de Habilitação</DialogTitle>
+          <DialogDescription className="text-zinc-400">
+            Defina o valor do lance às cegas para participar do leilão deste
+            pote.
+          </DialogDescription>
+        </DialogHeader>
+
+        {canBid ? (
+          <div className="space-y-6 py-2">
+            <div className="text-center">
+              <p className="text-3xl font-bold text-amber-300 tabular-nums">
+                {formatCC(bidAmount)}
+              </p>
+              <p className="text-xs text-zinc-500 mt-1">
+                Saldo disponível: {formatCC(currentBalance)}
+              </p>
+            </div>
+
+            <div className="px-2">
+              <Slider
+                min={minBid}
+                max={maxBid}
+                step={1000}
+                value={[bidAmount]}
+                onValueChange={([v]) => setBidAmount(v)}
+                className="w-full"
+              />
+              <div className="flex justify-between text-[10px] text-zinc-500 mt-1">
+                <span>{formatCC(minBid)}</span>
+                <span>{formatCC(maxBid)}</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-center text-zinc-400 py-4">
+            Saldo insuficiente para dar um lance (mínimo {formatCC(minBid)}).
+          </p>
+        )}
+
+        <DialogFooter>
+          <button
+            onClick={() => onOpenChange(false)}
+            className="w-full sm:w-auto rounded-xl bg-zinc-800 px-5 py-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-700 transition"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!canBid || submitting}
+            className="w-full sm:w-auto rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40 disabled:pointer-events-none transition"
+          >
+            {submitting ? "Enviando..." : "Confirmar Lance"}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

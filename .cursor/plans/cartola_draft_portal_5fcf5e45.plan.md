@@ -4,34 +4,34 @@ overview: Build a mobile-first team manager portal with 4 screens (dashboard hub
 todos:
   - id: db-migration
     content: "Create SQL migration: add user_id to managers, create draft_player_favorites, create activate_special_card RPC"
-    status: pending
+    status: completed
   - id: install-shadcn
     content: "Install shadcn components: slider, tabs, sheet"
-    status: pending
+    status: completed
   - id: team-manager-layout
     content: Create (team-manager) route group with layout.tsx (auth + manager check + context provider)
-    status: pending
+    status: completed
   - id: draft-session-hook
     content: Create useDraftSession polling hook and TeamManagerDraftContext
-    status: pending
+    status: completed
   - id: dashboard-page
     content: Build /team-manager dashboard page with action cards grid and balance display
-    status: pending
+    status: completed
   - id: join-bid-modal
     content: Build Join Bid modal (pot qualification) with slider + API route
-    status: pending
+    status: completed
   - id: special-card-flow
     content: Build special card activation button + bid modal + atomic RPC call + API route
-    status: pending
+    status: completed
   - id: balance-page
     content: Build /team-manager/balance page with balance cards and transaction extract
-    status: pending
+    status: completed
   - id: team-page
     content: Build /team-manager/squad page with football field layout and player cards
-    status: pending
+    status: completed
   - id: players-page
     content: Build /team-manager/search-and-favorite-players page with search, filters, tabs, and favorites
-    status: pending
+    status: completed
 isProject: false
 ---
 
