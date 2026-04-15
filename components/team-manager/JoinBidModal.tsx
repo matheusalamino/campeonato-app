@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -18,6 +18,10 @@ type JoinBidModalProps = {
   currentBalance: number;
   championshipId: string;
   championshipManagerId: string;
+  /** e.g. "Pote 2 (Atacante)" — shown in title when staff opened the window */
+  qualificationPotLabel: string | null;
+  /** Close modal if staff closes the window while it is open */
+  qualificationWindowOpen: boolean;
   onSuccess: () => void;
 };
 
@@ -31,8 +35,16 @@ export function JoinBidModal({
   currentBalance,
   championshipId,
   championshipManagerId,
+  qualificationPotLabel,
+  qualificationWindowOpen,
   onSuccess,
 }: JoinBidModalProps) {
+  useEffect(() => {
+    if (open && !qualificationWindowOpen) {
+      onOpenChange(false);
+    }
+  }, [open, qualificationWindowOpen, onOpenChange]);
+
   const minBid = 1000;
   const maxBid = Math.floor(currentBalance / 1000) * 1000;
   const canBid = maxBid >= minBid;
@@ -77,7 +89,14 @@ export function JoinBidModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-zinc-900 border-zinc-800 text-white max-w-md">
         <DialogHeader>
-          <DialogTitle>Lance de Habilitação</DialogTitle>
+          <DialogTitle>
+            Lance de Habilitação
+            {qualificationPotLabel ? (
+              <span className="block text-base font-normal text-zinc-400 mt-1">
+                {qualificationPotLabel}
+              </span>
+            ) : null}
+          </DialogTitle>
           <DialogDescription className="text-zinc-400">
             Defina o valor do lance às cegas para participar do leilão deste
             pote.

@@ -31,6 +31,20 @@ export default function TeamManagerDashboard() {
 
   const teamFull = session.teamCount >= 10;
 
+  const qualificationPotLabel =
+    session.qualificationWindowOpen &&
+    session.qualificationPotNumber !== null &&
+    session.qualificationPotPosition
+      ? `Pote ${session.qualificationPotNumber} (${session.qualificationPotPosition})`
+      : null;
+
+  const joinQualificationEnabled =
+    session.qualificationWindowOpen &&
+    !teamFull &&
+    !session.hasSubmittedQualificationBidForActivePot &&
+    session.qualificationPotNumber !== null &&
+    Boolean(session.qualificationPotPosition);
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header */}
@@ -76,8 +90,10 @@ export default function TeamManagerDashboard() {
           <DashboardCard
             icon={<Gavel className="w-6 h-6 text-blue-400" />}
             label="Lance de Habilitação"
-            disabled={teamFull}
-            onClick={() => setJoinBidOpen(true)}
+            disabled={!joinQualificationEnabled}
+            onClick={() => {
+              if (joinQualificationEnabled) setJoinBidOpen(true);
+            }}
           />
 
           <SpecialCardButton
@@ -118,6 +134,8 @@ export default function TeamManagerDashboard() {
         currentBalance={session.currentBalance}
         championshipId={ctx.championshipId}
         championshipManagerId={ctx.championshipManagerId}
+        qualificationPotLabel={qualificationPotLabel}
+        qualificationWindowOpen={session.qualificationWindowOpen}
         onSuccess={() => session.refetch()}
       />
 

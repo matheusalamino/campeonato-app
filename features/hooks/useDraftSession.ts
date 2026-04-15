@@ -21,6 +21,12 @@ export type DraftSessionData = {
   hasUsedSpecialCard: boolean;
   playerHasActiveCard: boolean;
   currentAuctionRegistrationId: string | null;
+  /** Staff opened blind-bid window for a line pot (from championships). */
+  qualificationWindowOpen: boolean;
+  qualificationPotNumber: number | null;
+  qualificationPotPosition: string | null;
+  /** Manager already submitted a bid for the currently open pot. */
+  hasSubmittedQualificationBidForActivePot: boolean;
   isLoading: boolean;
   error: string | null;
 };
@@ -37,6 +43,10 @@ export function useDraftSession(
     hasUsedSpecialCard: false,
     playerHasActiveCard: false,
     currentAuctionRegistrationId: null,
+    qualificationWindowOpen: false,
+    qualificationPotNumber: null,
+    qualificationPotPosition: null,
+    hasSubmittedQualificationBidForActivePot: false,
     isLoading: true,
     error: null,
   });
@@ -45,7 +55,7 @@ export function useDraftSession(
 
   const fetchSession = useCallback(async () => {
     try {
-      const [cmRes, budgetRes, cardRes] = await Promise.all([
+      const [cmRes, budgetRes, cardRes, chRes] = await Promise.all([
         supabase
           .from("championship_managers")
           .select("current_balance, initial_balance, team_id")
@@ -66,6 +76,13 @@ export function useDraftSession(
           .eq("championship_id", championshipId)
           .eq("activated_by_cm_id", championshipManagerId)
           .limit(1),
+        supabase
+          .from("championships")
+          .select(
+            "draft_qualification_window_open, draft_qualification_pot_number, draft_qualification_pot_position",
+          )
+          .eq("id", championshipId)
+          .single(),
       ]);
 
       let teamCount = 0;
@@ -92,6 +109,39 @@ export function useDraftSession(
 
       const activeBudget = budgetRes.data?.[0] ?? null;
 
+      const ch = chRes.data as {
+        draft_qualification_window_open: boolean | null;
+        draft_qualification_pot_number: number | null;
+        draft_qualification_pot_position: string | null;
+      } | null;
+
+      const qualificationWindowOpen = Boolean(
+        ch?.draft_qualification_window_open,
+      );
+      const qualificationPotNumber = ch?.draft_qualification_pot_number ?? null;
+      const qualificationPotPosition =
+        ch?.draft_qualification_pot_position?.trim() ?? null;
+
+      let hasSubmittedQualificationBidForActivePot = false;
+      if (
+        qualificationWindowOpen &&
+        qualificationPotNumber !== null &&
+        qualificationPotPosition
+      ) {
+        const { data: existingBid } = await supabase
+          .from("draft_qualification_bids")
+          .select("id")
+          .eq("championship_id", championshipId)
+          .eq("championship_manager_id", championshipManagerId)
+          .eq("pot_number", qualificationPotNumber)
+          .eq("pot_position", qualificationPotPosition)
+          .maybeSingle();
+
+        hasSubmittedQualificationBidForActivePot = Boolean(existingBid);
+      }
+
+      if (!mountedRef.current) return;
+
       setData((prev) => ({
         ...prev,
         currentBalance: cmRes.data?.current_balance ?? prev.currentBalance,
@@ -107,6 +157,10 @@ export function useDraftSession(
           : null,
         teamCount,
         hasUsedSpecialCard: (cardRes.data?.length ?? 0) > 0,
+        qualificationWindowOpen,
+        qualificationPotNumber,
+        qualificationPotPosition,
+        hasSubmittedQualificationBidForActivePot,
         isLoading: false,
         error: null,
       }));

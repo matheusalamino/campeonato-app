@@ -26,6 +26,74 @@ export async function POST(req: Request) {
       );
     }
 
+    const { data: ch, error: chErr } = await supabase
+      .from("championships")
+      .select(
+        "id, draft_qualification_window_open, draft_qualification_pot_number, draft_qualification_pot_position",
+      )
+      .eq("id", championshipId)
+      .single();
+
+    if (chErr || !ch) {
+      return NextResponse.json(
+        { error: "Campeonato não encontrado" },
+        { status: 404 },
+      );
+    }
+
+    if (!ch.draft_qualification_window_open) {
+      return NextResponse.json(
+        {
+          error:
+            "A janela de lances de habilitação está fechada. Aguarde a abertura do pote.",
+        },
+        { status: 403 },
+      );
+    }
+
+    const potNumber = ch.draft_qualification_pot_number;
+    const potPosition = ch.draft_qualification_pot_position?.trim();
+
+    if (
+      potNumber === null ||
+      potNumber === undefined ||
+      !potPosition ||
+      potPosition.length === 0
+    ) {
+      return NextResponse.json(
+        { error: "Pote ativo inválido no campeonato" },
+        { status: 400 },
+      );
+    }
+
+    if (potPosition.toLowerCase() === "goleiro") {
+      return NextResponse.json(
+        { error: "Habilitação não se aplica ao pote de goleiros" },
+        { status: 400 },
+      );
+    }
+
+    const { data: potRow, error: potErr } = await supabase
+      .from("draft_pots")
+      .select("id")
+      .eq("championship_id", championshipId)
+      .eq("pot_number", potNumber)
+      .eq("position", potPosition)
+      .limit(1)
+      .maybeSingle();
+
+    if (potErr) throw potErr;
+
+    if (!potRow) {
+      return NextResponse.json(
+        {
+          error:
+            "Pote não encontrado nos potes gerados. Verifique pot_number e posição.",
+        },
+        { status: 400 },
+      );
+    }
+
     const { data: cm } = await supabase
       .from("championship_managers")
       .select("current_balance")
@@ -46,8 +114,8 @@ export async function POST(req: Request) {
         championship_manager_id: championshipManagerId,
         bid_amount: bidAmount,
         submitted_at: new Date().toISOString(),
-        pot_number: 0,
-        pot_position: "PENDING",
+        pot_number: potNumber,
+        pot_position: potPosition,
       });
 
     if (bidError) {
@@ -62,6 +130,8 @@ export async function POST(req: Request) {
 
     const newBalance = cm.current_balance - bidAmount;
 
+    const potLabel = `Pote ${potNumber} (${potPosition})`;
+
     const { error: txError } = await supabase
       .from("draft_balance_transactions")
       .insert({
@@ -69,7 +139,7 @@ export async function POST(req: Request) {
         championship_manager_id: championshipManagerId,
         type: "POT_BID_RESERVE",
         amount: -bidAmount,
-        description: `Lance de habilitação: ${bidAmount.toLocaleString("pt-BR")}`,
+        description: `Habilitação ${potLabel}: ${bidAmount.toLocaleString("pt-BR")}`,
       });
 
     if (txError) throw txError;
@@ -81,7 +151,7 @@ export async function POST(req: Request) {
 
     if (updateError) throw updateError;
 
-    return NextResponse.json({ success: true, newBalance });
+    return NextResponse.json({ success: true, newBalance, potNumber, potPosition });
   } catch (err) {
     console.error("join-pot-bid error:", err);
     return NextResponse.json(

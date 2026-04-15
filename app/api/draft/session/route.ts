@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [cmRes, budgetRes, cardRes] = await Promise.all([
+    const [cmRes, budgetRes, cardRes, chRes] = await Promise.all([
       supabase
         .from("championship_managers")
         .select("current_balance, initial_balance, team_id")
@@ -36,6 +36,13 @@ export async function GET(req: NextRequest) {
         .eq("championship_id", championshipId)
         .eq("activated_by_cm_id", cmId)
         .limit(1),
+      supabase
+        .from("championships")
+        .select(
+          "draft_qualification_window_open, draft_qualification_pot_number, draft_qualification_pot_position",
+        )
+        .eq("id", championshipId)
+        .single(),
     ]);
 
     let teamCount = 0;
@@ -58,12 +65,45 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const ch = chRes.data as {
+      draft_qualification_window_open: boolean | null;
+      draft_qualification_pot_number: number | null;
+      draft_qualification_pot_position: string | null;
+    } | null;
+
+    const qualificationWindowOpen = Boolean(ch?.draft_qualification_window_open);
+    const qualificationPotNumber = ch?.draft_qualification_pot_number ?? null;
+    const qualificationPotPosition =
+      ch?.draft_qualification_pot_position?.trim() ?? null;
+
+    let hasSubmittedQualificationBidForActivePot = false;
+    if (
+      qualificationWindowOpen &&
+      qualificationPotNumber !== null &&
+      qualificationPotPosition
+    ) {
+      const { data: existingBid } = await supabase
+        .from("draft_qualification_bids")
+        .select("id")
+        .eq("championship_id", championshipId)
+        .eq("championship_manager_id", cmId)
+        .eq("pot_number", qualificationPotNumber)
+        .eq("pot_position", qualificationPotPosition)
+        .maybeSingle();
+
+      hasSubmittedQualificationBidForActivePot = Boolean(existingBid);
+    }
+
     return NextResponse.json({
       currentBalance: cmRes.data?.current_balance ?? 0,
       initialBalance: cmRes.data?.initial_balance ?? 100000,
       potBudget: budgetRes.data?.[0] ?? null,
       teamCount,
       hasUsedSpecialCard: (cardRes.data?.length ?? 0) > 0,
+      qualificationWindowOpen,
+      qualificationPotNumber,
+      qualificationPotPosition,
+      hasSubmittedQualificationBidForActivePot,
     });
   } catch (err) {
     console.error("session error:", err);
