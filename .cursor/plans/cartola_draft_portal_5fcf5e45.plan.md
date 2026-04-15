@@ -1,6 +1,6 @@
 ---
-name: Cartola Draft Portal
-overview: Build a mobile-first cartola portal with 4 screens (dashboard hub, balance/extract, team field view, player search/favorites) plus modals for blind bids and special card, backed by polling for real-time updates and an atomic RPC for special card race conditions.
+name: Team Manager Draft Portal
+overview: Build a mobile-first team manager portal with 4 screens (dashboard hub, balance/extract, team field view, player search/favorites) plus modals for blind bids and special card, backed by polling for real-time updates and an atomic RPC for special card race conditions.
 todos:
   - id: db-migration
     content: "Create SQL migration: add user_id to managers, create draft_player_favorites, create activate_special_card RPC"
@@ -8,52 +8,59 @@ todos:
   - id: install-shadcn
     content: "Install shadcn components: slider, tabs, sheet"
     status: pending
-  - id: cartola-layout
-    content: Create (cartola) route group with layout.tsx (auth + manager check + context provider)
+  - id: team-manager-layout
+    content: Create (team-manager) route group with layout.tsx (auth + manager check + context provider)
     status: pending
   - id: draft-session-hook
-    content: Create useDraftSession polling hook and CartolaDraftContext
+    content: Create useDraftSession polling hook and TeamManagerDraftContext
     status: pending
   - id: dashboard-page
-    content: Build /cartola dashboard page with action cards grid and balance display
+    content: Build /team-manager dashboard page with action cards grid and balance display
     status: pending
-  - id: habilitacao-modal
-    content: Build Habilitacao bid modal with slider + API route
+  - id: join-bid-modal
+    content: Build Join Bid modal (pot qualification) with slider + API route
     status: pending
   - id: special-card-flow
     content: Build special card activation button + bid modal + atomic RPC call + API route
     status: pending
   - id: balance-page
-    content: Build /cartola/saldo page with balance cards and transaction extract
+    content: Build /team-manager/balance page with balance cards and transaction extract
     status: pending
   - id: team-page
-    content: Build /cartola/time page with football field layout and player cards
+    content: Build /team-manager/squad page with football field layout and player cards
     status: pending
   - id: players-page
-    content: Build /cartola/jogadores page with search, filters, tabs, and favorites
+    content: Build /team-manager/search-and-favorite-players page with search, filters, tabs, and favorites
     status: pending
 isProject: false
 ---
 
-# Cartola Draft Portal
+# Team Manager Draft Portal
+
+## Naming Conventions
+
+- All code identifiers (routes, files, folders, components, hooks, types) are in **English**
+- Only user-facing display text (labels, titles, toasts, descriptions) is in **Portuguese**
+- "Cartola" in code -> `TeamManager` / `team-manager`
+- "Habilitacao" in code -> `Join` / `join`
 
 ## Architecture Overview
 
 ```mermaid
 flowchart TD
-    subgraph routeGroup ["(cartola) Route Group"]
+    subgraph routeGroup ["(team-manager) Route Group"]
         Layout["layout.tsx — Auth + Manager check"]
-        Dashboard["/cartola — Action Hub"]
-        Saldo["/cartola/saldo — Balance + Extract"]
-        Time["/cartola/time — Team Field View"]
-        Jogadores["/cartola/jogadores — Players Search"]
+        Dashboard["/team-manager — Action Hub"]
+        Balance["/team-manager/balance — Balance + Extract"]
+        Squad["/team-manager/squad — Team Field View"]
+        Players["/team-manager/search-and-favorite-players — Player Search"]
     end
 
     Layout --> Dashboard
-    Dashboard -->|"navigate"| Saldo
-    Dashboard -->|"navigate"| Time
-    Dashboard -->|"navigate"| Jogadores
-    Dashboard -->|"modal"| HabModal["Habilitacao Bid Modal"]
+    Dashboard -->|"navigate"| Balance
+    Dashboard -->|"navigate"| Squad
+    Dashboard -->|"navigate"| Players
+    Dashboard -->|"modal"| JoinModal["Join Bid Modal"]
     Dashboard -->|"modal"| SCActivate["Special Card Activation"]
     SCActivate -->|"modal"| SCBid["Special Card Bid Modal"]
 
@@ -62,6 +69,7 @@ flowchart TD
         PotData["Pot Budget"]
         TeamCount["Team Player Count"]
         CardStatus["Special Card Status"]
+        AuctionPlayer["Current Auctioned Player"]
     end
 
     Dashboard -.->|"useDraftSession"| polling
@@ -96,7 +104,12 @@ CREATE TABLE public.draft_player_favorites (
 
 ### 1c. Supabase RPC for atomic special card activation
 
-A database function that handles the race condition when two cartolas press the special card button simultaneously. Uses `SELECT ... FOR UPDATE` to serialize access.
+A database function that handles the race condition when two managers press the special card button simultaneously. It enforces **three rules atomically**:
+
+1. The manager has not already used their card in this championship
+2. No other manager has already activated a card for the **same player currently being auctioned** (`target_registration_id`)
+
+Uses the existing UNIQUE constraint `(activated_by_cm_id, championship_id)` plus explicit checks with `FOR UPDATE` row locking.
 
 ```sql
 CREATE OR REPLACE FUNCTION activate_special_card(
@@ -107,22 +120,35 @@ CREATE OR REPLACE FUNCTION activate_special_card(
   p_target_registration_id uuid
 ) RETURNS json AS $$
 DECLARE
-  v_existing uuid;
   v_already_used boolean;
+  v_player_card_exists boolean;
   v_new_id uuid;
 BEGIN
-  -- Check if this cartola already used their card
+  -- 1. Check if this manager already used their card in this championship
   SELECT EXISTS(
     SELECT 1 FROM draft_special_card_uses
     WHERE championship_id = p_championship_id
       AND activated_by_cm_id = p_cm_id
+    FOR UPDATE
   ) INTO v_already_used;
 
   IF v_already_used THEN
     RETURN json_build_object('success', false, 'reason', 'card_already_used');
   END IF;
 
-  -- Attempt insert (unique constraint handles the race)
+  -- 2. Check if another manager already activated a card for this player
+  SELECT EXISTS(
+    SELECT 1 FROM draft_special_card_uses
+    WHERE championship_id = p_championship_id
+      AND target_registration_id = p_target_registration_id
+    FOR UPDATE
+  ) INTO v_player_card_exists;
+
+  IF v_player_card_exists THEN
+    RETURN json_build_object('success', false, 'reason', 'player_already_has_card');
+  END IF;
+
+  -- 3. Insert (unique constraint is the final safety net)
   INSERT INTO draft_special_card_uses (
     championship_id, activated_by_cm_id, pot_number,
     pot_position, target_registration_id, result
@@ -156,35 +182,35 @@ Existing components already available: Dialog, Button, Badge, Card, Input, Selec
 
 ## 3. Route Group and Layout
 
-### File: `app/(cartola)/layout.tsx`
+### File: `app/(team-manager)/layout.tsx`
 
 Server component layout that:
 1. Calls `getUserRole()` from [lib/auth.ts](lib/auth.ts) -- redirect to `/login` if unauthenticated
 2. Verifies `role === 'manager'` -- redirect if not a manager
 3. Fetches the manager record linked to the user via `managers.user_id`
 4. Fetches `championship_managers` to find which championship the manager belongs to
-5. Wraps children in a `CartolaDraftProvider` context (provides `managerId`, `championshipManagerId`, `championshipId`)
+5. Wraps children in a `TeamManagerDraftProvider` context (provides `managerId`, `championshipManagerId`, `championshipId`)
 
 Layout shell: **no sidebar**, full-screen dark background, bottom-safe padding for mobile, a simple top header bar with the manager's name/team and back navigation.
 
 ```
-(cartola)/
+(team-manager)/
   layout.tsx
-  cartola/
+  team-manager/
     page.tsx            -- Dashboard hub
-    saldo/
+    balance/
       page.tsx          -- Balance + extract
-    time/
+    squad/
       page.tsx          -- Team field view
-    jogadores/
+    search-and-favorite-players/
       page.tsx          -- Player search + favorites
 ```
 
-All routes render at `/cartola`, `/cartola/saldo`, `/cartola/time`, `/cartola/jogadores`.
+All routes render at `/team-manager`, `/team-manager/balance`, `/team-manager/squad`, `/team-manager/search-and-favorite-players`.
 
 ---
 
-## 4. Main Dashboard — `/cartola`
+## 4. Main Dashboard — `/team-manager`
 
 Client component. **Mobile-first grid of action cards** with the current balance prominently displayed at the top.
 
@@ -192,11 +218,11 @@ Client component. **Mobile-first grid of action cards** with the current balance
 - Top: Manager name + team badge + general balance (large number)
 - Below: Current pot info badge (e.g., "Pote 2 — ATA em andamento")
 - Grid of action cards (2 columns on mobile, 3 on tablet/desktop):
-  1. **Saldo e Extrato** — navigates to `/cartola/saldo`
-  2. **Lance de Habilitacao** — opens modal (inline)
+  1. **Saldo e Extrato** — navigates to `/team-manager/balance`
+  2. **Lance de Habilitacao** — opens JoinBidModal (inline)
   3. **Carta Especial** — activates card / opens bid modal
-  4. **Meu Time** — navigates to `/cartola/time` — shows player count badge (e.g., "4/10")
-  5. **Jogadores** — navigates to `/cartola/jogadores`
+  4. **Meu Time** — navigates to `/team-manager/squad` — shows player count badge (e.g., "4/10")
+  5. **Jogadores** — navigates to `/team-manager/search-and-favorite-players`
 
 ### Polling — `useDraftSession` hook
 
@@ -206,27 +232,41 @@ Custom hook in `features/hooks/useDraftSession.ts`:
   - `championship_managers` row (current_balance, initial_balance)
   - `draft_pot_budgets` for the active pot (remaining_budget)
   - `championship_team_players` count for this manager's team
-  - `draft_special_card_uses` to check if card has been used
+  - `draft_special_card_uses` to check if card has been used **by this manager** (hasUsedSpecialCard)
+  - `draft_special_card_uses` to check if a card has been used **for the current auctioned player** (playerHasActiveCard)
   - `draft_player_purchases` count
-- Returns: `{ balance, potBudget, teamCount, hasUsedSpecialCard, isLoading, ... }`
+- Returns: `{ balance, potBudget, teamCount, hasUsedSpecialCard, playerHasActiveCard, isLoading, ... }`
 - Cleans up interval on unmount
 
-### Habilitacao Bid Modal
+### JoinBidModal (Pot Qualification)
 
 Uses shadcn **Dialog** component:
 - Title: "Lance de Habilitacao — Pote X (ATA)"
 - **Slider** component from CC$1,000 to `currentBalance` (step CC$1,000)
 - Display of selected amount in large gold text
 - "Confirmar Lance" button
-- POST to `/api/draft/qualification-bid` which inserts into `draft_qualification_bids` + creates a `POT_BID_RESERVE` transaction + updates `current_balance`
+- POST to `/api/draft/join-pot-bid` which inserts into `draft_qualification_bids` + creates a `POT_BID_RESERVE` transaction + updates `current_balance`
 
 ### Special Card Flow
 
+**Button is DISABLED when any of these conditions is true:**
+- Manager has already used their card in this championship (`hasUsedSpecialCard`)
+- Another manager already activated a card for the player currently being auctioned (`playerHasActiveCard`)
+- No player is currently being auctioned (no active auction context)
+- Manager's team is already full (10 players)
+
+**Button is ENABLED only when ALL of these are true:**
+- Manager has NOT used their card yet
+- A player IS currently being auctioned
+- NO other card has been activated for this player
+- Manager has available budget in the pot
+
 Two-step UI:
-1. **Activate button** on dashboard — calls Supabase RPC `activate_special_card` (atomic)
-   - On success: shows "Carta ativada!" and opens the bid modal
-   - On failure: toast "Outro cartola ja ativou a carta primeiro"
-2. **Special Card Bid Modal** (Dialog):
+1. **Activate button** on dashboard — calls Supabase RPC `activate_special_card` (atomic, handles race condition)
+   - On success: toast "Carta Especial ativada!" and opens the bid modal
+   - On failure (card_already_used): toast "Voce ja usou sua Carta Especial"
+   - On failure (player_already_has_card): toast "Outro cartola ja ativou a Carta Especial para este jogador"
+2. **SpecialCardBidModal** (Dialog):
    - Slider from CC$0 to `potBudget.remaining_budget` (step CC$1,000)
    - 20-second countdown timer displayed prominently
    - "Confirmar Lance" button
@@ -234,7 +274,7 @@ Two-step UI:
 
 ---
 
-## 5. Balance Page — `/cartola/saldo`
+## 5. Balance Page — `/team-manager/balance`
 
 Client component with two sections:
 
@@ -251,7 +291,7 @@ Uses existing pattern: `useEffect` + Supabase browser client, similar to [featur
 
 ---
 
-## 6. Team Page — `/cartola/time`
+## 6. Squad Page — `/team-manager/squad`
 
 Client component with a **football field SVG/CSS layout**.
 
@@ -266,14 +306,14 @@ Client component with a **football field SVG/CSS layout**.
 - Fetch `championship_team_players` joined with `championship_registrations` -> `players` for this manager's championship_team
 - Also fetch `draft_player_purchases` to show purchase price on each card
 - Each player: circular avatar/initials + name + overall + position badge + purchase price
-- Empty slots shown as dashed circles with "?" 
+- Empty slots shown as dashed circles with "?"
 - Counter: "4/10 jogadores" with position breakdown
 
 The field background uses CSS gradients (green pitch with white lines), responsive sizing via `aspect-ratio` and viewport units.
 
 ---
 
-## 7. Players Page — `/cartola/jogadores`
+## 7. Players Page — `/team-manager/search-and-favorite-players`
 
 Client component with search, filters, and favorites.
 
@@ -299,9 +339,9 @@ Data fetching: single load of all registrations for the championship, filtered c
 
 New API routes following the existing pattern in [app/api/draft/](app/api/draft/):
 
-- **`POST /api/draft/qualification-bid`** — submit habilitacao bid, reserve balance
+- **`POST /api/draft/join-pot-bid`** — submit pot qualification bid, reserve balance
 - **`POST /api/draft/special-card-bid`** — submit special card blind bid
-- **`GET /api/draft/session`** — single endpoint for polling (returns balance, pot budget, team count, card status in one response)
+- **`GET /api/draft/session`** — single endpoint for polling (returns balance, pot budget, team count, card status, current auctioned player card status in one response)
 
 All use `createClient()` from [lib/supabase/server.ts](lib/supabase/server.ts) following the existing API route pattern.
 
@@ -310,42 +350,42 @@ All use `createClient()` from [lib/supabase/server.ts](lib/supabase/server.ts) f
 ## 9. New Hooks and Context
 
 - **`features/hooks/useDraftSession.ts`** — polling hook (3s interval) for dashboard real-time data
-- **`components/CartolaDraftContext.tsx`** — context providing `championshipManager`, `championship`, `manager` data from the server layout down to all client components
+- **`components/TeamManagerDraftContext.tsx`** — context providing `championshipManager`, `championship`, `manager` data from the server layout down to all client components
 
 ---
 
 ## 10. File Structure Summary
 
 ```
-app/(cartola)/
+app/(team-manager)/
   layout.tsx
-  cartola/
+  team-manager/
     page.tsx
-    saldo/
+    balance/
       page.tsx
-    time/
+    squad/
       page.tsx
-    jogadores/
+    search-and-favorite-players/
       page.tsx
 components/
-  cartola/
+  team-manager/
     DashboardCard.tsx
     BalanceDisplay.tsx
-    HabilitacaoBidModal.tsx
+    JoinBidModal.tsx
     SpecialCardButton.tsx
     SpecialCardBidModal.tsx
     FootballField.tsx
     PlayerSearchCard.tsx
     TransactionItem.tsx
-  CartolaDraftContext.tsx
+  TeamManagerDraftContext.tsx
 features/hooks/
   useDraftSession.ts
 app/api/draft/
-  qualification-bid/route.ts
+  join-pot-bid/route.ts
   special-card-bid/route.ts
   session/route.ts
 types/
   draft-favorites.ts
 supabase/migrations/
-  20260412_cartola_portal.sql
+  20260412_team_manager_portal.sql
 ```
