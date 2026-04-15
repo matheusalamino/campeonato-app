@@ -41,10 +41,10 @@ function PlayerSlot({ player }: { player?: SquadPlayer }) {
   if (!player) {
     return (
       <div className="flex flex-col items-center gap-1">
-        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-dashed border-zinc-600 flex items-center justify-center">
-          <span className="text-zinc-600 text-lg">?</span>
+        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-dashed border-yellow-400 flex items-center justify-center">
+          <span className="text-yellow-400 text-lg">?</span>
         </div>
-        <span className="text-[9px] text-zinc-600">Vazio</span>
+        <span className="text-[9px] text-yellow-400">Vazio</span>
       </div>
     );
   }
