@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:new": "supabase migration new",
+    "db:link:staging": "supabase link --project-ref ydcevehrbmzkqqqcssvm",
+    "db:link:production": "supabase link --project-ref blcsqyawytmbnbpbzlvs",
+    "db:push": "supabase db push",
+    "db:push:dry": "supabase db push --dry-run",
+    "db:migrations": "supabase migration list"
   },
   "dependencies": {
     "@supabase/ssr": "^0.9.0",
