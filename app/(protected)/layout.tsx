@@ -20,6 +20,10 @@ export default async function ProtectedLayout({
     redirect("/team-manager");
   }
 
+  if (role === "auction_fiscal") {
+    redirect("/auction-fiscal");
+  }
+
   return (
     <LoadingProvider>
       <ChampionshipProvider>

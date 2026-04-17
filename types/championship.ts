@@ -8,6 +8,10 @@ export interface Championship {
   draft_qualification_window_open?: boolean;
   draft_qualification_pot_number?: number | null;
   draft_qualification_pot_position?: string | null;
+  /** Leilão (pote) ativo para o fiscal */
+  draft_auction_open?: boolean;
+  draft_auction_pot_number?: number | null;
+  draft_auction_pot_position?: string | null;
 }
 
 export type PhaseType = "group" | "knockout";

@@ -32,6 +32,10 @@ export default async function TeamManagerLayout({
     redirect("/login");
   }
 
+  if (profile.role === "auction_fiscal") {
+    redirect("/auction-fiscal");
+  }
+
   if (profile.role !== "manager") {
     redirect("/");
   }
