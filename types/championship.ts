@@ -4,6 +4,10 @@ export interface Championship {
   season?: string;
   status?: string;
   overall?: number;
+  /** When true, managers may submit one qualification bid for the active pot */
+  draft_qualification_window_open?: boolean;
+  draft_qualification_pot_number?: number | null;
+  draft_qualification_pot_position?: string | null;
 }
 
 export type PhaseType = "group" | "knockout";

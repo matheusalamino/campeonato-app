@@ -24,6 +24,24 @@ export default function LoginPage() {
       return;
     }
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.role === "manager") {
+        router.replace("/team-manager");
+        router.refresh();
+        return;
+      }
+    }
+
     router.replace("/");
     router.refresh();
   }

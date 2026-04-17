@@ -16,6 +16,10 @@ export default async function ProtectedLayout({
     redirect("/login");
   }
 
+  if (role === "manager") {
+    redirect("/team-manager");
+  }
+
   return (
     <LoadingProvider>
       <ChampionshipProvider>
