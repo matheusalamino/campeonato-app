@@ -40,6 +40,12 @@ export default function LoginPage() {
         router.refresh();
         return;
       }
+
+      if (profile?.role === "auction_fiscal") {
+        router.replace("/auction-fiscal");
+        router.refresh();
+        return;
+      }
     }
 
     router.replace("/");
