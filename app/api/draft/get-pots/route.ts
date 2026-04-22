@@ -5,6 +5,7 @@ type DraftPot = {
   player_id: string;
   pot_number: number;
   position: string;
+  max_managers: number;
 };
 
 type Player = {
@@ -34,7 +35,7 @@ export async function GET(req: Request) {
   // 🔥 1. Buscar potes
   const { data: potsData, error: potsError } = await supabase
     .from("draft_pots")
-    .select("player_id, pot_number, position")
+    .select("player_id, pot_number, position, max_managers")
     .eq("championship_id", championshipId)
     .order("pot_order", { ascending: true });
 
@@ -91,6 +92,7 @@ export async function GET(req: Request) {
     {
       pot_number: number;
       position: string;
+      max_managers: number;
       players: {
         id: string;
         name: string;
@@ -109,6 +111,7 @@ export async function GET(req: Request) {
         pot_number: item.pot_number,
         position: item.position,
         players: [],
+        max_managers: item.max_managers,
         average_overall: 0,
       };
     }

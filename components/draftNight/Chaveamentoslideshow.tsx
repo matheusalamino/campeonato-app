@@ -219,7 +219,6 @@ function LotteryGroupsView({
 
   function openModal(slot: GroupSlot, phaseId: string, e: React.MouseEvent) {
     e.stopPropagation();
-    if (slot.teamId) return; // already assigned, could allow re-assign optionally
     setModalSlot({ slot, phaseId });
   }
 
