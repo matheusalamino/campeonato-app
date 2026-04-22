@@ -55,7 +55,10 @@ export function PlayerRadar({
   );
 }
 
-export default function PlayerCard({ player }: { player: AuctionPlayer }) {
+type PlayerCardProps = { player: AuctionPlayer } | AuctionPlayer;
+
+export default function PlayerCard(props: PlayerCardProps) {
+  const player = "player" in props ? props.player : props;
   const pos = posAbbr(player.position);
   const overall = player.overall ?? "—";
   const mid = Math.ceil(player.attributes.length / 2);
