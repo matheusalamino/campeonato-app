@@ -37,18 +37,15 @@ const LS_KEY = "auctionFiscalChampionshipId";
 
 export default function AuctionFiscalPage() {
   const [championships, setChampionships] = useState<ChampionshipRow[]>([]);
-  const [championshipId, setChampionshipId] = useState<string>("");
   const [payload, setPayload] = useState<PotPayload | null>(null);
   const [loadingList, setLoadingList] = useState(true);
   const [confirmBulk, setConfirmBulk] = useState(false);
-  const [progressiveTarget, setProgressiveTarget] = useState<Participant | null>(
-    null,
-  );
-
-  useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem(LS_KEY) : null;
-    if (saved) setChampionshipId(saved);
-  }, []);
+  const [progressiveTarget, setProgressiveTarget] =
+    useState<Participant | null>(null);
+  const [championshipId, setChampionshipId] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem(LS_KEY) ?? "";
+  });
 
   useEffect(() => {
     if (championshipId) localStorage.setItem(LS_KEY, championshipId);
@@ -92,13 +89,26 @@ export default function AuctionFiscalPage() {
   }, [championshipId]);
 
   useEffect(() => {
-    void fetchPot();
-    const id = setInterval(() => void fetchPot(), 3500);
-    return () => clearInterval(id);
+    const timeoutId = window.setTimeout(() => {
+      void fetchPot();
+    }, 0);
+
+    const intervalId = window.setInterval(() => {
+      void fetchPot();
+    }, 3500);
+
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(intervalId);
+    };
   }, [fetchPot]);
 
   const potLabel = useMemo(() => {
-    if (!payload?.auctionOpen || payload.potNumber == null || !payload.potPosition) {
+    if (
+      !payload?.auctionOpen ||
+      payload.potNumber == null ||
+      !payload.potPosition
+    ) {
       return null;
     }
     return `Pote ${payload.potNumber} (${payload.potPosition})`;
@@ -146,7 +156,9 @@ export default function AuctionFiscalPage() {
       toast.error(json.error ?? "Erro ao aplicar multa");
       return;
     }
-    toast.success(`Multa de CC$ ${(json.amount ?? 0).toLocaleString("pt-BR")} aplicada.`);
+    toast.success(
+      `Multa de CC$ ${(json.amount ?? 0).toLocaleString("pt-BR")} aplicada.`,
+    );
     setProgressiveTarget(null);
     await fetchPot();
   }
@@ -158,9 +170,9 @@ export default function AuctionFiscalPage() {
           Fiscal do leilão
         </h1>
         <p className="text-sm text-zinc-400">
-          Acompanhe os saldos atualizados automaticamente enquanto o admin
-          opera o leilão na apresentação. Aplique multas com confirmação antes
-          de registrar.
+          Acompanhe os saldos atualizados automaticamente enquanto o admin opera
+          o leilão na apresentação. Aplique multas com confirmação antes de
+          registrar.
         </p>
       </header>
 
@@ -275,7 +287,8 @@ export default function AuctionFiscalPage() {
           <DialogHeader>
             <DialogTitle>Confirmar multa geral</DialogTitle>
             <DialogDescription className="text-zinc-400">
-              Esta ação registra multas no sistema. Só continue se tiver certeza.
+              Esta ação registra multas no sistema. Só continue se tiver
+              certeza.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 text-sm text-zinc-300">

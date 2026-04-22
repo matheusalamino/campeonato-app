@@ -10,6 +10,21 @@ import {
 } from "recharts";
 import type { AuctionPlayer } from "@/app/api/draft/pot-auction-players/route";
 
+type RevealPlayer = {
+  name: string;
+  position: string;
+  overall: number;
+  photo?: string | null;
+  stats: {
+    pace: number;
+    shot: number;
+    pass: number;
+    dribble: number;
+    defense: number;
+    physical: number;
+  };
+};
+
 const POS_ABBR: Record<string, string> = {
   Atacante: "ATA",
   Zagueiro: "ZAG",
@@ -55,10 +70,63 @@ export function PlayerRadar({
   );
 }
 
-type PlayerCardProps = { player: AuctionPlayer } | AuctionPlayer;
+type PlayerCardProps =
+  | { player: AuctionPlayer | RevealPlayer }
+  | AuctionPlayer
+  | RevealPlayer;
 
 export default function PlayerCard(props: PlayerCardProps) {
-  const player = "player" in props ? props.player : props;
+  const rawPlayer = "player" in props ? props.player : props;
+
+  const player =
+    "attributes" in rawPlayer
+      ? rawPlayer
+      : {
+          name: rawPlayer.name,
+          position: rawPlayer.position,
+          overall: rawPlayer.overall,
+          official_name: null,
+          photo_url: rawPlayer.photo ?? null,
+          attributes: [
+            {
+              skill: "pace",
+              label: "PAC",
+              name: "PAC",
+              value: rawPlayer.stats.pace,
+            },
+            {
+              skill: "shot",
+              label: "SHO",
+              name: "SHO",
+              value: rawPlayer.stats.shot,
+            },
+            {
+              skill: "pass",
+              label: "PAS",
+              name: "PAS",
+              value: rawPlayer.stats.pass,
+            },
+            {
+              skill: "dribble",
+              label: "DRI",
+              name: "DRI",
+              value: rawPlayer.stats.dribble,
+            },
+            {
+              skill: "defense",
+              label: "DEF",
+              name: "DEF",
+              value: rawPlayer.stats.defense,
+            },
+            {
+              skill: "physical",
+              label: "PHY",
+              name: "PHY",
+              value: rawPlayer.stats.physical,
+            },
+          ],
+        };
+
   const pos = posAbbr(player.position);
   const overall = player.overall ?? "—";
   const mid = Math.ceil(player.attributes.length / 2);

@@ -171,39 +171,56 @@ export default function PotAuctionSlide({
 
   useEffect(() => {
     isMounted.current = true;
-    setLoading(true);
-    setCurrentIdx(0);
-    setSales({});
 
-    fetch(
-      `/api/draft/pot-auction-players?championshipId=${encodeURIComponent(championshipId)}&potNumber=${pot.pot_number}&potPosition=${encodeURIComponent(pot.position)}`,
-    )
-      .then(async (res) => {
-        if (!res.ok) {
-          const b = (await res.json()) as { error?: string };
-          throw new Error(b.error ?? "Erro");
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        setLoading(true);
+        setError(null);
+        setCurrentIdx(0);
+        setSales({});
+
+        try {
+          const res = await fetch(
+            `/api/draft/pot-auction-players?championshipId=${encodeURIComponent(championshipId)}&potNumber=${pot.pot_number}&potPosition=${encodeURIComponent(pot.position)}`,
+          );
+
+          if (!res.ok) {
+            const b = (await res.json()) as { error?: string };
+            throw new Error(b.error ?? "Erro");
+          }
+
+          const data = (await res.json()) as PotAuctionPlayersResponse;
+
+          if (!isMounted.current) return;
+
+          setPlayers(data.players);
+
+          const pre: Record<string, { managerName: string; price: number }> =
+            {};
+          data.players.forEach((p) => {
+            if (p.already_purchased) {
+              pre[p.registration_id] = {
+                managerName: "Já vendido",
+                price: 0,
+              };
+            }
+          });
+
+          setSales(pre);
+        } catch (err: unknown) {
+          if (!isMounted.current) return;
+          setError(err instanceof Error ? err.message : "Erro");
+        } finally {
+          if (isMounted.current) {
+            setLoading(false);
+          }
         }
-        return res.json() as Promise<PotAuctionPlayersResponse>;
-      })
-      .then((data) => {
-        if (!isMounted.current) return;
-        setPlayers(data.players);
-        const pre: Record<string, { managerName: string; price: number }> = {};
-        data.players.forEach((p) => {
-          if (p.already_purchased)
-            pre[p.registration_id] = { managerName: "Já vendido", price: 0 };
-        });
-        setSales(pre);
-        setLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (!isMounted.current) return;
-        setError(err instanceof Error ? err.message : "Erro");
-        setLoading(false);
-      });
+      })();
+    }, 0);
 
     return () => {
       isMounted.current = false;
+      clearTimeout(timeoutId);
     };
   }, [championshipId, pot.pot_number, pot.position]);
 
