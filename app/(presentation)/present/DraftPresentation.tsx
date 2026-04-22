@@ -5,6 +5,7 @@ import MenuLeilao from "@/components/draftNight/MenuDraft";
 import ManagersSlideshow from "@/components/draftNight/ManagersSlideShow";
 import TeamsSlideshow from "@/components/draftNight/TeamsSlideShow";
 import ChaveamentoSlideshow from "@/components/draftNight/Chaveamentoslideshow";
+import JogadoresSlideshow from "@/components/draftNight/JogadoresSlideshow";
 import { useSearchParams } from "next/navigation";
 
 type Step =
@@ -174,7 +175,8 @@ type InternalStep =
   | "times_show"
   | "chaveamento_intro"
   | "chaveamento_show"
-  | "jogadores";
+  | "jogadores_intro"
+  | "jogadores_show";
 
 const FLOW: InternalStep[] = [
   "intro",
@@ -186,7 +188,8 @@ const FLOW: InternalStep[] = [
   "times_show",
   "chaveamento_intro",
   "chaveamento_show",
-  "jogadores",
+  "jogadores_intro",
+  "jogadores_show",
 ];
 
 const MENU_MAP: Record<Step, InternalStep> = {
@@ -196,7 +199,7 @@ const MENU_MAP: Record<Step, InternalStep> = {
   cartolas: "cartolas_intro",
   times: "times_intro",
   chaveamento: "chaveamento_intro",
-  jogadores: "jogadores",
+  jogadores: "jogadores_intro",
 };
 
 const MENU_STEPS: InternalStep[] = [
@@ -206,13 +209,15 @@ const MENU_STEPS: InternalStep[] = [
   "times_show",
   "chaveamento_intro",
   "chaveamento_show",
-  "jogadores",
+  "jogadores_intro",
+  "jogadores_show",
 ];
 
 const SLIDESHOW_STEPS: InternalStep[] = [
   "cartolas_show",
   "times_show",
   "chaveamento_show",
+  "jogadores_show",
 ];
 
 const internalSlideContent: Partial<Record<InternalStep, SlideData>> = {
@@ -220,7 +225,7 @@ const internalSlideContent: Partial<Record<InternalStep, SlideData>> = {
   cartolas_intro: slideContent.cartolas,
   times_intro: slideContent.times,
   chaveamento_intro: slideContent.chaveamento,
-  jogadores: slideContent.jogadores,
+  jogadores_intro: slideContent.jogadores,
 };
 
 // ── MAIN ───────────────────────────────────────────────────
@@ -388,7 +393,7 @@ export default function DraftPresentation() {
           />
         )}
 
-        {/* Back to menu badge */}
+        {/* Back to menu badge
         {isMenuStep && (
           <button
             className="back-badge"
@@ -399,7 +404,7 @@ export default function DraftPresentation() {
           >
             <MenuGridIcon /> Voltar ao Menu
           </button>
-        )}
+        )} */}
 
         {/* ── CONTENT ── */}
         <div
@@ -418,12 +423,12 @@ export default function DraftPresentation() {
                     "drop-shadow(0 0 60px rgba(255,160,0,.75)) drop-shadow(0 0 120px rgba(200,100,0,.4))",
                 }}
               />
-              <div className="divider" style={{ maxWidth: 360, marginTop: 8 }}>
+              {/* <div className="divider" style={{ maxWidth: 360, marginTop: 8 }}>
                 <div className="div-line" />
                 <div className="div-gem" />
                 <div className="div-line" />
-              </div>
-              <p
+              </div> */}
+              {/* <p
                 className="gold-text-subtle"
                 style={{
                   fontFamily: "'Cinzel',serif",
@@ -435,7 +440,7 @@ export default function DraftPresentation() {
                 }}
               >
                 Clique para começar
-              </p>
+              </p> */}
             </div>
           )}
 
@@ -448,7 +453,6 @@ export default function DraftPresentation() {
               onGoToMenu={() => goTo("menu")}
             />
           )}
-
           {step === "times_show" && (
             <TeamsSlideshow
               championshipId={championshipId}
@@ -456,11 +460,17 @@ export default function DraftPresentation() {
               onGoToMenu={() => goTo("menu")}
             />
           )}
-
           {step === "chaveamento_show" && (
             <ChaveamentoSlideshow
               championshipId={championshipId}
-              onFinished={() => goTo("jogadores")}
+              onFinished={() => goTo("jogadores_intro")}
+              onGoToMenu={() => goTo("menu")}
+            />
+          )}
+          {step === "jogadores_show" && (
+            <JogadoresSlideshow
+              championshipId={championshipId}
+              onFinished={() => goTo("jogadores_show")}
               onGoToMenu={() => goTo("menu")}
             />
           )}

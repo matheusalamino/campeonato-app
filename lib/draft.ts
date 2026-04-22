@@ -44,9 +44,8 @@ export function distributePlayers(
 
 // limite de cartolas
 export function calculateManagersLimit(size: number): number {
-  if (size >= 11) return 6;
-  if (size >= 9) return 5;
-  if (size >= 7) return 4;
-  if (size >= 5) return 3;
-  return 0;
+  if (size >= 9) return 7;
+  if (size >= 7) return 5;
+  if (size >= 5) return 4;
+  return 3;
 }

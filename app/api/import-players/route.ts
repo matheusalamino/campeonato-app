@@ -74,7 +74,6 @@ export async function POST(req: Request) {
     });
 
     const rows = parsed.data;
-
     const errors: ImportError[] = [];
     let successCount = 0;
 
@@ -83,18 +82,16 @@ export async function POST(req: Request) {
 
       try {
         const cpf = normalizeCPF(row.CPF);
-
         if (!cpf) throw new Error("CPF vazio");
 
-        const name =
-          safeString(row["Nome da Camisa (Uniforme)"]) ||
-          safeString(row["Nome Completo"]);
-
-        if (!name) throw new Error("Nome não informado");
-
+        // ── name  = shirt name (what shows on the card / jersey)
+        // ── official_name = full legal name
         const officialName = safeString(row["Nome Completo"]);
+        const shirtName =
+          safeString(row["Nome da Camisa (Uniforme)"]) ?? officialName;
 
-        // ── PLAYER ──
+        if (!shirtName) throw new Error("Nome não informado");
+
         // ── PLAYER ──
         const { data: existing, error: fetchError } = await supabase
           .from("players")
@@ -111,8 +108,8 @@ export async function POST(req: Request) {
           const { data: newPlayer, error } = await supabase
             .from("players")
             .insert({
-              name,
-              official_name: officialName,
+              name: shirtName, // shirt name → name
+              official_name: officialName, // full name  → official_name
               preferred_position: safeString(row["Posição"]),
               cpf,
               email: safeString(row.Email),
@@ -126,15 +123,14 @@ export async function POST(req: Request) {
             .single();
 
           if (error || !newPlayer) throw new Error(error?.message);
-
           playerId = newPlayer.id;
         } else {
-          // 🟡 UPDATE PLAYER
+          // 🟡 UPDATE PLAYER (guided by CPF)
           const { error: updateError } = await supabase
             .from("players")
             .update({
-              name,
-              official_name: officialName,
+              name: shirtName, // shirt name → name
+              official_name: officialName, // full name  → official_name
               preferred_position: safeString(row["Posição"]),
               email: safeString(row.Email),
               whatsapp: safeString(row.WhatsApp),
@@ -147,7 +143,6 @@ export async function POST(req: Request) {
           if (updateError) throw new Error(updateError.message);
         }
 
-        // ── REGISTRATION ──
         // ── REGISTRATION ──
         const { data: registration, error: regError } = await supabase
           .from("championship_registrations")
@@ -176,7 +171,6 @@ export async function POST(req: Request) {
             .single();
 
           if (error || !newRegistration) throw new Error(error?.message);
-
           registrationId = newRegistration.id;
         } else {
           // 🟡 UPDATE REGISTRATION
@@ -195,12 +189,9 @@ export async function POST(req: Request) {
 
         successCount++;
       } catch (err: unknown) {
-        const message =
-          err instanceof Error ? err.message : "Erro desconhecido";
-
         errors.push({
           line: index + 1,
-          error: message,
+          error: err instanceof Error ? err.message : "Erro desconhecido",
           row,
         });
       }
