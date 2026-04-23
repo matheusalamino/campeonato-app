@@ -13,11 +13,10 @@ export async function POST(req: Request) {
     const body = (await req.json()) as {
       championshipId?: string;
       championshipManagerId?: string;
-      fineType?: "over_budget" | "no_bid_player" | "no_bid_goalkeeper";
     };
 
     const { championshipId, championshipManagerId } = body;
-    const fineType = body.fineType ?? "over_budget";
+    const fineType = "over_budget" as const;
 
     if (!championshipId || !championshipManagerId) {
       return NextResponse.json(
@@ -92,39 +91,30 @@ export async function POST(req: Request) {
     const nextOcc = maxOcc + 1;
     const amount = nextOcc * STEP;
 
-    const { data: budgetRow, error: brErr } = await supabase
-      .from("draft_pot_budgets")
-      .select("id, remaining_budget")
+    const { data: cmRow, error: cmErr } = await supabase
+      .from("championship_managers")
+      .select("id, current_balance")
+      .eq("id", championshipManagerId)
       .eq("championship_id", championshipId)
-      .eq("championship_manager_id", championshipManagerId)
-      .eq("pot_number", potNumber)
-      .eq("pot_position", potPosition)
-      .eq("settled", false)
-      .maybeSingle();
-
-    if (brErr) throw brErr;
-    if (!budgetRow) {
+      .single();
+    if (cmErr || !cmRow) {
       return NextResponse.json(
-        { error: "Cartola sem orçamento ativo neste pote" },
-        { status: 400 },
+        { error: "Cartola não encontrada" },
+        { status: 404 },
       );
     }
 
-    const appliedAmount = Math.min(amount, Math.max(0, budgetRow.remaining_budget));
+    const availableBase = Math.max(0, cmRow.current_balance);
+
+    const appliedAmount = Math.min(amount, availableBase);
     if (appliedAmount <= 0) {
       return NextResponse.json(
-        { error: "Saldo do pote insuficiente para aplicar multa." },
+        { error: "Saldo insuficiente para aplicar multa." },
         { status: 400 },
       );
     }
-    const newRemaining = Math.max(0, budgetRow.remaining_budget - appliedAmount);
 
-    const fineLabel =
-      fineType === "no_bid_player"
-        ? "Sem lance no jogador"
-        : fineType === "no_bid_goalkeeper"
-          ? "Sem lance no goleiro"
-          : "Lance acima do saldo";
+    const fineLabel = "Lance acima do saldo";
 
     const { data: fineRow, error: fineErr } = await supabase
       .from("draft_fines")
@@ -145,12 +135,7 @@ export async function POST(req: Request) {
 
     if (fineErr) throw fineErr;
 
-    const txType =
-      fineType === "no_bid_player"
-        ? "FINE_NO_BID_PLAYER"
-        : fineType === "no_bid_goalkeeper"
-          ? "FINE_NO_BID_GOALKEEPER"
-          : "FINE_OVER_BUDGET";
+    const txType = "FINE_OVER_BUDGET";
 
     const { error: txErr } = await supabase
       .from("draft_balance_transactions")
@@ -168,9 +153,11 @@ export async function POST(req: Request) {
     if (txErr) throw txErr;
 
     const { error: upErr } = await supabase
-      .from("draft_pot_budgets")
-      .update({ remaining_budget: newRemaining })
-      .eq("id", budgetRow.id);
+      .from("championship_managers")
+      .update({
+        current_balance: Math.max(0, cmRow.current_balance - appliedAmount),
+      })
+      .eq("id", cmRow.id);
 
     if (upErr) throw upErr;
 
@@ -179,7 +166,6 @@ export async function POST(req: Request) {
       fineType,
       occurrenceNumber: nextOcc,
       amount: appliedAmount,
-      newRemainingBudget: newRemaining,
     });
   } catch (err) {
     console.error("apply-over-budget-fine error:", err);

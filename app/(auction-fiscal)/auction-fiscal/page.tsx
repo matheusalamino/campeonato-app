@@ -14,10 +14,12 @@ import {
 import { toast } from "sonner";
 
 const supabase = createClient();
+let alertHornAudio: HTMLAudioElement | null = null;
 
 type ChampionshipRow = { id: string; name: string };
 
 type Participant = {
+  draftPotBudgetId: string | null;
   championshipManagerId: string;
   displayName: string;
   managerName: string;
@@ -29,8 +31,6 @@ type Participant = {
   remainingPotBudget: number;
   nextProgressiveFineByType: {
     over_budget: number;
-    no_bid_player: number;
-    no_bid_goalkeeper: number;
   };
 };
 
@@ -44,40 +44,18 @@ type PotPayload = {
 };
 
 const LS_KEY = "auctionFiscalChampionshipId";
-type ProgressiveFineType = "over_budget" | "no_bid_player" | "no_bid_goalkeeper";
 
 function playAlertHorn() {
   try {
-    const audioContext = new AudioContext();
-    const now = audioContext.currentTime;
-    const master = audioContext.createGain();
-    master.gain.setValueAtTime(0.0001, now);
-    master.gain.exponentialRampToValueAtTime(0.45, now + 0.03);
-    master.gain.exponentialRampToValueAtTime(0.0001, now + 1.0);
-    master.connect(audioContext.destination);
-
-    const createBlast = (start: number, baseFreq: number) => {
-      const osc = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      osc.type = "sawtooth";
-      osc.frequency.setValueAtTime(baseFreq, start);
-      osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.75, start + 0.22);
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(0.9, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.24);
-      osc.connect(gain);
-      gain.connect(master);
-      osc.start(start);
-      osc.stop(start + 0.24);
-    };
-
-    createBlast(now + 0.02, 420);
-    createBlast(now + 0.34, 370);
-    window.setTimeout(() => {
-      void audioContext.close().catch(() => undefined);
-    }, 1400);
+    if (typeof window === "undefined") return;
+    if (!alertHornAudio) {
+      alertHornAudio = new Audio("/audios/buzzer.mp3");
+      alertHornAudio.preload = "auto";
+    }
+    alertHornAudio.currentTime = 0;
+    void alertHornAudio.play().catch(() => undefined);
   } catch {
-    // Silently ignore if WebAudio is blocked by browser policy.
+    // Silently ignore if audio playback is blocked by browser policy.
   }
 }
 
@@ -86,10 +64,11 @@ export default function AuctionFiscalPage() {
   const [payload, setPayload] = useState<PotPayload | null>(null);
   const [loadingList, setLoadingList] = useState(true);
   const [confirmBulk, setConfirmBulk] = useState(false);
+  const [isApplyingBulk, setIsApplyingBulk] = useState(false);
+  const [isApplyingIndividual, setIsApplyingIndividual] = useState(false);
+  const [isApplyingExtraBalance, setIsApplyingExtraBalance] = useState(false);
   const [progressiveTarget, setProgressiveTarget] =
     useState<Participant | null>(null);
-  const [progressiveFineType, setProgressiveFineType] =
-    useState<ProgressiveFineType>("over_budget");
   const [extraBalanceOpen, setExtraBalanceOpen] = useState(false);
   const [extraBalanceAmount, setExtraBalanceAmount] = useState("2000");
   const [championshipId, setChampionshipId] = useState<string>(() => {
@@ -164,56 +143,70 @@ export default function AuctionFiscalPage() {
     return `Pote ${payload.potNumber} (${payload.potPosition})`;
   }, [payload]);
 
+  const qualifiedParticipantsCount = useMemo(() => {
+    if (!payload?.participants?.length) return 0;
+    return payload.participants.filter((p) => p.draftPotBudgetId !== null).length;
+  }, [payload]);
+
   async function applyBulk() {
     if (!championshipId) return;
-    setConfirmBulk(false);
-    const res = await fetch("/api/draft/fiscal/bulk-general-fine", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ championshipId }),
-    });
-    const json = (await res.json()) as {
-      success?: boolean;
-      appliedCount?: number;
-      error?: string;
-    };
-    if (!res.ok) {
-      toast.error(json.error ?? "Erro ao aplicar multa geral");
-      return;
+    setIsApplyingBulk(true);
+    try {
+      const res = await fetch("/api/draft/fiscal/bulk-general-fine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ championshipId }),
+      });
+      const json = (await res.json()) as {
+        success?: boolean;
+        appliedCount?: number;
+        error?: string;
+      };
+      if (!res.ok) {
+        toast.error(json.error ?? "Erro ao aplicar multa geral");
+        return;
+      }
+      toast.success(
+        `Multa geral aplicada (${json.appliedCount ?? 0} cartola(s)).`,
+      );
+      playAlertHorn();
+      setConfirmBulk(false);
+      await fetchPot();
+    } finally {
+      setIsApplyingBulk(false);
     }
-    toast.success(
-      `Multa geral aplicada (${json.appliedCount ?? 0} cartola(s)).`,
-    );
-    playAlertHorn();
-    await fetchPot();
   }
 
   async function applyProgressive(p: Participant) {
     if (!championshipId) return;
-    const res = await fetch("/api/draft/fiscal/apply-over-budget-fine", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        championshipId,
-        championshipManagerId: p.championshipManagerId,
-        fineType: progressiveFineType,
-      }),
-    });
-    const json = (await res.json()) as {
-      success?: boolean;
-      amount?: number;
-      error?: string;
-    };
-    if (!res.ok) {
-      toast.error(json.error ?? "Erro ao aplicar multa");
-      return;
+    setIsApplyingIndividual(true);
+    try {
+      const res = await fetch("/api/draft/fiscal/apply-over-budget-fine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          championshipId,
+          championshipManagerId: p.championshipManagerId,
+        }),
+      });
+      const json = (await res.json()) as {
+        success?: boolean;
+        amount?: number;
+        error?: string;
+      };
+      if (!res.ok) {
+        toast.error(json.error ?? "Erro ao aplicar multa");
+        return;
+      }
+      toast.success(
+        `Multa de CC$ ${(json.amount ?? 0).toLocaleString("pt-BR")} aplicada.`,
+      );
+      playAlertHorn();
+      setProgressiveTarget(null);
+      await fetchPot();
+    } finally {
+      setIsApplyingIndividual(false);
     }
-    toast.success(
-      `Multa de CC$ ${(json.amount ?? 0).toLocaleString("pt-BR")} aplicada.`,
-    );
-    playAlertHorn();
-    setProgressiveTarget(null);
-    await fetchPot();
   }
 
   async function applyExtraBalance() {
@@ -224,28 +217,33 @@ export default function AuctionFiscalPage() {
       return;
     }
 
-    const res = await fetch("/api/draft/fiscal/grant-extra-balance", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ championshipId, amount }),
-    });
+    setIsApplyingExtraBalance(true);
+    try {
+      const res = await fetch("/api/draft/fiscal/grant-extra-balance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ championshipId, amount }),
+      });
 
-    const json = (await res.json()) as {
-      success?: boolean;
-      affected?: number;
-      error?: string;
-    };
+      const json = (await res.json()) as {
+        success?: boolean;
+        affected?: number;
+        error?: string;
+      };
 
-    if (!res.ok) {
-      toast.error(json.error ?? "Erro ao creditar saldo extra");
-      return;
+      if (!res.ok) {
+        toast.error(json.error ?? "Erro ao creditar saldo extra");
+        return;
+      }
+
+      setExtraBalanceOpen(false);
+      toast.success(
+        `Saldo extra creditado para ${json.affected ?? 0} cartola(s).`,
+      );
+      await fetchPot();
+    } finally {
+      setIsApplyingExtraBalance(false);
     }
-
-    setExtraBalanceOpen(false);
-    toast.success(
-      `Saldo extra creditado para ${json.affected ?? 0} cartola(s).`,
-    );
-    await fetchPot();
   }
 
   return (
@@ -305,11 +303,11 @@ export default function AuctionFiscalPage() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              disabled={!payload?.auctionOpen || !payload.participants.length}
+              disabled={!payload?.auctionOpen || qualifiedParticipantsCount === 0}
               className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-medium hover:bg-amber-600 disabled:opacity-40"
               onClick={() => setConfirmBulk(true)}
             >
-              Multa Geral (CC$ 2.000)
+              Multa Geral Sem Lance (CC$ 2.000)
             </button>
             <button
               type="button"
@@ -344,64 +342,76 @@ export default function AuctionFiscalPage() {
                     </td>
                   </tr>
                 ) : (
-                  payload.participants.map((p) => (
-                    <tr
-                      key={p.championshipManagerId}
-                      className="border-t border-zinc-800/80"
-                    >
-                      <td className="px-3 py-2 font-medium">
-                        <div className="flex items-center gap-2">
-                          {p.teamLogoUrl ? (
-                            <Image
-                              src={p.teamLogoUrl}
-                              alt={p.teamName ?? "Time"}
-                              width={28}
-                              height={28}
-                              className="h-7 w-7 rounded-full object-cover border border-zinc-700"
-                              unoptimized
-                            />
-                          ) : (
-                            <div className="h-7 w-7 rounded-full border border-zinc-700 bg-zinc-800" />
-                          )}
-                          {p.managerPhotoUrl ? (
-                            <Image
-                              src={p.managerPhotoUrl}
-                              alt={p.managerName}
-                              width={28}
-                              height={28}
-                              className="h-7 w-7 rounded-full object-cover border border-amber-600/60"
-                              unoptimized
-                            />
-                          ) : (
-                            <div className="h-7 w-7 rounded-full border border-amber-600/60 bg-zinc-800" />
-                          )}
-                          <span>{p.displayName}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        CC$ {p.currentBalance.toLocaleString("pt-BR")}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-red-300/90">
-                        CC$ {p.totalFineAmount.toLocaleString("pt-BR")}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-amber-200/90">
-                        CC$ {p.remainingPotBudget.toLocaleString("pt-BR")}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          disabled={!payload.auctionOpen || p.remainingPotBudget <= 0}
-                          className="rounded-md border bg-amber-700 px-2 py-1 text-xs hover:bg-amber-600 disabled:opacity-40"
-                          onClick={() => {
-                            setProgressiveFineType("over_budget");
-                            setProgressiveTarget(p);
-                          }}
-                        >
-                          Multa Individual
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  payload.participants.map((p) => {
+                    const isQualified = p.draftPotBudgetId !== null;
+                    return (
+                      <tr
+                        key={p.championshipManagerId}
+                        className="border-t border-zinc-800/80"
+                      >
+                        <td className="px-3 py-2 font-medium">
+                          <div className="flex items-center gap-2">
+                            {p.teamLogoUrl ? (
+                              <Image
+                                src={p.teamLogoUrl}
+                                alt={p.teamName ?? "Time"}
+                                width={28}
+                                height={28}
+                                className="h-7 w-7 rounded-full object-cover border border-zinc-700"
+                                unoptimized
+                              />
+                            ) : (
+                              <div className="h-7 w-7 rounded-full border border-zinc-700 bg-zinc-800" />
+                            )}
+                            {p.managerPhotoUrl ? (
+                              <Image
+                                src={p.managerPhotoUrl}
+                                alt={p.managerName}
+                                width={28}
+                                height={28}
+                                className="h-7 w-7 rounded-full object-cover border border-amber-600/60"
+                                unoptimized
+                              />
+                            ) : (
+                              <div className="h-7 w-7 rounded-full border border-amber-600/60 bg-zinc-800" />
+                            )}
+                            <span>{p.displayName}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          CC$ {p.currentBalance.toLocaleString("pt-BR")}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-red-300/90">
+                          CC$ {p.totalFineAmount.toLocaleString("pt-BR")}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-amber-200/90">
+                          CC$ {p.remainingPotBudget.toLocaleString("pt-BR")}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            disabled={
+                              !payload.auctionOpen ||
+                              !isQualified ||
+                              isApplyingIndividual
+                            }
+                            className="rounded-md border bg-amber-700 px-2 py-1 text-xs hover:bg-amber-600 disabled:opacity-40 cursor-pointer"
+                            onClick={() => {
+                              if (!isQualified) return;
+                              setProgressiveTarget(p);
+                            }}
+                            title={
+                              !isQualified
+                                ? "Somente cartolas qualificados no pote atual podem receber multa individual."
+                                : undefined
+                            }
+                          >
+                            Multa Individual
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -428,7 +438,13 @@ export default function AuctionFiscalPage() {
             <p>
               Será aplicada multa fixa de até CC$ 2.000 por cartola, debitando
               do saldo do pote atual. Se o saldo do pote for menor, debita só o
-              disponível.
+              disponível. O tipo será definido automaticamente pelo pote:{" "}
+              <span className="font-medium">no_bid_goalkeeper</span> para GOL e{" "}
+              <span className="font-medium">no_bid_player</span> para linha.
+            </p>
+            <p className="text-xs text-zinc-500">
+              A multa geral será aplicada somente aos cartolas qualificados para
+              o leilão do pote atual.
             </p>
             <p className="font-medium text-amber-200/90">
               Você confirma que deseja aplicar a multa geral agora?
@@ -437,6 +453,7 @@ export default function AuctionFiscalPage() {
           <DialogFooter className="gap-2">
             <button
               type="button"
+              disabled={isApplyingBulk}
               className="rounded-lg border border-zinc-600 px-3 py-2 text-sm"
               onClick={() => setConfirmBulk(false)}
             >
@@ -444,10 +461,11 @@ export default function AuctionFiscalPage() {
             </button>
             <button
               type="button"
+              disabled={isApplyingBulk}
               className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-medium hover:bg-amber-600"
               onClick={() => void applyBulk()}
             >
-              Sim, aplicar multa geral
+              {isApplyingBulk ? "Aplicando..." : "Sim, aplicar multa geral"}
             </button>
           </DialogFooter>
         </DialogContent>
@@ -459,28 +477,14 @@ export default function AuctionFiscalPage() {
       >
         <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100">
           <DialogHeader>
-            <DialogTitle>Confirmar multa individual</DialogTitle>
+            <DialogTitle>Confirmar Multa Individual</DialogTitle>
             <DialogDescription className="text-zinc-400">
-              Multa progressiva em passos de CC$ 2.000, debitada do saldo do
-              pote atual.
+              Multa progressiva de &quot;over budget&quot; em passos de CC$ 2.000, debitada
+              do saldo geral.
             </DialogDescription>
           </DialogHeader>
           {progressiveTarget && (
             <div className="space-y-3 text-sm text-zinc-300">
-              <label className="block">
-                <span className="mb-1 block text-zinc-500">Tipo da multa</span>
-                <select
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2"
-                  value={progressiveFineType}
-                  onChange={(e) =>
-                    setProgressiveFineType(e.target.value as ProgressiveFineType)
-                  }
-                >
-                  <option value="over_budget">Lance acima do saldo</option>
-                  <option value="no_bid_player">Sem lance no jogador</option>
-                  <option value="no_bid_goalkeeper">Sem lance no goleiro</option>
-                </select>
-              </label>
               <p>
                 <span className="text-zinc-500">Cartola: </span>
                 <span className="font-medium text-zinc-100">
@@ -491,9 +495,9 @@ export default function AuctionFiscalPage() {
                 <span className="text-zinc-500">Valor desta aplicação: </span>
                 <span className="text-lg font-semibold text-amber-300 tabular-nums">
                   CC${" "}
-                  {progressiveTarget.nextProgressiveFineByType[
-                    progressiveFineType
-                  ].toLocaleString("pt-BR")}
+                  {progressiveTarget.nextProgressiveFineByType.over_budget.toLocaleString(
+                    "pt-BR",
+                  )}
                 </span>
               </p>
               <p className="text-xs text-zinc-500">
@@ -508,6 +512,7 @@ export default function AuctionFiscalPage() {
           <DialogFooter className="gap-2">
             <button
               type="button"
+              disabled={isApplyingIndividual}
               className="rounded-lg border border-zinc-600 px-3 py-2 text-sm"
               onClick={() => setProgressiveTarget(null)}
             >
@@ -515,12 +520,13 @@ export default function AuctionFiscalPage() {
             </button>
             <button
               type="button"
+              disabled={isApplyingIndividual}
               className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-medium hover:bg-amber-600"
               onClick={() =>
                 progressiveTarget && void applyProgressive(progressiveTarget)
               }
             >
-              Sim, aplicar multa
+              {isApplyingIndividual ? "Aplicando..." : "Sim, aplicar multa"}
             </button>
           </DialogFooter>
         </DialogContent>
@@ -555,6 +561,7 @@ export default function AuctionFiscalPage() {
           <DialogFooter className="gap-2">
             <button
               type="button"
+              disabled={isApplyingExtraBalance}
               className="rounded-lg border border-zinc-600 px-3 py-2 text-sm"
               onClick={() => setExtraBalanceOpen(false)}
             >
@@ -562,10 +569,11 @@ export default function AuctionFiscalPage() {
             </button>
             <button
               type="button"
+              disabled={isApplyingExtraBalance}
               className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-medium hover:bg-emerald-600"
               onClick={() => void applyExtraBalance()}
             >
-              Confirmar crédito
+              {isApplyingExtraBalance ? "Aplicando..." : "Confirmar crédito"}
             </button>
           </DialogFooter>
         </DialogContent>

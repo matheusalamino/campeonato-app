@@ -48,6 +48,14 @@ export async function POST(req: Request) {
     const potNumber = ch.draft_auction_pot_number;
     const potPosition = ch.draft_auction_pot_position.trim();
     const potLabel = `Pote ${potNumber} (${potPosition})`;
+    const isGoalkeeperPot = potPosition.toUpperCase() === "GOL";
+    const fineType = isGoalkeeperPot ? "no_bid_goalkeeper" : "no_bid_player";
+    const txType = isGoalkeeperPot
+      ? "FINE_NO_BID_GOALKEEPER"
+      : "FINE_NO_BID_PLAYER";
+    const fineLabel = isGoalkeeperPot
+      ? "Sem lance no goleiro"
+      : "Sem lance no jogador";
 
     const { data: budgets, error: bErr } = await supabase
       .from("draft_pot_budgets")
@@ -79,11 +87,11 @@ export async function POST(req: Request) {
         .insert({
           championship_id: championshipId,
           championship_manager_id: budget.championship_manager_id,
-          type: "manual",
+          type: fineType,
           amount,
           pot_number: potNumber,
           pot_position: potPosition,
-          description: `Multa Geral do Fiscal — ${potLabel} (CC$${FIXED_FINE.toLocaleString("pt-BR")} fixa)`,
+          description: `Multa Geral — ${fineLabel} — ${potLabel} (CC$${FIXED_FINE.toLocaleString("pt-BR")} fixa)`,
           is_automatic: false,
           applied_by: auth.user.id,
         })
@@ -97,12 +105,12 @@ export async function POST(req: Request) {
         .insert({
           championship_id: championshipId,
           championship_manager_id: budget.championship_manager_id,
-          type: "FINE_MANUAL",
+          type: txType,
           amount: -amount,
           reference_id: fineRow.id,
           pot_number: potNumber,
           pot_position: potPosition,
-          description: `Multa Geral (sobre orçamento do pote) — ${potLabel}`,
+          description: `Multa Geral — ${fineLabel} — ${potLabel}`,
         });
 
       if (txErr) throw txErr;

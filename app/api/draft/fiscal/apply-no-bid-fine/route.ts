@@ -40,24 +40,31 @@ export async function POST(req: Request) {
       );
     }
 
-    const { data: cm, error: cmErr } = await supabase
-      .from("championship_managers")
-      .select("id, current_balance")
-      .eq("id", championshipManagerId)
+    const { data: budget, error: budgetErr } = await supabase
+      .from("draft_pot_budgets")
+      .select("id, remaining_budget")
       .eq("championship_id", championshipId)
-      .single();
+      .eq("championship_manager_id", championshipManagerId)
+      .eq("pot_number", potNumber)
+      .eq("pot_position", potPosition)
+      .eq("settled", false)
+      .maybeSingle();
 
-    if (cmErr || !cm) {
+    if (budgetErr) throw budgetErr;
+    if (!budget) {
       return NextResponse.json(
-        { error: "Cartola não encontrado neste campeonato." },
-        { status: 404 },
+        { error: "Cartola sem orçamento ativo neste pote." },
+        { status: 400 },
       );
     }
 
-    const appliedAmount = Math.min(amount, Math.max(0, cm.current_balance ?? 0));
+    const appliedAmount = Math.min(amount, Math.max(0, budget.remaining_budget ?? 0));
     if (appliedAmount <= 0) {
       return NextResponse.json(
-        { error: "Saldo insuficiente para aplicar essa multa." },
+        {
+          error:
+            "Cartola isenta para este tipo de multa: saldo do pote atual zerado.",
+        },
         { status: 400 },
       );
     }
@@ -102,9 +109,9 @@ export async function POST(req: Request) {
     if (txErr) throw txErr;
 
     const { error: upErr } = await supabase
-      .from("championship_managers")
-      .update({ current_balance: (cm.current_balance ?? 0) - appliedAmount })
-      .eq("id", championshipManagerId);
+      .from("draft_pot_budgets")
+      .update({ remaining_budget: Math.max(0, budget.remaining_budget - appliedAmount) })
+      .eq("id", budget.id);
     if (upErr) throw upErr;
 
     return NextResponse.json({

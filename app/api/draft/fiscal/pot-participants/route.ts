@@ -146,8 +146,6 @@ export async function GET(req: NextRequest) {
           initialPotBudget: budget?.initial ?? 0,
           nextProgressiveFineByType: {
             over_budget: nextFine(cmId, "over_budget") * 2000,
-            no_bid_player: nextFine(cmId, "no_bid_player") * 2000,
-            no_bid_goalkeeper: nextFine(cmId, "no_bid_goalkeeper") * 2000,
           },
         };
       });
