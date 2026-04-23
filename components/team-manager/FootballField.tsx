@@ -1,13 +1,12 @@
 "use client";
 
-import { cn } from "@/lib/utils";
-
 type SquadPlayer = {
   id: string;
   name: string;
   position: string;
   overall: number | null;
   purchasePrice: number | null;
+  photoUrl: string | null;
 };
 
 type FootballFieldProps = {
@@ -26,13 +25,6 @@ const positionMap: Record<string, string> = {
   ATA: "ATA",
 };
 
-const positionColors: Record<string, string> = {
-  GOL: "bg-yellow-500/20 border-yellow-500/50 text-yellow-300",
-  ZAG: "bg-blue-500/20 border-blue-500/50 text-blue-300",
-  MEI: "bg-emerald-500/20 border-emerald-500/50 text-emerald-300",
-  ATA: "bg-red-500/20 border-red-500/50 text-red-300",
-};
-
 function formatCC(value: number) {
   return `CC$ ${value.toLocaleString("pt-BR")}`;
 }
@@ -49,24 +41,29 @@ function PlayerSlot({ player }: { player?: SquadPlayer }) {
     );
   }
 
-  const pos = positionMap[player.position] ?? "MEI";
-  const colors = positionColors[pos] ?? positionColors.MEI;
-
   return (
     <div className="flex flex-col items-center gap-1 max-w-[72px]">
-      <div
-        className={cn(
-          "w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 flex items-center justify-center text-sm font-bold",
-          colors,
+      <div className="relative w-12 h-12 sm:w-14 sm:h-14 shrink-0">
+        {player.photoUrl ? (
+          <img
+            src={player.photoUrl}
+            alt=""
+            className="w-full h-full rounded-full object-cover border-2 border-amber-500/55 shadow-md shadow-black/40"
+          />
+        ) : (
+          <div className="w-full h-full rounded-full border-2 border-amber-600/25 bg-zinc-800/90 flex items-center justify-center text-[11px] font-semibold text-zinc-500">
+            ?
+          </div>
         )}
-      >
-        {player.overall ?? "–"}
+        <span className="absolute -top-0.5 -right-0.5 min-w-[1.35rem] h-5 px-0.5 rounded-full flex items-center justify-center text-[9px] font-bold leading-none border shadow-sm bg-zinc-950 border-amber-500/70 text-amber-200">
+          {player.overall ?? "–"}
+        </span>
       </div>
       <span className="text-[10px] font-medium text-center leading-tight truncate w-full">
         {player.name.split(" ")[0]}
       </span>
       {player.purchasePrice !== null && (
-        <span className="text-[8px] text-zinc-500">
+        <span className="text-[8px] font-semibold text-amber-300 tabular-nums">
           {formatCC(player.purchasePrice)}
         </span>
       )}

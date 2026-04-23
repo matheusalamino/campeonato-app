@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -18,7 +18,67 @@ type Transaction = {
   amount: number;
   description: string | null;
   created_at: string;
+  pot_number: number | null;
+  pot_position: string | null;
 };
+
+type AuctionState = {
+  open: boolean;
+  potNumber: number | null;
+  potPosition: string | null;
+};
+
+function normalizePotPos(s: string | null): string {
+  return (s ?? "").trim().toLowerCase();
+}
+
+function transactionMatchesActivePot(
+  tx: Transaction,
+  active: AuctionState,
+): boolean {
+  if (!active.open || active.potNumber == null || !active.potPosition?.trim()) {
+    return false;
+  }
+  const wantN = active.potNumber;
+  const wantP = normalizePotPos(active.potPosition);
+
+  if (tx.pot_number != null && tx.pot_position != null) {
+    return tx.pot_number === wantN && normalizePotPos(tx.pot_position) === wantP;
+  }
+
+  const desc = tx.description ?? "";
+  const needleA = `Pote ${wantN} (${active.potPosition.trim()})`;
+  const needleB = `Pote ${wantN} (${wantP})`;
+  return desc.includes(needleA) || desc.toLowerCase().includes(needleB.toLowerCase());
+}
+
+function txsEqual(a: Transaction[], b: Transaction[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.id !== y.id ||
+      x.type !== y.type ||
+      x.amount !== y.amount ||
+      (x.description ?? "") !== (y.description ?? "") ||
+      x.created_at !== y.created_at ||
+      x.pot_number !== y.pot_number ||
+      normalizePotPos(x.pot_position) !== normalizePotPos(y.pot_position)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function auctionEqual(a: AuctionState, b: AuctionState): boolean {
+  return (
+    a.open === b.open &&
+    a.potNumber === b.potNumber &&
+    normalizePotPos(a.potPosition) === normalizePotPos(b.potPosition)
+  );
+}
 
 export default function BalancePage() {
   const router = useRouter();
@@ -26,25 +86,81 @@ export default function BalancePage() {
   const session = useDraftSession(ctx.championshipId, ctx.championshipManagerId);
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [auctionState, setAuctionState] = useState<AuctionState>({
+    open: false,
+    potNumber: null,
+    potPosition: null,
+  });
   const [loading, setLoading] = useState(true);
+  const initialLoadDone = useRef(false);
 
   useEffect(() => {
-    async function load() {
-      setLoading(true);
-      const { data } = await supabase
-        .from("draft_balance_transactions")
-        .select("id, type, amount, description, created_at")
-        .eq("championship_manager_id", ctx.championshipManagerId)
-        .order("created_at", { ascending: false });
+    let cancelled = false;
+    initialLoadDone.current = false;
 
-      setTransactions(data ?? []);
-      setLoading(false);
+    async function load() {
+      const isInitial = !initialLoadDone.current;
+      if (isInitial) setLoading(true);
+
+      try {
+        const [{ data: txData }, { data: ch }] = await Promise.all([
+          supabase
+            .from("draft_balance_transactions")
+            .select(
+              "id, type, amount, description, created_at, pot_number, pot_position",
+            )
+            .eq("championship_manager_id", ctx.championshipManagerId)
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("championships")
+            .select(
+              "draft_auction_open, draft_auction_pot_number, draft_auction_pot_position",
+            )
+            .eq("id", ctx.championshipId)
+            .single(),
+        ]);
+
+        if (cancelled) return;
+
+        const nextTx = (txData ?? []) as Transaction[];
+        const nextAuction: AuctionState = {
+          open: Boolean(ch?.draft_auction_open),
+          potNumber: ch?.draft_auction_pot_number ?? null,
+          potPosition: ch?.draft_auction_pot_position?.trim() ?? null,
+        };
+
+        setTransactions((prev) =>
+          txsEqual(prev, nextTx) ? prev : nextTx,
+        );
+        setAuctionState((prev) =>
+          auctionEqual(prev, nextAuction) ? prev : nextAuction,
+        );
+      } finally {
+        if (!cancelled && isInitial) {
+          setLoading(false);
+          initialLoadDone.current = true;
+        }
+      }
     }
 
-    load();
-    const interval = setInterval(load, 5000);
-    return () => clearInterval(interval);
-  }, [ctx.championshipManagerId]);
+    void load();
+    const interval = setInterval(() => void load(), 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [ctx.championshipManagerId, ctx.championshipId]);
+
+  const potTabTransactions = useMemo(() => {
+    return transactions.filter(
+      (tx) =>
+        transactionMatchesActivePot(tx, auctionState) &&
+        (tx.type === "POT_BID_RESERVE" ||
+          tx.type === "POT_BID_REFUND" ||
+          tx.type === "POT_BUDGET_RETURN" ||
+          tx.type === "DRAFT_PLAYER_PURCHASE"),
+    );
+  }, [transactions, auctionState]);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -105,34 +221,30 @@ export default function BalancePage() {
 
           <TabsContent value="pot" className="mt-3">
             <div className="rounded-2xl bg-zinc-900 border border-zinc-800 px-4">
-              {loading ? (
+              {!auctionState.open ? (
+                <p className="py-8 text-center text-sm text-zinc-500">
+                  Nenhum leilão de pote ativo no momento. Quando o fiscal abrir o
+                  leilão, as movimentações deste pote aparecem aqui.
+                </p>
+              ) : loading ? (
                 <p className="py-8 text-center text-sm text-zinc-500">
                   Carregando...
                 </p>
-              ) : (() => {
-                  const potTx = transactions.filter(
-                    (tx) =>
-                      tx.type === "POT_BID_RESERVE" ||
-                      tx.type === "POT_BID_REFUND" ||
-                      tx.type === "POT_BUDGET_RETURN" ||
-                      tx.type === "FINE_REMAINING_BUDGET",
-                  );
-                  return potTx.length === 0 ? (
-                    <p className="py-8 text-center text-sm text-zinc-500">
-                      Nenhuma transação de pote encontrada.
-                    </p>
-                  ) : (
-                    potTx.map((tx) => (
-                      <TransactionItem
-                        key={tx.id}
-                        type={tx.type}
-                        amount={tx.amount}
-                        description={tx.description}
-                        createdAt={tx.created_at}
-                      />
-                    ))
-                  );
-                })()}
+              ) : potTabTransactions.length === 0 ? (
+                <p className="py-8 text-center text-sm text-zinc-500">
+                  Nenhuma transação deste pote ainda.
+                </p>
+              ) : (
+                potTabTransactions.map((tx) => (
+                  <TransactionItem
+                    key={tx.id}
+                    type={tx.type}
+                    amount={tx.amount}
+                    description={tx.description}
+                    createdAt={tx.created_at}
+                  />
+                ))
+              )}
             </div>
           </TabsContent>
         </Tabs>

@@ -138,6 +138,8 @@ export default function TeamManagerDashboard() {
         currentBalance={session.currentBalance}
         championshipId={ctx.championshipId}
         championshipManagerId={ctx.championshipManagerId}
+        qualificationPotNumber={session.qualificationPotNumber}
+        qualificationPotPosition={session.qualificationPotPosition}
         qualificationPotLabel={qualificationPotLabel}
         qualificationWindowOpen={session.qualificationWindowOpen}
         onSuccess={() => session.refetch()}

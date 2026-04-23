@@ -24,6 +24,18 @@ function purchaseTypeLabel(t: PurchasePlayerBody["purchaseType"]): string {
   }
 }
 
+function resolvePlayerName(
+  playersRel: unknown,
+): { name: string } | null {
+  if (!playersRel) return null;
+  if (Array.isArray(playersRel)) {
+    const first = playersRel[0] as { name?: string } | undefined;
+    return first?.name ? { name: first.name } : null;
+  }
+  const o = playersRel as { name?: string };
+  return o.name ? { name: o.name } : null;
+}
+
 export async function POST(req: NextRequest) {
   const auth = await requireAdminOrAuctionFiscal();
   if (auth.error || !auth.supabase) return auth.error!;
@@ -68,7 +80,7 @@ export async function POST(req: NextRequest) {
   try {
     const { data: reg, error: regErr } = await supabase
       .from("championship_registrations")
-      .select("id, championship_id")
+      .select("id, championship_id, players(name)")
       .eq("id", registrationId)
       .single();
 
@@ -78,6 +90,8 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    const playerName = resolvePlayerName(reg.players)?.name ?? "Jogador";
 
     const { data: existingPurchase } = await supabase
       .from("draft_player_purchases")
@@ -170,16 +184,18 @@ export async function POST(req: NextRequest) {
             | undefined)
         : undefined;
 
-    if (budget && budget.remaining_budget < purchasePrice) {
+    const usePotBudget = purchaseType === "open_auction" && Boolean(budget);
+
+    if (usePotBudget && budget!.remaining_budget < purchasePrice) {
       return NextResponse.json(
         {
-          error: `Saldo do pote insuficiente (restante ${budget.remaining_budget.toLocaleString("pt-BR")})`,
+          error: `Saldo do pote insuficiente (restante ${budget!.remaining_budget.toLocaleString("pt-BR")})`,
         },
         { status: 400 },
       );
     }
 
-    if (balanceBefore < purchasePrice) {
+    if (!usePotBudget && balanceBefore < purchasePrice) {
       return NextResponse.json(
         { error: "Saldo CC do cartola insuficiente para este valor" },
         { status: 400 },
@@ -216,9 +232,11 @@ export async function POST(req: NextRequest) {
       throw ctpErr;
     }
 
-    const newBalance = balanceBefore - purchasePrice;
     const potLabel = `Pote ${potNumber} (${pos})`;
     const typeLabel = purchaseTypeLabel(purchaseType);
+    const priceFmt = purchasePrice.toLocaleString("pt-BR");
+    const descPot = `${typeLabel} — ${playerName} — ${potLabel} · CC$ ${priceFmt} (orçamento do pote)`;
+    const descCc = `${typeLabel} — ${playerName} — ${potLabel} · CC$ ${priceFmt}`;
 
     const { error: txErr } = await supabase.from("draft_balance_transactions").insert({
       championship_id: championshipId,
@@ -226,7 +244,9 @@ export async function POST(req: NextRequest) {
       type: "DRAFT_PLAYER_PURCHASE",
       amount: -purchasePrice,
       reference_id: purchaseRowId,
-      description: `${typeLabel} — ${potLabel}: ${purchasePrice.toLocaleString("pt-BR")}`,
+      pot_number: potNumber,
+      pot_position: pos,
+      description: usePotBudget ? descPot : descCc,
     });
 
     if (txErr) {
@@ -239,38 +259,16 @@ export async function POST(req: NextRequest) {
       throw txErr;
     }
 
-    const { error: balErr } = await supabase
-      .from("championship_managers")
-      .update({ current_balance: newBalance })
-      .eq("id", championshipManagerId);
+    let newBalance = balanceBefore;
 
-    if (balErr) {
-      await supabase
-        .from("draft_balance_transactions")
-        .delete()
-        .eq("reference_id", purchaseRowId)
-        .eq("type", "DRAFT_PLAYER_PURCHASE");
-      await supabase
-        .from("championship_team_players")
-        .delete()
-        .eq("championship_team_id", championshipTeamId)
-        .eq("registration_id", registrationId);
-      await supabase.from("draft_player_purchases").delete().eq("id", purchaseRowId);
-      throw balErr;
-    }
-
-    if (budget) {
-      const newRem = budget.remaining_budget - purchasePrice;
+    if (usePotBudget) {
+      const newRem = budget!.remaining_budget - purchasePrice;
       const { error: budUpErr } = await supabase
         .from("draft_pot_budgets")
         .update({ remaining_budget: Math.max(0, newRem) })
-        .eq("id", budget.id);
+        .eq("id", budget!.id);
 
       if (budUpErr) {
-        await supabase
-          .from("championship_managers")
-          .update({ current_balance: balanceBefore })
-          .eq("id", championshipManagerId);
         await supabase
           .from("draft_balance_transactions")
           .delete()
@@ -284,12 +282,34 @@ export async function POST(req: NextRequest) {
         await supabase.from("draft_player_purchases").delete().eq("id", purchaseRowId);
         throw budUpErr;
       }
+    } else {
+      newBalance = balanceBefore - purchasePrice;
+      const { error: balErr } = await supabase
+        .from("championship_managers")
+        .update({ current_balance: newBalance })
+        .eq("id", championshipManagerId);
+
+      if (balErr) {
+        await supabase
+          .from("draft_balance_transactions")
+          .delete()
+          .eq("reference_id", purchaseRowId)
+          .eq("type", "DRAFT_PLAYER_PURCHASE");
+        await supabase
+          .from("championship_team_players")
+          .delete()
+          .eq("championship_team_id", championshipTeamId)
+          .eq("registration_id", registrationId);
+        await supabase.from("draft_player_purchases").delete().eq("id", purchaseRowId);
+        throw balErr;
+      }
     }
 
     return NextResponse.json({
       ok: true,
       purchaseId: purchaseRowId,
       newBalance,
+      debitedFromPotBudget: usePotBudget,
     });
   } catch (err) {
     console.error("purchase-player error:", err);
