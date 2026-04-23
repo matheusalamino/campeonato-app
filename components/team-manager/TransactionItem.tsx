@@ -110,6 +110,11 @@ export function TransactionItem({
     color: "text-zinc-400",
   };
 
+  const isPotBudgetPurchase =
+    type === "DRAFT_PLAYER_PURCHASE" &&
+    amount < 0 &&
+    Boolean(description?.includes("(orçamento do pote)"));
+
   return (
     <div className="flex items-center gap-3 py-3 border-b border-zinc-800/50 last:border-0">
       <div className={cn("shrink-0", config.color)}>{config.icon}</div>
@@ -122,7 +127,11 @@ export function TransactionItem({
       <span
         className={cn(
           "text-sm font-bold tabular-nums shrink-0",
-          amount >= 0 ? "text-emerald-400" : "text-red-400",
+          amount >= 0
+            ? "text-emerald-400"
+            : isPotBudgetPurchase
+              ? "text-amber-400"
+              : "text-red-400",
         )}
       >
         {formatCC(amount)}

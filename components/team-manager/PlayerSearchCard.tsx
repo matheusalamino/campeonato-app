@@ -7,6 +7,9 @@ type PlayerSearchCardProps = {
   name: string;
   position: string;
   overall: number | null;
+  photoUrl: string | null;
+  isPurchased: boolean;
+  purchasePrice: number | null;
   isFavorite: boolean;
   onToggleFavorite: () => void;
 };
@@ -29,42 +32,96 @@ function overallColor(overall: number | null) {
   return "text-orange-400";
 }
 
+function formatPrice(n: number) {
+  return `CC$ ${n.toLocaleString("pt-BR")}`;
+}
+
 export function PlayerSearchCard({
   name,
   position,
   overall,
+  photoUrl,
+  isPurchased,
+  purchasePrice,
   isFavorite,
   onToggleFavorite,
 }: PlayerSearchCardProps) {
+  const canFavorite = !isPurchased || isFavorite;
+
   return (
     <div className="flex items-center gap-3 rounded-xl bg-zinc-900 border border-zinc-800 p-3">
-      {/* Overall */}
-      <div
-        className={cn(
-          "w-11 h-11 rounded-lg flex items-center justify-center text-lg font-bold shrink-0 bg-zinc-800",
-          overallColor(overall),
-        )}
-      >
-        {overall ?? "–"}
-      </div>
-
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{name}</p>
-        <span
+      {/* Foto (círculo) + overall (quadrado) */}
+      <div className="flex items-center gap-2 shrink-0">
+        <div className="relative w-11 h-11 rounded-full overflow-hidden border border-zinc-600 bg-zinc-800">
+          {photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={photoUrl}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-500">
+              ?
+            </div>
+          )}
+        </div>
+        <div
           className={cn(
-            "inline-block mt-0.5 rounded-full px-2 py-0.5 text-[10px] font-medium",
-            positionColors[position] ?? "bg-zinc-700 text-zinc-300",
+            "w-10 h-10 rounded-lg flex items-center justify-center text-base font-bold shrink-0 bg-zinc-800 border border-zinc-700",
+            overallColor(overall),
           )}
         >
-          {position}
-        </span>
+          {overall ?? "–"}
+        </div>
       </div>
 
-      {/* Favorite button */}
+      {/* Info + badges */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate">{name}</p>
+        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+          <span
+            className={cn(
+              "inline-block rounded-full px-2 py-0.5 text-[10px] font-medium",
+              positionColors[position] ?? "bg-zinc-700 text-zinc-300",
+            )}
+          >
+            {position}
+          </span>
+          {isPurchased && (
+            <>
+              <span className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/35">
+                Leiloado
+              </span>
+              {purchasePrice != null && (
+                <span className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                  {formatPrice(purchasePrice)}
+                </span>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
       <button
-        onClick={onToggleFavorite}
-        className="p-2 rounded-lg hover:bg-zinc-800 transition shrink-0"
+        type="button"
+        onClick={() => {
+          if (canFavorite) onToggleFavorite();
+        }}
+        disabled={!canFavorite}
+        title={
+          isPurchased && !isFavorite
+            ? "Jogadores já leiloados não podem ser favoritados"
+            : isFavorite
+              ? "Remover dos favoritos"
+              : "Adicionar aos favoritos"
+        }
+        className={cn(
+          "p-2 rounded-lg transition shrink-0",
+          canFavorite
+            ? "hover:bg-zinc-800 cursor-pointer"
+            : "opacity-35 cursor-not-allowed",
+        )}
       >
         <Star
           className={cn(

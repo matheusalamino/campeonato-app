@@ -15,6 +15,7 @@ type SquadPlayer = {
   position: string;
   overall: number | null;
   purchasePrice: number | null;
+  photoUrl: string | null;
 };
 
 export default function SquadPage() {
@@ -51,6 +52,7 @@ export default function SquadPage() {
            championship_registrations (
              id,
              final_overall,
+             profile_photo_link,
              player_id,
              players ( id, name, preferred_position )
            )`,
@@ -73,6 +75,7 @@ export default function SquadPage() {
           const reg = (Array.isArray(raw) ? raw[0] : raw) as {
             id: string;
             final_overall: number | null;
+            profile_photo_link: string | null;
             player_id: string;
             players:
               | { id: string; name: string; preferred_position: string }
@@ -93,6 +96,7 @@ export default function SquadPage() {
             position: player.preferred_position,
             overall: reg.final_overall,
             purchasePrice: purchaseMap.get(reg.id) ?? null,
+            photoUrl: reg.profile_photo_link ?? null,
           };
         })
         .filter(Boolean) as SquadPlayer[];

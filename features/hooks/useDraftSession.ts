@@ -65,21 +65,12 @@ export function useDraftSession(
 
   const fetchSession = useCallback(async () => {
     try {
-      const [cmRes, budgetRes, cardRes, chRes] = await Promise.all([
+      const [cmRes, cardRes, chRes] = await Promise.all([
         supabase
           .from("championship_managers")
           .select("current_balance, initial_balance, team_id")
           .eq("id", championshipManagerId)
           .single(),
-        supabase
-          .from("draft_pot_budgets")
-          .select(
-            "pot_number, pot_position, initial_budget, remaining_budget, settled",
-          )
-          .eq("championship_manager_id", championshipManagerId)
-          .eq("settled", false)
-          .order("created_at", { ascending: false })
-          .limit(1),
         supabase
           .from("draft_special_card_uses")
           .select("id")
@@ -89,7 +80,7 @@ export function useDraftSession(
         supabase
           .from("championships")
           .select(
-            "draft_qualification_window_open, draft_qualification_pot_number, draft_qualification_pot_position",
+            "draft_qualification_window_open, draft_qualification_pot_number, draft_qualification_pot_position, draft_auction_open, draft_auction_pot_number, draft_auction_pot_position",
           )
           .eq("id", championshipId)
           .single(),
@@ -132,13 +123,38 @@ export function useDraftSession(
 
       if (!mountedRef.current) return;
 
-      const activeBudget = budgetRes.data?.[0] ?? null;
-
       const ch = chRes.data as {
         draft_qualification_window_open: boolean | null;
         draft_qualification_pot_number: number | null;
         draft_qualification_pot_position: string | null;
+        draft_auction_open: boolean | null;
+        draft_auction_pot_number: number | null;
+        draft_auction_pot_position: string | null;
       } | null;
+
+      let budgetQuery = supabase
+        .from("draft_pot_budgets")
+        .select(
+          "pot_number, pot_position, initial_budget, remaining_budget, settled",
+        )
+        .eq("championship_manager_id", championshipManagerId)
+        .eq("settled", false);
+
+      if (
+        ch?.draft_auction_open &&
+        ch.draft_auction_pot_number != null &&
+        ch.draft_auction_pot_position?.trim()
+      ) {
+        budgetQuery = budgetQuery
+          .eq("pot_number", ch.draft_auction_pot_number)
+          .eq("pot_position", ch.draft_auction_pot_position.trim());
+      }
+
+      const { data: budgetRows } = await budgetQuery
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      const activeBudget = budgetRows?.[0] ?? null;
 
       const qualificationWindowOpen = Boolean(
         ch?.draft_qualification_window_open,

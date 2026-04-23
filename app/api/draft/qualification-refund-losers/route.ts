@@ -142,6 +142,8 @@ export async function POST(req: Request) {
           type: "POT_BID_REFUND",
           amount,
           reference_id: bid.id,
+          pot_number: potNumber,
+          pot_position: pos,
           description: `Estorno habilitação ${potLabel}: não classificado · ${amount.toLocaleString("pt-BR")}`,
         });
 
@@ -157,10 +159,52 @@ export async function POST(req: Request) {
       refunded += 1;
     }
 
+    const { data: qualifiedBids, error: qErr } = await supabase
+      .from("draft_qualification_bids")
+      .select("championship_manager_id, bid_amount")
+      .eq("championship_id", championshipId)
+      .eq("pot_number", potNumber)
+      .eq("pot_position", pos)
+      .eq("qualified", true);
+
+    if (qErr) throw qErr;
+
+    let potBudgetsCreated = 0;
+
+    for (const row of qualifiedBids ?? []) {
+      const cmId = row.championship_manager_id as string;
+      const bidAmount = row.bid_amount as number;
+
+      const { data: existingBudget, error: exErr } = await supabase
+        .from("draft_pot_budgets")
+        .select("id")
+        .eq("championship_id", championshipId)
+        .eq("championship_manager_id", cmId)
+        .eq("pot_number", potNumber)
+        .eq("pot_position", pos)
+        .maybeSingle();
+
+      if (exErr) throw exErr;
+      if (existingBudget) continue;
+
+      const { error: insBud } = await supabase.from("draft_pot_budgets").insert({
+        championship_id: championshipId,
+        championship_manager_id: cmId,
+        pot_number: potNumber,
+        pot_position: pos,
+        initial_budget: bidAmount,
+        remaining_budget: bidAmount,
+      });
+
+      if (insBud) throw insBud;
+      potBudgetsCreated += 1;
+    }
+
     return NextResponse.json({
       success: true,
       refunded,
       losersConsidered: loserRows.length,
+      potBudgetsCreated,
     });
   } catch (err) {
     console.error("qualification-refund-losers error:", err);

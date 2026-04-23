@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -15,6 +15,9 @@ type PlayerItem = {
   name: string;
   position: string;
   overall: number | null;
+  photoUrl: string | null;
+  isPurchased: boolean;
+  purchasePrice: number | null;
 };
 
 export default function SearchAndFavoritePlayersPage() {
@@ -26,44 +29,89 @@ export default function SearchAndFavoritePlayersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [positionFilter, setPositionFilter] = useState("Todos");
+  const playersRef = useRef<PlayerItem[]>([]);
 
   useEffect(() => {
-    async function load() {
-      const [regRes, favRes] = await Promise.all([
-        supabase
-          .from("championship_registrations")
-          .select(
-            `id, final_overall, players!inner ( name, preferred_position )`,
-          )
-          .eq("championship_id", ctx.championshipId),
-        supabase
-          .from("draft_player_favorites")
-          .select("registration_id")
-          .eq("championship_manager_id", ctx.championshipManagerId),
-      ]);
+    let cancelled = false;
+    let loadingTurnedOn = false;
 
-      const mapped: PlayerItem[] = (regRes.data ?? []).map((r) => {
-        const player = Array.isArray(r.players) ? r.players[0] : r.players;
-        return {
-          registrationId: r.id,
-          name: player?.name ?? "–",
-          position: player?.preferred_position ?? "–",
-          overall: r.final_overall,
-        };
-      });
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      setLoading(true);
+      loadingTurnedOn = true;
 
-      mapped.sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0));
+      try {
+        const [regRes, favRes, purRes] = await Promise.all([
+          supabase
+            .from("championship_registrations")
+            .select(
+              `id, final_overall, profile_photo_link, players!inner ( name, preferred_position )`,
+            )
+            .eq("championship_id", ctx.championshipId),
+          supabase
+            .from("draft_player_favorites")
+            .select("registration_id")
+            .eq("championship_manager_id", ctx.championshipManagerId),
+          supabase
+            .from("draft_player_purchases")
+            .select("registration_id, purchase_price")
+            .eq("championship_id", ctx.championshipId),
+        ]);
 
-      setPlayers(mapped);
-      setFavoriteIds(new Set((favRes.data ?? []).map((f) => f.registration_id)));
-      setLoading(false);
-    }
+        if (cancelled) return;
 
-    load();
+        const purchaseByReg = new Map<string, number>();
+        for (const row of purRes.data ?? []) {
+          purchaseByReg.set(
+            row.registration_id as string,
+            row.purchase_price as number,
+          );
+        }
+
+        const mapped: PlayerItem[] = (regRes.data ?? []).map((r) => {
+          const player = Array.isArray(r.players) ? r.players[0] : r.players;
+          const rid = r.id as string;
+          const price = purchaseByReg.get(rid);
+          return {
+            registrationId: rid,
+            name: player?.name ?? "–",
+            position: player?.preferred_position ?? "–",
+            overall: r.final_overall,
+            photoUrl: (r.profile_photo_link as string | null) ?? null,
+            isPurchased: purchaseByReg.has(rid),
+            purchasePrice: price ?? null,
+          };
+        });
+
+        mapped.sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0));
+
+        if (cancelled) return;
+
+        setPlayers(mapped);
+        playersRef.current = mapped;
+        setFavoriteIds(new Set((favRes.data ?? []).map((f) => f.registration_id)));
+      } finally {
+        if (loadingTurnedOn) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [ctx.championshipId, ctx.championshipManagerId]);
 
   const toggleFavorite = useCallback(
     async (registrationId: string) => {
+      const player = playersRef.current.find(
+        (p) => p.registrationId === registrationId,
+      );
+      if (player?.isPurchased && !favoriteIds.has(registrationId)) {
+        return;
+      }
+
       const isFav = favoriteIds.has(registrationId);
 
       setFavoriteIds((prev) => {
@@ -189,6 +237,9 @@ export default function SearchAndFavoritePlayersPage() {
                       name={p.name}
                       position={p.position}
                       overall={p.overall}
+                      photoUrl={p.photoUrl}
+                      isPurchased={p.isPurchased}
+                      purchasePrice={p.purchasePrice}
                       isFavorite={favoriteIds.has(p.registrationId)}
                       onToggleFavorite={() => toggleFavorite(p.registrationId)}
                     />
@@ -210,6 +261,9 @@ export default function SearchAndFavoritePlayersPage() {
                       name={p.name}
                       position={p.position}
                       overall={p.overall}
+                      photoUrl={p.photoUrl}
+                      isPurchased={p.isPurchased}
+                      purchasePrice={p.purchasePrice}
                       isFavorite
                       onToggleFavorite={() => toggleFavorite(p.registrationId)}
                     />

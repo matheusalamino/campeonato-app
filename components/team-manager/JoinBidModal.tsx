@@ -11,6 +11,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
+import type { PotAuctionPlayersResponse } from "@/app/api/draft/pot-auction-players/route";
 
 type JoinBidModalProps = {
   open: boolean;
@@ -18,6 +19,8 @@ type JoinBidModalProps = {
   currentBalance: number;
   championshipId: string;
   championshipManagerId: string;
+  qualificationPotNumber: number | null;
+  qualificationPotPosition: string | null;
   /** e.g. "Pote 2 (Atacante)" — shown in title when staff opened the window */
   qualificationPotLabel: string | null;
   /** Close modal if staff closes the window while it is open */
@@ -35,6 +38,8 @@ export function JoinBidModal({
   currentBalance,
   championshipId,
   championshipManagerId,
+  qualificationPotNumber,
+  qualificationPotPosition,
   qualificationPotLabel,
   qualificationWindowOpen,
   onSuccess,
@@ -44,6 +49,55 @@ export function JoinBidModal({
       onOpenChange(false);
     }
   }, [open, qualificationWindowOpen, onOpenChange]);
+
+  const [potPlayers, setPotPlayers] = useState<
+    PotAuctionPlayersResponse["players"]
+  >([]);
+  const [potPreviewLoading, setPotPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    if (
+      !open ||
+      qualificationPotNumber == null ||
+      !qualificationPotPosition?.trim()
+    ) {
+      setPotPlayers([]);
+      return;
+    }
+
+    const ac = new AbortController();
+    setPotPreviewLoading(true);
+
+    const q = new URLSearchParams({
+      championshipId,
+      potNumber: String(qualificationPotNumber),
+      potPosition: qualificationPotPosition.trim(),
+    });
+
+    void fetch(`/api/draft/pot-auction-players?${q.toString()}`, {
+      signal: ac.signal,
+    })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const json = (await res.json()) as PotAuctionPlayersResponse;
+        if (!ac.signal.aborted) {
+          setPotPlayers(json.players ?? []);
+        }
+      })
+      .catch(() => {
+        if (!ac.signal.aborted) setPotPlayers([]);
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setPotPreviewLoading(false);
+      });
+
+    return () => ac.abort();
+  }, [
+    open,
+    championshipId,
+    qualificationPotNumber,
+    qualificationPotPosition,
+  ]);
 
   const minBid = 1000;
   const maxBid = Math.floor(currentBalance / 1000) * 1000;
@@ -87,7 +141,7 @@ export function JoinBidModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-zinc-900 border-zinc-800 text-white max-w-md">
+      <DialogContent className="bg-zinc-900 border-zinc-800 text-white max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             Lance de Habilitação
@@ -102,6 +156,52 @@ export function JoinBidModal({
             pote.
           </DialogDescription>
         </DialogHeader>
+
+        {qualificationPotNumber != null && qualificationPotPosition ? (
+          <div className="space-y-2">
+            <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+              Jogadores neste pote
+            </p>
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-thin">
+              {potPreviewLoading ? (
+                <p className="text-xs text-zinc-500 py-4">Carregando elenco…</p>
+              ) : potPlayers.length === 0 ? (
+                <p className="text-xs text-zinc-500 py-2">
+                  Nenhum jogador listado para este pote.
+                </p>
+              ) : (
+                potPlayers
+                  .filter((p) => p.registration_id)
+                  .map((p) => (
+                    <div
+                      key={p.registration_id}
+                      className="flex flex-col items-center gap-1 shrink-0 w-[52px]"
+                    >
+                      <div className="relative w-11 h-11">
+                        {p.photo_url ? (
+                          <img
+                            src={p.photo_url}
+                            alt=""
+                            className="w-full h-full rounded-full object-cover border border-amber-600/40"
+                          />
+                        ) : (
+                          <div className="w-full h-full rounded-full bg-zinc-800 border border-zinc-600 flex items-center justify-center text-[10px] text-zinc-500">
+                            ?
+                          </div>
+                        )}
+                        <span className="absolute -top-0.5 -right-0.5 min-w-[1.1rem] h-4 px-0.5 rounded-full bg-zinc-950 border border-amber-500/50 text-[8px] font-bold text-amber-200 flex items-center justify-center leading-none">
+                          {p.overall ?? "–"}
+                        </span>
+                      </div>
+                      <span className="text-[8px] text-center text-zinc-300 leading-tight line-clamp-2 w-full">
+                        {p.name}
+                      </span>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        ) : null}
 
         {canBid ? (
           <div className="space-y-6 py-2">

@@ -139,6 +139,8 @@ export async function POST(req: Request) {
         championship_manager_id: championshipManagerId,
         type: "POT_BID_RESERVE",
         amount: -bidAmount,
+        pot_number: potNumber,
+        pot_position: potPosition,
         description: `Habilitação ${potLabel}: ${bidAmount.toLocaleString("pt-BR")}`,
       });
 

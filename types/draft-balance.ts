@@ -19,6 +19,9 @@ export interface DraftBalanceTransaction {
   type: DraftBalanceTransactionType;
   amount: number;
   reference_id: string | null;
+  /** Quando preenchido, permite filtrar extrato por pote ativo do campeonato. */
+  pot_number: number | null;
+  pot_position: string | null;
   description: string | null;
   created_at: string;
 }

@@ -172,10 +172,43 @@ export async function POST(req: Request) {
       if (winErr) throw winErr;
     }
 
+    const winners = eligibleBids.filter((b) => winningIds.has(b.id));
+    let potBudgetsCreated = 0;
+
+    for (const b of winners) {
+      const cmId = b.championship_manager_id;
+      const bidAmount = b.bid_amount;
+
+      const { data: existingBudget, error: exErr } = await supabase
+        .from("draft_pot_budgets")
+        .select("id")
+        .eq("championship_id", championshipId)
+        .eq("championship_manager_id", cmId)
+        .eq("pot_number", potNumber)
+        .eq("pot_position", pos)
+        .maybeSingle();
+
+      if (exErr) throw exErr;
+      if (existingBudget) continue;
+
+      const { error: insBud } = await supabase.from("draft_pot_budgets").insert({
+        championship_id: championshipId,
+        championship_manager_id: cmId,
+        pot_number: potNumber,
+        pot_position: pos,
+        initial_budget: bidAmount,
+        remaining_budget: bidAmount,
+      });
+
+      if (insBud) throw insBud;
+      potBudgetsCreated += 1;
+    }
+
     return NextResponse.json({
       success: true,
       qualifiedCount: winningIds.size,
       bidCount: bidList.length,
+      potBudgetsCreated,
     });
   } catch (err) {
     console.error("qualification-resolve error:", err);
