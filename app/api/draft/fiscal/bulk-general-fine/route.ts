@@ -94,7 +94,7 @@ export async function POST(req: Request) {
         amount,
         pot_number: potNumber,
         pot_position: potPosition,
-        description: `Multa geral do fiscal — ${potLabel} (CC$ 2.000 fixa)`,
+        description: `Multa Geral do Fiscal — ${potLabel} (CC$${FIXED_FINE.toLocaleString("pt-BR")} fixa)`,
         is_automatic: false,
         applied_by: auth.user.id,
       });
@@ -108,7 +108,7 @@ export async function POST(req: Request) {
           championship_manager_id: cm.id,
           type: "FINE_MANUAL",
           amount: -amount,
-          description: `Multa geral — ${potLabel}`,
+          description: `Multa Geral — ${potLabel}`,
         });
 
       if (txErr) throw txErr;

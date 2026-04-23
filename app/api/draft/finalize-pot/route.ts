@@ -78,6 +78,7 @@ export async function POST(req: Request) {
       const { fine, returned } = computePotRemainderSettlement(remaining);
 
       if (fine > 0) {
+        const potLabel = `Pote ${potNumber} (${normalizedPosition})`;
         const { error: fineIns } = await supabase.from("draft_fines").insert({
           championship_id: championshipId,
           championship_manager_id: row.championship_manager_id,
@@ -85,7 +86,7 @@ export async function POST(req: Request) {
           amount: fine,
           pot_number: potNumber,
           pot_position: normalizedPosition,
-          description: `Multa — saldo restante do pote (${normalizedPosition}, pote ${potNumber})`,
+          description: `Multa — Saldo não utilizado no ${potLabel}`,
           is_automatic: true,
         });
         if (fineIns) throw fineIns;
@@ -102,6 +103,7 @@ export async function POST(req: Request) {
 
         const newBal = cm.current_balance + returned;
 
+        const potLabel = `Pote ${potNumber} (${normalizedPosition})`;
         const { error: txErr } = await supabase
           .from("draft_balance_transactions")
           .insert({
@@ -109,7 +111,7 @@ export async function POST(req: Request) {
             championship_manager_id: row.championship_manager_id,
             type: "POT_BUDGET_RETURN",
             amount: returned,
-            description: `Devolução após finalização do pote ${potNumber} (${normalizedPosition})`,
+            description: `Devolução — Saldo não utilizado no ${potLabel}`,
           });
         if (txErr) throw txErr;
 

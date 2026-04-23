@@ -144,7 +144,7 @@ export async function POST(req: Request) {
           reference_id: bid.id,
           pot_number: potNumber,
           pot_position: pos,
-          description: `Estorno habilitação ${potLabel}: não classificado · ${amount.toLocaleString("pt-BR")}`,
+          description: `Devolução — Cartola não classificada no ${potLabel}: CC$${amount.toLocaleString("pt-BR")}`,
         });
 
       if (txErr) throw txErr;

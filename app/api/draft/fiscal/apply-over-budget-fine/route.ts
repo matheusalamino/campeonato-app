@@ -113,7 +113,7 @@ export async function POST(req: Request) {
       amount,
       pot_number: potNumber,
       pot_position: potPosition,
-      description: `Multa por lance acima do saldo (${nextOcc}ª ocorrência)`,
+      description: `Multa - Lance acima do saldo (${nextOcc}ª ocorrência)`,
       is_automatic: false,
       occurrence_number: nextOcc,
       applied_by: auth.user.id,
@@ -128,7 +128,7 @@ export async function POST(req: Request) {
         championship_manager_id: championshipManagerId,
         type: "FINE_OVER_BUDGET",
         amount: -amount,
-        description: `Multa progressiva (${nextOcc}× CC$ ${STEP.toLocaleString("pt-BR")})`,
+        description: `Multa Progressiva (${nextOcc}× CC$ ${STEP.toLocaleString("pt-BR")})`,
       });
 
     if (txErr) throw txErr;
