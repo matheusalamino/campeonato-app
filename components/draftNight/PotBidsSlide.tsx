@@ -279,27 +279,27 @@ export default function PotBidsSlide({
   const displayManagers: ManagerBidStatus[] = revealed
     ? isGoalkeeper
       ? [
-          ...managers.filter((m) => m.is_eligible),
-          ...managers.filter((m) => !m.is_eligible),
-        ]
+        ...managers.filter((m) => m.is_eligible),
+        ...managers.filter((m) => !m.is_eligible),
+      ]
       : [...rankedManagers, ...managers.filter((m) => !m.is_eligible)]
     : [
-        ...[...managers.filter((m) => m.is_eligible)].sort((a, b) => {
-          if (a.has_bid && b.has_bid) {
-            const ta = a.submitted_at
-              ? new Date(a.submitted_at).getTime()
-              : 0;
-            const tb = b.submitted_at
-              ? new Date(b.submitted_at).getTime()
-              : 0;
-            if (ta !== tb) return ta - tb;
-          }
-          if (a.has_bid && !b.has_bid) return -1;
-          if (!a.has_bid && b.has_bid) return 1;
-          return (a.manager_name ?? "").localeCompare(b.manager_name ?? "", "pt");
-        }),
-        ...managers.filter((m) => !m.is_eligible),
-      ];
+      ...[...managers.filter((m) => m.is_eligible)].sort((a, b) => {
+        if (a.has_bid && b.has_bid) {
+          const ta = a.submitted_at
+            ? new Date(a.submitted_at).getTime()
+            : 0;
+          const tb = b.submitted_at
+            ? new Date(b.submitted_at).getTime()
+            : 0;
+          if (ta !== tb) return ta - tb;
+        }
+        if (a.has_bid && !b.has_bid) return -1;
+        if (!a.has_bid && b.has_bid) return 1;
+        return (a.manager_name ?? "").localeCompare(b.manager_name ?? "", "pt");
+      }),
+      ...managers.filter((m) => !m.is_eligible),
+    ];
 
   const submissionOrderByCm = new Map<string, number>();
   if (!revealed) {
@@ -498,7 +498,7 @@ export default function PotBidsSlide({
           </div>
         )}
 
-        <div className="pb-actions">
+        {!loading && displayManagers.length > 0 && <div className="pb-actions">
           {!revealed ? (
             // ── Reveal always available ──
             <button
@@ -586,7 +586,7 @@ export default function PotBidsSlide({
                       if (!aw.ok) {
                         setProceedError(
                           awBody.error ??
-                            "Falha ao abrir janela de leilão (estado do campeonato)",
+                          "Falha ao abrir janela de leilão (estado do campeonato)",
                         );
                         return;
                       }
@@ -602,7 +602,7 @@ export default function PotBidsSlide({
               </button>
             </>
           )}
-        </div>
+        </div>}
       </div>
     </>
   );
