@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { requireAdminOrAuctionFiscal } from "@/lib/draft-auth";
 
@@ -45,16 +44,6 @@ export async function POST(req: Request) {
       if (!normalizedPosition) {
         return NextResponse.json(
           { error: "potPosition inválido" },
-          { status: 400 },
-        );
-      }
-
-      if (normalizedPosition.toLowerCase() === "goleiro") {
-        return NextResponse.json(
-          {
-            error:
-              "Fluxo de leilão em linha: use um pote de linha (não goleiro).",
-          },
           { status: 400 },
         );
       }
