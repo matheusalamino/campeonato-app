@@ -41,7 +41,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Parâmetros inválidos." }, { status: 400 });
   }
 
-  const isGoalkeeper = potPosition.toLowerCase().includes("goleiro");
+  const posLower = potPosition.toLowerCase();
+  const isGoalkeeper = posLower === "gol" || posLower.includes("goleiro");
+  const isExtra = posLower === "extra" || posLower.includes("adicional");
 
   try {
     const { count: purchasesCount, error: purchasesErr } = await supabase
@@ -53,7 +55,7 @@ export async function GET(req: NextRequest) {
 
     if (purchasesErr) throw purchasesErr;
 
-    if (isGoalkeeper) {
+    if (isGoalkeeper || isExtra) {
       const { data: enrolledManagers, error: mgrErr } = await supabase
         .from("championship_managers")
         .select(
@@ -110,13 +112,19 @@ export async function GET(req: NextRequest) {
           team_name: firstJoined<{ name: string }>(m.teams)?.name ?? null,
         }));
 
-      const response: ResponseShape = {
-        nextScreen:
-          qualifiedManagers.length > 0 || (purchasesCount ?? 0) > 0
-            ? "auction"
-            : "bids",
-        qualifiedManagers,
-      };
+      const response: ResponseShape = isExtra
+        ? {
+            // Pote extra/adicional não usa habilitação por lance.
+            nextScreen: "auction",
+            qualifiedManagers,
+          }
+        : {
+            nextScreen:
+              qualifiedManagers.length > 0 || (purchasesCount ?? 0) > 0
+                ? "auction"
+                : "bids",
+            qualifiedManagers,
+          };
       return NextResponse.json(response);
     }
 

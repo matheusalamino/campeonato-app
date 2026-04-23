@@ -62,17 +62,9 @@ export async function POST(req: Request) {
 
     if (rErr) throw rErr;
 
-    if (!rows?.length) {
-      return NextResponse.json({
-        success: true,
-        settledCount: 0,
-        message: "Nenhum saldo de pote em aberto para finalizar",
-      });
-    }
-
     let settledCount = 0;
 
-    for (const row of rows) {
+    for (const row of rows ?? []) {
       const remaining = row.remaining_budget;
       const { fine, returned } = computePotRemainderSettlement(remaining);
 
@@ -192,6 +184,7 @@ export async function POST(req: Request) {
     const playerIds = (potPlayers ?? []).map((r) => r.player_id);
     let extraPotNumber: number | null = null;
     let movedToExtraCount = 0;
+    const extraPosition = "Extra";
 
     if (playerIds.length > 0) {
       const [{ data: regs, error: regErr }, { data: buys, error: buyErr }] =
@@ -221,23 +214,47 @@ export async function POST(req: Request) {
       });
 
       if (unsoldPlayerIds.length > 0) {
-        const { data: maxPotRow, error: maxPotErr } = await supabase
+        const { count: managersCount, error: countErr } = await supabase
+          .from("championship_managers")
+          .select("id", { head: true, count: "exact" })
+          .eq("championship_id", championshipId);
+        if (countErr) throw countErr;
+        const maxManagersForExtraPot = Math.max(0, managersCount ?? 0);
+
+        const { data: existingExtraPot, error: extraPotErr } = await supabase
           .from("draft_pots")
           .select("pot_number, pot_order")
           .eq("championship_id", championshipId)
+          .eq("position", extraPosition)
           .order("pot_order", { ascending: false })
           .limit(1)
           .maybeSingle();
-        if (maxPotErr) throw maxPotErr;
+        if (extraPotErr) throw extraPotErr;
 
-        const nextPotNumber = (maxPotRow?.pot_number ?? potNumber) + 1;
-        const nextPotOrder = (maxPotRow?.pot_order ?? 0) + 1;
+        let nextPotNumber = existingExtraPot?.pot_number ?? null;
+        let nextPotOrder = existingExtraPot?.pot_order ?? null;
+
+        if (nextPotNumber == null || nextPotOrder == null) {
+          const { data: maxPotRow, error: maxPotErr } = await supabase
+            .from("draft_pots")
+            .select("pot_number, pot_order")
+            .eq("championship_id", championshipId)
+            .order("pot_order", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (maxPotErr) throw maxPotErr;
+
+          nextPotNumber = (maxPotRow?.pot_number ?? potNumber) + 1;
+          nextPotOrder = (maxPotRow?.pot_order ?? 0) + 1;
+        }
 
         const { error: moveErr } = await supabase
           .from("draft_pots")
           .update({
             pot_number: nextPotNumber,
             pot_order: nextPotOrder,
+            position: extraPosition,
+            max_managers: maxManagersForExtraPot,
           })
           .eq("championship_id", championshipId)
           .eq("pot_number", potNumber)
@@ -256,6 +273,10 @@ export async function POST(req: Request) {
       settledCount,
       movedToExtraCount,
       extraPotNumber,
+      message:
+        settledCount === 0
+          ? "Pote finalizado sem orçamentos abertos; jogadores não vendidos realocados quando aplicável."
+          : undefined,
     });
   } catch (err) {
     console.error("finalize-pot error:", err);
