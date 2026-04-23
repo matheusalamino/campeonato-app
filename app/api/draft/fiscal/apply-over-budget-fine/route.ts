@@ -91,6 +91,24 @@ export async function POST(req: Request) {
     const nextOcc = maxOcc + 1;
     const amount = nextOcc * STEP;
 
+    const { data: budgetRow, error: brErr } = await supabase
+      .from("draft_pot_budgets")
+      .select("id, remaining_budget")
+      .eq("championship_id", championshipId)
+      .eq("championship_manager_id", championshipManagerId)
+      .eq("pot_number", potNumber)
+      .eq("pot_position", potPosition)
+      .eq("settled", false)
+      .maybeSingle();
+
+    if (brErr) throw brErr;
+    if (!budgetRow) {
+      return NextResponse.json(
+        { error: "Cartola sem orçamento ativo neste pote" },
+        { status: 400 },
+      );
+    }
+
     const { data: cmRow, error: cmErr } = await supabase
       .from("championship_managers")
       .select("id, current_balance")
@@ -104,15 +122,19 @@ export async function POST(req: Request) {
       );
     }
 
-    const availableBase = Math.max(0, cmRow.current_balance);
+    const potAvailable = Math.max(0, budgetRow.remaining_budget);
+    const generalAvailable = Math.max(0, cmRow.current_balance);
+    const totalAvailable = potAvailable + generalAvailable;
 
-    const appliedAmount = Math.min(amount, availableBase);
+    const appliedAmount = Math.min(amount, totalAvailable);
     if (appliedAmount <= 0) {
       return NextResponse.json(
         { error: "Saldo insuficiente para aplicar multa." },
         { status: 400 },
       );
     }
+    const debitFromPot = Math.min(appliedAmount, potAvailable);
+    const debitFromGeneral = Math.max(0, appliedAmount - debitFromPot);
 
     const fineLabel = "Lance acima do saldo";
 
@@ -147,25 +169,38 @@ export async function POST(req: Request) {
         reference_id: fineRow.id,
         pot_number: potNumber,
         pot_position: potPosition,
-        description: `Multa Progressiva (${nextOcc}× CC$ ${STEP.toLocaleString("pt-BR")}) — ${fineLabel}`,
+        description: `Multa Progressiva (${nextOcc}× CC$ ${STEP.toLocaleString("pt-BR")}) — ${fineLabel} [Pote: CC$ ${debitFromPot.toLocaleString("pt-BR")} | Geral: CC$ ${debitFromGeneral.toLocaleString("pt-BR")}]`,
       });
 
     if (txErr) throw txErr;
 
-    const { error: upErr } = await supabase
-      .from("championship_managers")
-      .update({
-        current_balance: Math.max(0, cmRow.current_balance - appliedAmount),
-      })
-      .eq("id", cmRow.id);
+    if (debitFromPot > 0) {
+      const { error: upPotErr } = await supabase
+        .from("draft_pot_budgets")
+        .update({
+          remaining_budget: Math.max(0, budgetRow.remaining_budget - debitFromPot),
+        })
+        .eq("id", budgetRow.id);
+      if (upPotErr) throw upPotErr;
+    }
 
-    if (upErr) throw upErr;
+    if (debitFromGeneral > 0) {
+      const { error: upGeneralErr } = await supabase
+        .from("championship_managers")
+        .update({
+          current_balance: Math.max(0, cmRow.current_balance - debitFromGeneral),
+        })
+        .eq("id", cmRow.id);
+      if (upGeneralErr) throw upGeneralErr;
+    }
 
     return NextResponse.json({
       success: true,
       fineType,
       occurrenceNumber: nextOcc,
       amount: appliedAmount,
+      debitedFromPot: debitFromPot,
+      debitedFromGeneral: debitFromGeneral,
     });
   } catch (err) {
     console.error("apply-over-budget-fine error:", err);

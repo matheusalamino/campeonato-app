@@ -151,7 +151,7 @@ export default function TeamManagerDashboard() {
             icon={<Search className="w-6 h-6 text-cyan-400" />}
             label="Jogadores"
             onClick={() =>
-              router.push("/team-manager/search-and-favorite-players")
+              router.push("/team-manager/players")
             }
           />
         </div>
