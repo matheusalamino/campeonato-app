@@ -65,16 +65,19 @@ export async function POST(req: Request) {
       );
     }
 
-    const { data: potRow, error: potErr } = await supabase
+    // Pode haver mais de uma linha em draft_pots para o mesmo pote (re-geração);
+    // .maybeSingle() / .single() quebram com PGRST116 se vierem várias.
+    const { data: potRows, error: potErr } = await supabase
       .from("draft_pots")
       .select("max_managers")
       .eq("championship_id", championshipId)
       .eq("pot_number", potNumber)
       .eq("position", pos)
-      .maybeSingle();
+      .order("created_at", { ascending: false })
+      .limit(1);
 
     if (potErr) throw potErr;
-    const maxManagers = potRow?.max_managers ?? 0;
+    const maxManagers = (potRows?.[0]?.max_managers as number) ?? 0;
 
     const { data: bids, error: bidsErr } = await supabase
       .from("draft_qualification_bids")
