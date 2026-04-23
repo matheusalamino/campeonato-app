@@ -14,6 +14,8 @@ export type Team = {
   id: string;
   name: string;
   logo_url: string | null;
+  /** Nome do cartola (manager) dono do time neste campeonato, se já sorteado. */
+  cartola_name: string | null;
 };
 
 function shuffled<T>(arr: T[]): T[] {
@@ -52,17 +54,33 @@ export function useTeams(championshipId: string) {
 
         const teamIds = ctRows.map((r) => r.team_id as string);
 
-        const { data: teamRows, error: teamsError } = await supabase
-          .from("teams")
-          .select("id, name, logo_url")
-          .in("id", teamIds);
+        const [{ data: teamRows, error: teamsError }, { data: cmRows }] =
+          await Promise.all([
+            supabase
+              .from("teams")
+              .select("id, name, logo_url")
+              .in("id", teamIds),
+            supabase
+              .from("championship_managers")
+              .select("team_id, managers ( name )")
+              .eq("championship_id", championshipId)
+              .not("team_id", "is", null),
+          ]);
 
         if (teamsError) throw teamsError;
+
+        const cartolaByTeamId: Record<string, string> = {};
+        (cmRows ?? []).forEach((row) => {
+          const tid = row.team_id as string | null;
+          const name = (row.managers as { name?: string } | null)?.name;
+          if (tid && name) cartolaByTeamId[tid] = name;
+        });
 
         const teamList: Team[] = (teamRows ?? []).map((t) => ({
           id: t.id as string,
           name: t.name as string,
           logo_url: (t.logo_url as string | null) ?? null,
+          cartola_name: cartolaByTeamId[t.id as string] ?? null,
         }));
 
         setTeams(shuffled(teamList));

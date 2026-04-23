@@ -74,6 +74,18 @@ function PositionIcon({ position }: { position: string }) {
   );
 }
 
+/** Evita última linha da grid com um único cartão (ex.: 4 potes em 3 colunas). */
+function potGridColumns(count: number): number {
+  if (count <= 1) return 1;
+  if (count === 2) return 2;
+  for (const cols of [3, 2, 4, 5]) {
+    if (cols > count) continue;
+    const rem = count % cols;
+    if (rem === 0 || rem >= 2 || count <= cols) return cols;
+  }
+  return Math.min(3, count);
+}
+
 function PotCard({
   pot,
   onClick,
@@ -159,7 +171,7 @@ export default function PotMenuSlide({
   completedPots: Set<string>;
   onSelectPot: (pot: DraftPot) => void;
 }) {
-  const cols = pots.length <= 3 ? pots.length : pots.length <= 6 ? 3 : 4;
+  const cols = potGridColumns(pots.length);
   const potKey = (p: DraftPot) => `${p.pot_number}:${p.position}`;
 
   const allDone =

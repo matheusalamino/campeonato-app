@@ -45,15 +45,19 @@ export default function TeamManagerDashboard() {
     session.qualificationPotNumber !== null &&
     Boolean(session.qualificationPotPosition);
 
+  const headerTeamName = session.liveTeamName ?? ctx.teamName;
+  const headerTeamLogoUrl = session.liveTeamLogoUrl ?? ctx.teamLogoUrl;
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header */}
       <header className="sticky top-14 z-30 bg-zinc-950/90 backdrop-blur-sm border-b border-zinc-800 px-4 py-3">
         <div className="flex items-center gap-3 max-w-2xl mx-auto">
-          {ctx.teamLogoUrl ? (
+          {headerTeamLogoUrl ? (
             <img
-              src={ctx.teamLogoUrl}
-              alt={ctx.teamName ?? ""}
+              key={session.liveTeamId ?? ctx.teamId ?? "logo"}
+              src={headerTeamLogoUrl}
+              alt={headerTeamName ?? ""}
               className="w-10 h-10 rounded-full object-cover border-2 border-zinc-700"
             />
           ) : (
@@ -64,7 +68,7 @@ export default function TeamManagerDashboard() {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold truncate">{ctx.managerName}</p>
             <p className="text-xs text-zinc-400 truncate">
-              {ctx.teamName ?? "Sem time"} &middot; {ctx.championshipName}
+              {headerTeamName ?? "Sem time"} &middot; {ctx.championshipName}
             </p>
           </div>
         </div>

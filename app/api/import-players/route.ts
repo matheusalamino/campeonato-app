@@ -1,3 +1,4 @@
+import { recalculateOverallWithClient } from "@/lib/overall";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import Papa from "papaparse";
@@ -48,6 +49,62 @@ function toNumber(value?: string) {
 
 function safeString(value?: string) {
   return value?.trim() || null;
+}
+
+/** Nota 1–5 das colunas do CSV; células vazias ou inválidas → null. */
+function parseSkillRating(value?: string | null): number | null {
+  if (value == null) return null;
+  const t = String(value).trim();
+  if (t === "") return null;
+  const n = Number(t.replace(",", "."));
+  if (!Number.isFinite(n)) return null;
+  const rounded = Math.round(n);
+  if (rounded < 1 || rounded > 5) return null;
+  return rounded;
+}
+
+/**
+ * Monta as 6 linhas de self_evaluation alinhadas a EvaluateModal
+ * (Goleiro vs linha).
+ */
+function selfEvalRowsFromCsv(row: CSVRow): { skill: string; rating: number }[] {
+  const position = safeString(row["Posição"]);
+  const isGk = position === "Goleiro";
+
+  const spec = isGk
+    ? (
+        [
+          ["reposicao", "Reposição"],
+          ["comunicacao", "Comunicação"],
+          ["posicionamento", "Posicionamento"],
+          ["reflexo", "Reflexo"],
+          ["jogoAereo", "Jogo Aéreo"],
+          ["agilidade", "Agilidade"],
+        ] as const
+      )
+    : (
+        [
+          ["visao", "Visão de Jogo"],
+          ["controle", "Controle de Bola"],
+          ["finalizacao", "Finalização"],
+          ["velocidade", "Velocidade"],
+          ["desarme", "Desarme"],
+          ["drible", "Drible"],
+        ] as const
+      );
+
+  const out: { skill: string; rating: number }[] = [];
+  for (const [skill, col] of spec) {
+    const raw = row[col as keyof CSVRow];
+    const rating = parseSkillRating(raw);
+    if (rating === null) {
+      throw new Error(
+        `Nota inválida ou ausente para a coluna "${col}" (esperado 1–5)`,
+      );
+    }
+    out.push({ skill, rating });
+  }
+  return out;
 }
 
 // ── MAIN ─────────────────────────────
@@ -186,6 +243,33 @@ export async function POST(req: Request) {
 
           if (updateError) throw new Error(updateError.message);
         }
+
+        if (!registrationId) {
+          throw new Error("Falha ao obter id da inscrição no campeonato");
+        }
+
+        const selfRows = selfEvalRowsFromCsv(row);
+
+        const { error: delSelfError } = await supabase
+          .from("self_evaluations")
+          .delete()
+          .eq("registration_id", registrationId);
+
+        if (delSelfError) throw new Error(delSelfError.message);
+
+        const { error: selfInsertError } = await supabase
+          .from("self_evaluations")
+          .insert(
+            selfRows.map((e) => ({
+              registration_id: registrationId,
+              skill: e.skill,
+              rating: e.rating,
+            })),
+          );
+
+        if (selfInsertError) throw new Error(selfInsertError.message);
+
+        await recalculateOverallWithClient(supabase, registrationId);
 
         successCount++;
       } catch (err: unknown) {

@@ -102,6 +102,7 @@ export function useChaveamento(championshipId: string) {
         id: t.id as string,
         name: t.name as string,
         logo_url: (t.logo_url as string | null) ?? null,
+        cartola_name: null,
       }));
 
       const settingsMap: Record<string, GroupSettings> = {};
