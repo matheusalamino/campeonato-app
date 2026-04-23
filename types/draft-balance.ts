@@ -9,7 +9,8 @@ export type DraftBalanceTransactionType =
   | "FINE_OVER_BUDGET"
   | "FINE_MANUAL"
   | "POT_BUDGET_RETURN"
-  | "ADDITIONAL_ROUND_PURCHASE";
+  | "ADDITIONAL_ROUND_PURCHASE"
+  | "DRAFT_PLAYER_PURCHASE";
 
 export interface DraftBalanceTransaction {
   id: string;

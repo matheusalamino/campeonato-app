@@ -78,6 +78,11 @@ const typeConfig: Record<
     label: "Compra — Rodada Adicional",
     color: "text-orange-400",
   },
+  DRAFT_PLAYER_PURCHASE: {
+    icon: <Banknote className="w-4 h-4" />,
+    label: "Compra — Leilão / Draft",
+    color: "text-orange-400",
+  },
 };
 
 function formatCC(value: number) {

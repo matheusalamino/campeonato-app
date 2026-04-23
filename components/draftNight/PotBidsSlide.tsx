@@ -205,6 +205,7 @@ export default function PotBidsSlide({
   const [windowError, setWindowError] = useState<string | null>(null);
   const [revealError, setRevealError] = useState<string | null>(null);
   const [proceedError, setProceedError] = useState<string | null>(null);
+  const [proceedingAuction, setProceedingAuction] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const isMounted = useRef(true);
 
@@ -538,38 +539,66 @@ export default function PotBidsSlide({
               {/* Proceed to auction */}
               <button
                 className="pb-proceed-btn"
+                disabled={proceedingAuction}
                 onClick={(e) => {
                   e.stopPropagation();
                   void (async () => {
                     setProceedError(null);
-                    if (!isGoalkeeper) {
-                      const res = await fetch(
-                        "/api/draft/qualification-refund-losers",
-                        {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            championshipId,
-                            potNumber: pot.pot_number,
-                            potPosition: pot.position,
-                          }),
-                        },
-                      );
-                      const body = (await res.json().catch(() => ({}))) as {
+                    setProceedingAuction(true);
+                    try {
+                      if (!isGoalkeeper) {
+                        const res = await fetch(
+                          "/api/draft/qualification-refund-losers",
+                          {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              championshipId,
+                              potNumber: pot.pot_number,
+                              potPosition: pot.position,
+                            }),
+                          },
+                        );
+                        const body = (await res.json().catch(() => ({}))) as {
+                          error?: string;
+                        };
+                        if (!res.ok) {
+                          setProceedError(
+                            body.error ?? "Falha ao estornar não classificados",
+                          );
+                          return;
+                        }
+                      }
+
+                      const aw = await fetch("/api/draft/auction-window", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          championshipId,
+                          open: true,
+                          potNumber: pot.pot_number,
+                          potPosition: pot.position,
+                        }),
+                      });
+                      const awBody = (await aw.json().catch(() => ({}))) as {
                         error?: string;
                       };
-                      if (!res.ok) {
+                      if (!aw.ok) {
                         setProceedError(
-                          body.error ?? "Falha ao estornar não classificados",
+                          awBody.error ??
+                            "Falha ao abrir janela de leilão (estado do campeonato)",
                         );
                         return;
                       }
+
+                      onProceedToAuction(buildQualified());
+                    } finally {
+                      setProceedingAuction(false);
                     }
-                    onProceedToAuction(buildQualified());
                   })();
                 }}
               >
-                Iniciar Leilão →
+                {proceedingAuction ? "Abrindo…" : "Iniciar Leilão →"}
               </button>
             </>
           )}
