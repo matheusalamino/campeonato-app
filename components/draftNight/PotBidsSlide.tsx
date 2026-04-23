@@ -204,6 +204,7 @@ export default function PotBidsSlide({
   const [windowOpened, setWindowOpened] = useState(false);
   const [windowError, setWindowError] = useState<string | null>(null);
   const [revealError, setRevealError] = useState<string | null>(null);
+  const [proceedError, setProceedError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
   const isMounted = useRef(true);
 
@@ -433,6 +434,9 @@ export default function PotBidsSlide({
         {revealError && (
           <p className="pb-window-err">Erro ao gravar classificação: {revealError}</p>
         )}
+        {proceedError && (
+          <p className="pb-window-err">Erro ao estornar / iniciar: {proceedError}</p>
+        )}
         {isGoalkeeper && (
           <p className="pb-gk-note">
             Goleiros não participam do processo de habilitação.
@@ -536,7 +540,33 @@ export default function PotBidsSlide({
                 className="pb-proceed-btn"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onProceedToAuction(buildQualified());
+                  void (async () => {
+                    setProceedError(null);
+                    if (!isGoalkeeper) {
+                      const res = await fetch(
+                        "/api/draft/qualification-refund-losers",
+                        {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            championshipId,
+                            potNumber: pot.pot_number,
+                            potPosition: pot.position,
+                          }),
+                        },
+                      );
+                      const body = (await res.json().catch(() => ({}))) as {
+                        error?: string;
+                      };
+                      if (!res.ok) {
+                        setProceedError(
+                          body.error ?? "Falha ao estornar não classificados",
+                        );
+                        return;
+                      }
+                    }
+                    onProceedToAuction(buildQualified());
+                  })();
                 }}
               >
                 Iniciar Leilão →
