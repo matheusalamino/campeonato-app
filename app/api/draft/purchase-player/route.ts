@@ -14,11 +14,11 @@ type PurchasePlayerBody = {
 function purchaseTypeLabel(t: PurchasePlayerBody["purchaseType"]): string {
   switch (t) {
     case "open_auction":
-      return "Leilão aberto";
+      return "Leilão Aberto";
     case "special_card":
-      return "Cartão especial";
+      return "Cartão Especial";
     case "additional_round":
-      return "Rodada adicional";
+      return "Rodada Adicional";
     default:
       return "Draft";
   }
@@ -235,7 +235,7 @@ export async function POST(req: NextRequest) {
     const potLabel = `Pote ${potNumber} (${pos})`;
     const typeLabel = purchaseTypeLabel(purchaseType);
     const priceFmt = purchasePrice.toLocaleString("pt-BR");
-    const descPot = `${typeLabel} — ${playerName} — ${potLabel} · CC$ ${priceFmt} (orçamento do pote)`;
+    const descPot = `${typeLabel} — ${playerName} — ${potLabel} · CC$ ${priceFmt} (Orçamento do Pote)`;
     const descCc = `${typeLabel} — ${playerName} — ${potLabel} · CC$ ${priceFmt}`;
 
     const { error: txErr } = await supabase.from("draft_balance_transactions").insert({

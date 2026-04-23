@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Wallet,
   Gavel,
-  Sparkles,
   Users,
   Search,
   Shield,
+  User,
 } from "lucide-react";
 import { useTeamManagerDraft } from "@/components/TeamManagerDraftContext";
 import { useDraftSession } from "@/features/hooks/useDraftSession";
@@ -53,18 +54,40 @@ export default function TeamManagerDashboard() {
       {/* Header */}
       <header className="sticky top-14 z-30 bg-zinc-950/90 backdrop-blur-sm border-b border-zinc-800 px-4 py-3">
         <div className="flex items-center gap-3 max-w-2xl mx-auto">
-          {headerTeamLogoUrl ? (
-            <img
-              key={session.liveTeamId ?? ctx.teamId ?? "logo"}
-              src={headerTeamLogoUrl}
-              alt={headerTeamName ?? ""}
-              className="w-10 h-10 rounded-full object-cover border-2 border-zinc-700"
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-zinc-500" />
-            </div>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {headerTeamLogoUrl ? (
+              <Image
+                key={session.liveTeamId ?? ctx.teamId ?? "logo"}
+                src={headerTeamLogoUrl}
+                alt={headerTeamName ?? ""}
+                width={40}
+                height={40}
+                className="w-10 h-10 rounded-full object-cover border-2 border-zinc-700"
+                unoptimized
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center border-2 border-zinc-700">
+                <Shield className="w-5 h-5 text-zinc-500" />
+              </div>
+            )}
+            {ctx.managerPhotoUrl ? (
+              <Image
+                src={ctx.managerPhotoUrl}
+                alt={ctx.managerName}
+                width={40}
+                height={40}
+                className="w-10 h-10 rounded-full object-cover border-2 border-amber-600/55 ring-2 ring-zinc-950"
+                unoptimized
+              />
+            ) : (
+              <div
+                className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center border-2 border-amber-600/45 ring-2 ring-zinc-950"
+                title={ctx.managerName}
+              >
+                <User className="w-5 h-5 text-amber-200/70" aria-hidden />
+              </div>
+            )}
+          </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold truncate">{ctx.managerName}</p>
             <p className="text-xs text-zinc-400 truncate">
@@ -83,14 +106,8 @@ export default function TeamManagerDashboard() {
           potBudget={session.potBudget}
         />
 
-        {/* Action grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <DashboardCard
-            icon={<Wallet className="w-6 h-6 text-emerald-400" />}
-            label="Saldo e Extrato"
-            onClick={() => router.push("/team-manager/balance")}
-          />
-
+        {/* Action grid - linha principal */}
+        <div className="grid grid-cols-2 gap-3">
           <DashboardCard
             icon={<Gavel className="w-6 h-6 text-blue-400" />}
             label="Lance de Habilitação"
@@ -112,6 +129,15 @@ export default function TeamManagerDashboard() {
               setActiveSpecialCardUseId(useId);
               setSpecialCardBidOpen(true);
             }}
+          />
+        </div>
+
+        {/* Action grid - linha secundária */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <DashboardCard
+            icon={<Wallet className="w-6 h-6 text-emerald-400" />}
+            label="Saldo e Extrato"
+            onClick={() => router.push("/team-manager/balance")}
           />
 
           <DashboardCard

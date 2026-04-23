@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import Image from "next/image";
 import { useTeams, type Team } from "@/features/hooks/useTeams";
 import {
   useManagers,
@@ -105,12 +106,16 @@ function LogoCircle({ team, sizePx }: { team: Team; sizePx: string }) {
       }}
     >
       {team.logo_url && !err ? (
-        <img
-          src={team.logo_url}
-          alt={team.name}
-          className="lc-img"
-          onError={() => setErr(true)}
-        />
+        <div className="relative h-[80%] w-[80%] shrink-0">
+          <Image
+            src={team.logo_url}
+            alt={team.name}
+            fill
+            className="object-contain"
+            onError={() => setErr(true)}
+            sizes="80px"
+          />
+        </div>
       ) : (
         <ShieldFallback name={team.name} small />
       )}
@@ -189,12 +194,17 @@ function TeamLogoLarge({ team }: { team: Team }) {
       </div>
       <div className="logo-circle-large">
         {team.logo_url && !err ? (
-          <img
-            src={team.logo_url}
-            alt={team.name}
-            className="logo-img-large"
-            onError={() => setErr(true)}
-          />
+          <div className="relative h-[72%] w-[72%]">
+            <Image
+              src={team.logo_url}
+              alt={team.name}
+              fill
+              className="object-contain"
+              style={{ filter: "drop-shadow(0 4px 16px rgba(0,0,0,.6))" }}
+              onError={() => setErr(true)}
+              sizes="200px"
+            />
+          </div>
         ) : (
           <ShieldFallback name={team.name} />
         )}

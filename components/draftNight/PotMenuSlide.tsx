@@ -1,6 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import type { DraftPot } from "@/features/hooks/useDraftPots";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 function PositionIcon({ position }: { position: string }) {
   const pos = position.toLowerCase();
@@ -89,22 +99,34 @@ function potGridColumns(count: number): number {
 function PotCard({
   pot,
   onClick,
+  onReset,
   delay,
   completed,
 }: {
   pot: DraftPot;
   onClick: () => void;
+  onReset: () => void;
   delay: number;
   completed: boolean;
 }) {
   const isGoalkeeper = pot.position.toLowerCase().includes("goleiro");
+  const locked = completed || pot.is_finalized;
 
   return (
-    <button
-      className={`pm-card ${completed ? "pm-card-done" : ""}`}
+    <div
+      className={`pm-card ${locked ? "pm-card-done" : ""} ${locked ? "pm-card-locked" : ""}`}
       onClick={(e) => {
         e.stopPropagation();
-        onClick();
+        if (!locked) onClick();
+      }}
+      role="button"
+      tabIndex={locked ? -1 : 0}
+      onKeyDown={(e) => {
+        if (locked) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
       }}
       style={{ animationDelay: `${delay}s` }}
     >
@@ -119,6 +141,18 @@ function PotCard({
           <span className="pm-done-check">✓</span>
           <span className="pm-done-label">Finalizado</span>
         </div>
+      )}
+      {locked && (
+        <button
+          type="button"
+          className="pm-reset-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            onReset();
+          }}
+        >
+          Resetar Pote
+        </button>
       )}
 
       <div
@@ -155,7 +189,7 @@ function PotCard({
           <span className="pm-max-label">jogadores</span>
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 export default function PotMenuSlide({
@@ -164,15 +198,19 @@ export default function PotMenuSlide({
   error,
   completedPots,
   onSelectPot,
+  onResetPot,
 }: {
   pots: DraftPot[];
   loading: boolean;
   error: string | null;
   completedPots: Set<string>;
   onSelectPot: (pot: DraftPot) => void;
+  onResetPot: (pot: DraftPot) => Promise<void>;
 }) {
   const cols = potGridColumns(pots.length);
   const potKey = (p: DraftPot) => `${p.pot_number}:${p.position}`;
+  const [resetTarget, setResetTarget] = useState<DraftPot | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   const allDone =
     pots.length > 0 && pots.every((p) => completedPots.has(potKey(p)));
@@ -206,11 +244,27 @@ export default function PotMenuSlide({
         .pm-card:hover::before{opacity:1}
         .pm-card-done{border-color:rgba(74,222,128,.35);background:rgba(74,222,128,.04)}
         .pm-card-done:hover{border-color:rgba(74,222,128,.6);box-shadow:0 0 24px rgba(74,222,128,.18)}
+        .pm-card-locked{cursor:default}
+        .pm-card-locked:hover{transform:none}
 
         /* Done overlay */
         .pm-done-overlay{position:absolute;top:10px;right:12px;display:flex;flex-direction:column;align-items:center;gap:2px;animation:pmPop .4s both}
         .pm-done-check{font-size:1rem;color:#4ade80;filter:drop-shadow(0 0 6px rgba(74,222,128,.5))}
         .pm-done-label{font-family:'Cinzel',serif;font-size:clamp(.38rem,.55vw,.48rem);letter-spacing:.2em;text-transform:uppercase;color:rgba(74,222,128,.7)}
+        .pm-reset-btn{
+          position:absolute;bottom:10px;right:12px;
+          border:1px solid rgba(255,255,255,.18);
+          background:rgba(0,0,0,.5);
+          border-radius:8px;
+          padding:6px 10px;
+          font-family:'Cinzel',serif;
+          font-size:clamp(.38rem,.55vw,.5rem);
+          letter-spacing:.15em;
+          text-transform:uppercase;
+          color:rgba(244,244,245,.8);
+          cursor:pointer;
+        }
+        .pm-reset-btn:hover{border-color:rgba(200,168,74,.6);color:#f5c842}
 
         .pm-gem{position:absolute;width:7px;height:7px;background:rgba(200,168,74,.4);transform:rotate(45deg);transition:background .25s}
         .pm-gem-tl{top:12px;left:12px}.pm-gem-tr{top:12px;right:12px}
@@ -279,13 +333,61 @@ export default function PotMenuSlide({
                 key={`${pot.pot_number}-${pot.position}`}
                 pot={pot}
                 onClick={() => onSelectPot(pot)}
+                onReset={() => setResetTarget(pot)}
                 delay={i * 0.07}
-                completed={completedPots.has(potKey(pot))}
+                completed={completedPots.has(potKey(pot)) || pot.is_finalized}
               />
             ))}
           </div>
         )}
       </div>
+      <Dialog open={!!resetTarget} onOpenChange={(o) => !o && setResetTarget(null)}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100">
+          <DialogHeader>
+            <DialogTitle>Resetar pote</DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Isso remove lances, compras e multas deste pote e recalcula os saldos dos cartolas.
+            </DialogDescription>
+          </DialogHeader>
+          {resetTarget && (
+            <p className="text-sm text-zinc-300">
+              Confirmar reset do <span className="font-medium">Pote {resetTarget.pot_letter} ({resetTarget.position})</span>?
+            </p>
+          )}
+          <DialogFooter className="gap-2">
+            <button
+              type="button"
+              className="rounded-lg border border-zinc-600 px-3 py-2 text-sm"
+              onClick={() => setResetTarget(null)}
+              disabled={resetting}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-medium hover:bg-amber-600 disabled:opacity-40"
+              disabled={!resetTarget || resetting}
+              onClick={() => {
+                if (!resetTarget) return;
+                setResetting(true);
+                void onResetPot(resetTarget)
+                  .then(() => {
+                    toast.success("Pote resetado com sucesso.");
+                    setResetTarget(null);
+                  })
+                  .catch((err: unknown) => {
+                    const message =
+                      err instanceof Error ? err.message : "Falha ao resetar pote";
+                    toast.error(message);
+                  })
+                  .finally(() => setResetting(false));
+              }}
+            >
+              {resetting ? "Resetando..." : "Sim, resetar pote"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

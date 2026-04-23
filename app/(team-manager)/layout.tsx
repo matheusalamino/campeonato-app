@@ -5,6 +5,7 @@ import {
   TeamManagerDraftData,
 } from "@/components/TeamManagerDraftContext";
 import { TeamManagerLogoutBar } from "@/components/team-manager/TeamManagerLogoutBar";
+import { AutoFineNotifier } from "@/components/team-manager/AutoFineNotifier";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +119,7 @@ export default async function TeamManagerLayout({
     <TeamManagerDraftProvider data={draftData}>
       <div className="flex min-h-screen flex-col bg-zinc-950 text-white">
         <TeamManagerLogoutBar />
+        <AutoFineNotifier />
         <div className="flex-1">{children}</div>
         <Toaster richColors position="top-center" />
       </div>

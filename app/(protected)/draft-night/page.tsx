@@ -1,6 +1,7 @@
 "use client";
 
 import { useChampionship } from "@/components/ChampionshipContext";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 
 // ── TYPES ─────────────────────────────
@@ -178,9 +179,12 @@ export default function DraftNightPage() {
                       >
                         <div className="flex items-center gap-2">
                           {player.photo ? (
-                            <img
+                            <Image
                               src={player.photo}
                               alt={player.name}
+                              width={28}
+                              height={28}
+                              unoptimized
                               className="w-7 h-7 rounded-full object-cover border border-zinc-600"
                             />
                           ) : (

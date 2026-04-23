@@ -69,6 +69,29 @@ export async function POST(req: Request) {
         );
       }
 
+      const [{ count: budgetTotal }, { count: budgetOpen }] = await Promise.all([
+        supabase
+          .from("draft_pot_budgets")
+          .select("id", { count: "exact", head: true })
+          .eq("championship_id", championshipId)
+          .eq("pot_number", potNumber)
+          .eq("pot_position", normalizedPosition),
+        supabase
+          .from("draft_pot_budgets")
+          .select("id", { count: "exact", head: true })
+          .eq("championship_id", championshipId)
+          .eq("pot_number", potNumber)
+          .eq("pot_position", normalizedPosition)
+          .eq("settled", false),
+      ]);
+
+      if ((budgetTotal ?? 0) > 0 && (budgetOpen ?? 0) === 0) {
+        return NextResponse.json(
+          { error: "Este pote já foi finalizado e não pode ser reaberto." },
+          { status: 409 },
+        );
+      }
+
       const { error: rpcErr } = await supabase.rpc("set_draft_auction_state", {
         p_championship_id: championshipId,
         p_open: true,

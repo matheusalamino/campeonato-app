@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 type SquadPlayer = {
   id: string;
   name: string;
@@ -45,10 +47,13 @@ function PlayerSlot({ player }: { player?: SquadPlayer }) {
     <div className="flex flex-col items-center gap-1 max-w-[72px]">
       <div className="relative w-12 h-12 sm:w-14 sm:h-14 shrink-0">
         {player.photoUrl ? (
-          <img
+          <Image
             src={player.photoUrl}
-            alt=""
-            className="w-full h-full rounded-full object-cover border-2 border-amber-500/55 shadow-md shadow-black/40"
+            alt={player.name}
+            fill
+            sizes="(max-width: 640px) 48px, 56px"
+            unoptimized
+            className="rounded-full object-cover border-2 border-amber-500/55 shadow-md shadow-black/40"
           />
         ) : (
           <div className="w-full h-full rounded-full border-2 border-amber-600/25 bg-zinc-800/90 flex items-center justify-center text-[11px] font-semibold text-zinc-500">
@@ -104,9 +109,9 @@ export function FootballField({ players }: FootballFieldProps) {
   }
 
   return (
-    <div className="relative w-full aspect-[3/4] max-w-md mx-auto rounded-2xl overflow-hidden">
+    <div className="relative w-full aspect-3/4 max-w-md mx-auto rounded-2xl overflow-hidden">
       {/* Pitch background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-green-900 via-green-800 to-green-900">
+      <div className="absolute inset-0 bg-linear-to-b from-green-900 via-green-800 to-green-900">
         {/* Center circle */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full border border-white/15" />
         {/* Center line */}

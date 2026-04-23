@@ -1,6 +1,7 @@
 "use client";
 
 import { Star } from "lucide-react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 type PlayerSearchCardProps = {
@@ -54,10 +55,12 @@ export function PlayerSearchCard({
       <div className="flex items-center gap-2 shrink-0">
         <div className="relative w-11 h-11 rounded-full overflow-hidden border border-zinc-600 bg-zinc-800">
           {photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={photoUrl}
               alt=""
+              width={44}
+              height={44}
+              unoptimized
               className="w-full h-full object-cover"
             />
           ) : (
