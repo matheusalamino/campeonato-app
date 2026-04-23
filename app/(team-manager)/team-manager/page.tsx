@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   Wallet,
   Gavel,
-  Sparkles,
   Users,
   Search,
   Shield,

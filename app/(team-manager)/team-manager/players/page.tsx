@@ -6,6 +6,7 @@ import { ArrowLeft, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTeamManagerDraft } from "@/components/TeamManagerDraftContext";
 import { PlayerSearchCard } from "@/components/team-manager/PlayerSearchCard";
+import { PotPreviewTab } from "@/components/team-manager/PotPreviewTab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const supabase = createClient();
@@ -29,6 +30,7 @@ export default function SearchAndFavoritePlayersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [positionFilter, setPositionFilter] = useState("Todos");
+  const [listTab, setListTab] = useState<"all" | "favorites" | "pots">("all");
   const playersRef = useRef<PlayerItem[]>([]);
 
   useEffect(() => {
@@ -162,6 +164,27 @@ export default function SearchAndFavoritePlayersPage() {
     [filtered, favoriteIds],
   );
 
+  const catalogByRegistration = useMemo(() => {
+    const m = new Map<
+      string,
+      {
+        registrationId: string;
+        position: string;
+        isPurchased: boolean;
+        purchasePrice: number | null;
+      }
+    >();
+    for (const p of players) {
+      m.set(p.registrationId, {
+        registrationId: p.registrationId,
+        position: p.position,
+        isPurchased: p.isPurchased,
+        purchasePrice: p.purchasePrice,
+      });
+    }
+    return m;
+  }, [players]);
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header */}
@@ -191,21 +214,30 @@ export default function SearchAndFavoritePlayersPage() {
             />
           </div>
 
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            {positions.map((pos) => (
-              <button
-                key={pos}
-                onClick={() => setPositionFilter(pos)}
-                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium border transition ${
-                  positionFilter === pos
-                    ? "bg-blue-600 border-blue-500 text-white"
-                    : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600"
-                }`}
-              >
-                {pos}
-              </button>
-            ))}
-          </div>
+          {listTab !== "pots" && (
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {positions.map((pos) => (
+                <button
+                  key={pos}
+                  type="button"
+                  onClick={() => setPositionFilter(pos)}
+                  className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium border transition ${
+                    positionFilter === pos
+                      ? "bg-blue-600 border-blue-500 text-white"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600"
+                  }`}
+                >
+                  {pos}
+                </button>
+              ))}
+            </div>
+          )}
+          {listTab === "pots" && (
+            <p className="text-[11px] text-zinc-500">
+              A busca por nome filtra jogadores dentro da pré-visualização dos
+              potes.
+            </p>
+          )}
         </div>
       </div>
 
@@ -214,13 +246,25 @@ export default function SearchAndFavoritePlayersPage() {
         {loading ? (
           <p className="text-center text-zinc-500 py-12">Carregando...</p>
         ) : (
-          <Tabs defaultValue="all" className="w-full">
-            <TabsList className="w-full bg-zinc-900 border border-zinc-800 mb-3">
-              <TabsTrigger value="all" className="flex-1 text-xs">
+          <Tabs
+            value={listTab}
+            onValueChange={(v) =>
+              setListTab(v as "all" | "favorites" | "pots")
+            }
+            className="w-full"
+          >
+            <TabsList className="w-full bg-zinc-900 border border-zinc-800 mb-3 h-auto min-h-10 flex-wrap sm:flex-nowrap gap-1 p-1">
+              <TabsTrigger value="all" className="flex-1 text-xs min-w-18">
                 Todos ({filtered.length})
               </TabsTrigger>
-              <TabsTrigger value="favorites" className="flex-1 text-xs">
+              <TabsTrigger
+                value="favorites"
+                className="flex-1 text-xs min-w-18"
+              >
                 Favoritos ({favorites.length})
+              </TabsTrigger>
+              <TabsTrigger value="pots" className="flex-1 text-xs min-w-18">
+                Potes
               </TabsTrigger>
             </TabsList>
 
@@ -270,6 +314,16 @@ export default function SearchAndFavoritePlayersPage() {
                   ))
                 )}
               </div>
+            </TabsContent>
+
+            <TabsContent value="pots">
+              <PotPreviewTab
+                championshipId={ctx.championshipId}
+                searchQuery={search}
+                favoriteIds={favoriteIds}
+                toggleFavorite={toggleFavorite}
+                catalogByRegistration={catalogByRegistration}
+              />
             </TabsContent>
           </Tabs>
         )}

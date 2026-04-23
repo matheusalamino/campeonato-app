@@ -14,6 +14,7 @@ type Player = {
 };
 
 type Registration = {
+  id: string;
   player_id: string;
   final_overall: number | null;
   profile_photo_link: string | null;
@@ -66,7 +67,7 @@ export async function GET(req: Request) {
   // 🔥 3. Buscar registrations (overall + foto)
   const { data: registrationsData, error: regError } = await supabase
     .from("championship_registrations")
-    .select("player_id, final_overall, profile_photo_link")
+    .select("id, player_id, final_overall, profile_photo_link")
     .eq("championship_id", championshipId)
     .in("player_id", playerIds);
 
@@ -76,11 +77,12 @@ export async function GET(req: Request) {
 
   const registrationsMap = new Map<
     string,
-    { overall: number; photo: string | null }
+    { registrationId: string; overall: number; photo: string | null }
   >();
 
   (registrationsData as Registration[]).forEach((r) => {
     registrationsMap.set(r.player_id, {
+      registrationId: r.id,
       overall: r.final_overall ?? 0,
       photo: r.profile_photo_link ?? null,
     });
@@ -95,6 +97,7 @@ export async function GET(req: Request) {
       max_managers: number;
       players: {
         id: string;
+        registrationId: string | null;
         name: string;
         overall: number;
         photo: string | null;
@@ -122,6 +125,7 @@ export async function GET(req: Request) {
     if (player) {
       grouped[key].players.push({
         id: player.id,
+        registrationId: reg?.registrationId ?? null,
         name: player.name,
         overall: reg?.overall ?? 0,
         photo: reg?.photo ?? null,
