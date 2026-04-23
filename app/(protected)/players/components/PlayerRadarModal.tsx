@@ -110,7 +110,7 @@ export default function PlayerRadarModal({
             </div>
           </div>
 
-          {currentOverall && (
+          {currentOverall != null && (
             <div className="text-left md:text-right">
               <div className="text-3xl md:text-4xl font-bold text-blue-400 bg-blue-500/10 px-3 py-1 rounded-lg inline-block">
                 {currentOverall}

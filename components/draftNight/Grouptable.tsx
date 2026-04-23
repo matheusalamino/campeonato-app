@@ -148,7 +148,7 @@ function AssignModal({
           <option value="">— escolha o time —</option>
           {teams.map((t) => (
             <option key={t.id} value={t.id}>
-              {t.name}
+              {t.cartola_name ? `${t.name} · ${t.cartola_name}` : t.name}
             </option>
           ))}
         </select>

@@ -100,12 +100,15 @@ function ManagerRow({
   maxManagers,
   revealed,
   isGoalkeeper,
+  submissionOrder,
 }: {
   mgr: ManagerBidStatus;
   rank: number | null;
   maxManagers: number;
   revealed: boolean;
   isGoalkeeper: boolean;
+  /** Ordem de envio do lance (1 = primeiro) antes da revelação. */
+  submissionOrder: number | null;
 }) {
   const isQualified = rank !== null && rank <= maxManagers;
   const hasBid = mgr.has_bid && mgr.is_eligible;
@@ -120,6 +123,10 @@ function ManagerRow({
             className={`pb-rank-num ${isQualified ? "pb-rank-gold" : "pb-rank-dim"}`}
           >
             {rank}º
+          </span>
+        ) : submissionOrder !== null ? (
+          <span className="pb-rank-num pb-rank-queue" title="Ordem de envio">
+            {submissionOrder}º
           </span>
         ) : (
           <span className="pb-rank-dot">—</span>
@@ -196,6 +203,7 @@ export default function PotBidsSlide({
   const isGoalkeeper = pot.position.toLowerCase().includes("goleiro");
   const [windowOpened, setWindowOpened] = useState(false);
   const [windowError, setWindowError] = useState<string | null>(null);
+  const [revealError, setRevealError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
   const isMounted = useRef(true);
 
@@ -267,11 +275,47 @@ export default function PotBidsSlide({
   );
 
   const displayManagers: ManagerBidStatus[] = revealed
-    ? [...rankedManagers, ...managers.filter((m) => !m.is_eligible)]
+    ? isGoalkeeper
+      ? [
+          ...managers.filter((m) => m.is_eligible),
+          ...managers.filter((m) => !m.is_eligible),
+        ]
+      : [...rankedManagers, ...managers.filter((m) => !m.is_eligible)]
     : [
-        ...managers.filter((m) => m.is_eligible),
+        ...[...managers.filter((m) => m.is_eligible)].sort((a, b) => {
+          if (a.has_bid && b.has_bid) {
+            const ta = a.submitted_at
+              ? new Date(a.submitted_at).getTime()
+              : 0;
+            const tb = b.submitted_at
+              ? new Date(b.submitted_at).getTime()
+              : 0;
+            if (ta !== tb) return ta - tb;
+          }
+          if (a.has_bid && !b.has_bid) return -1;
+          if (!a.has_bid && b.has_bid) return 1;
+          return (a.manager_name ?? "").localeCompare(b.manager_name ?? "", "pt");
+        }),
         ...managers.filter((m) => !m.is_eligible),
       ];
+
+  const submissionOrderByCm = new Map<string, number>();
+  if (!revealed) {
+    const withBid = managers
+      .filter((m) => m.is_eligible && m.has_bid)
+      .sort((a, b) => {
+        const ta = a.submitted_at
+          ? new Date(a.submitted_at).getTime()
+          : 0;
+        const tb = b.submitted_at
+          ? new Date(b.submitted_at).getTime()
+          : 0;
+        return ta - tb;
+      });
+    withBid.forEach((m, i) => {
+      submissionOrderByCm.set(m.championship_manager_id, i + 1);
+    });
+  }
 
   // Build qualified managers list for auction screen
   function buildQualified(): QualifiedManager[] {
@@ -332,6 +376,7 @@ export default function PotBidsSlide({
         .pb-rank-gold{background:linear-gradient(135deg,#fff0a0,#f5c842,#c8860a);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 0 6px rgba(255,180,30,.4))}
         .pb-rank-dim{color:rgba(200,168,74,.3)}
         .pb-rank-dot{font-family:'Cinzel',serif;color:rgba(200,168,74,.2);font-size:.9rem}
+        .pb-rank-queue{font-size:clamp(.72rem,1.1vw,.9rem);color:rgba(200,168,74,.55)}
 
         .pb-mgr-info{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
         .pb-mgr-name{font-family:'Cinzel',serif;font-weight:700;font-size:clamp(.75rem,1.2vw,1rem);letter-spacing:.07em;text-transform:uppercase;color:rgba(240,210,140,.92);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -385,6 +430,9 @@ export default function PotBidsSlide({
         {windowError && (
           <p className="pb-window-err">Erro ao abrir janela: {windowError}</p>
         )}
+        {revealError && (
+          <p className="pb-window-err">Erro ao gravar classificação: {revealError}</p>
+        )}
         {isGoalkeeper && (
           <p className="pb-gk-note">
             Goleiros não participam do processo de habilitação.
@@ -436,6 +484,9 @@ export default function PotBidsSlide({
                   maxManagers={data?.max_managers ?? 0}
                   revealed={revealed}
                   isGoalkeeper={isGoalkeeper}
+                  submissionOrder={
+                    submissionOrderByCm.get(mgr.championship_manager_id) ?? null
+                  }
                 />
               </div>
             ))}
@@ -449,7 +500,28 @@ export default function PotBidsSlide({
               className="pb-reveal-btn"
               onClick={(e) => {
                 e.stopPropagation();
-                setRevealed(true);
+                void (async () => {
+                  setRevealError(null);
+                  if (!isGoalkeeper) {
+                    const res = await fetch("/api/draft/qualification-resolve", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        championshipId,
+                        potNumber: pot.pot_number,
+                        potPosition: pot.position,
+                      }),
+                    });
+                    const body = (await res.json().catch(() => ({}))) as {
+                      error?: string;
+                    };
+                    if (!res.ok) {
+                      setRevealError(body.error ?? "Falha ao salvar classificados");
+                      return;
+                    }
+                  }
+                  setRevealed(true);
+                })();
               }}
             >
               {submittedCount < totalEligible && !isGoalkeeper

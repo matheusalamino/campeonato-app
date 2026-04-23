@@ -5,7 +5,9 @@ import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
 
-const POLL_INTERVAL = 3000;
+/** Enquanto o cartola ainda não tem time (sorteio na apresentação), poll um pouco mais rápido. */
+const POLL_MS_WAITING_TEAM = 2500;
+const POLL_MS_AFTER_TEAM = 5000;
 
 export type DraftSessionData = {
   currentBalance: number;
@@ -27,6 +29,10 @@ export type DraftSessionData = {
   qualificationPotPosition: string | null;
   /** Manager already submitted a bid for the currently open pot. */
   hasSubmittedQualificationBidForActivePot: boolean;
+  /** Atualizado a cada poll — reflete `team_id` assim que o sorteio na apresentação grava no banco. */
+  liveTeamId: string | null;
+  liveTeamName: string | null;
+  liveTeamLogoUrl: string | null;
   isLoading: boolean;
   error: string | null;
 };
@@ -47,10 +53,14 @@ export function useDraftSession(
     qualificationPotNumber: null,
     qualificationPotPosition: null,
     hasSubmittedQualificationBidForActivePot: false,
+    liveTeamId: null,
+    liveTeamName: null,
+    liveTeamLogoUrl: null,
     isLoading: true,
     error: null,
   });
 
+  const [pollMs, setPollMs] = useState(POLL_MS_WAITING_TEAM);
   const mountedRef = useRef(true);
 
   const fetchSession = useCallback(async () => {
@@ -86,14 +96,29 @@ export function useDraftSession(
       ]);
 
       let teamCount = 0;
-      const teamId = cmRes.data?.team_id;
+      const teamId = cmRes.data?.team_id ?? null;
+      let liveTeamId: string | null = null;
+      let liveTeamName: string | null = null;
+      let liveTeamLogoUrl: string | null = null;
+
       if (teamId) {
-        const { data: ctRow } = await supabase
-          .from("championship_teams")
-          .select("id")
-          .eq("championship_id", championshipId)
-          .eq("team_id", teamId)
-          .maybeSingle();
+        liveTeamId = teamId;
+        const [{ data: ctRow }, { data: teamRow }] = await Promise.all([
+          supabase
+            .from("championship_teams")
+            .select("id")
+            .eq("championship_id", championshipId)
+            .eq("team_id", teamId)
+            .maybeSingle(),
+          supabase
+            .from("teams")
+            .select("name, logo_url")
+            .eq("id", teamId)
+            .maybeSingle(),
+        ]);
+
+        liveTeamName = teamRow?.name ?? null;
+        liveTeamLogoUrl = teamRow?.logo_url ?? null;
 
         if (ctRow?.id) {
           const { count } = await supabase
@@ -142,6 +167,8 @@ export function useDraftSession(
 
       if (!mountedRef.current) return;
 
+      setPollMs(teamId ? POLL_MS_AFTER_TEAM : POLL_MS_WAITING_TEAM);
+
       setData((prev) => ({
         ...prev,
         currentBalance: cmRes.data?.current_balance ?? prev.currentBalance,
@@ -161,6 +188,9 @@ export function useDraftSession(
         qualificationPotNumber,
         qualificationPotPosition,
         hasSubmittedQualificationBidForActivePot,
+        liveTeamId,
+        liveTeamName,
+        liveTeamLogoUrl,
         isLoading: false,
         error: null,
       }));
@@ -178,13 +208,13 @@ export function useDraftSession(
     mountedRef.current = true;
     fetchSession();
 
-    const interval = setInterval(fetchSession, POLL_INTERVAL);
+    const interval = setInterval(fetchSession, pollMs);
 
     return () => {
       mountedRef.current = false;
       clearInterval(interval);
     };
-  }, [fetchSession]);
+  }, [fetchSession, pollMs]);
 
   return { ...data, refetch: fetchSession };
 }
