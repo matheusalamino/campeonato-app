@@ -42,6 +42,8 @@ export default function AuctionFiscalPage() {
   const [confirmBulk, setConfirmBulk] = useState(false);
   const [progressiveTarget, setProgressiveTarget] =
     useState<Participant | null>(null);
+  const [extraBalanceOpen, setExtraBalanceOpen] = useState(false);
+  const [extraBalanceAmount, setExtraBalanceAmount] = useState("2000");
   const [championshipId, setChampionshipId] = useState<string>(() => {
     if (typeof window === "undefined") return "";
     return localStorage.getItem(LS_KEY) ?? "";
@@ -163,11 +165,43 @@ export default function AuctionFiscalPage() {
     await fetchPot();
   }
 
+  async function applyExtraBalance() {
+    if (!championshipId) return;
+    const amount = Number(extraBalanceAmount.replace(/\D/g, ""));
+    if (!amount || amount % 1000 !== 0) {
+      toast.error("Informe um valor válido em múltiplos de CC$ 1.000.");
+      return;
+    }
+
+    const res = await fetch("/api/draft/fiscal/grant-extra-balance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ championshipId, amount }),
+    });
+
+    const json = (await res.json()) as {
+      success?: boolean;
+      affected?: number;
+      error?: string;
+    };
+
+    if (!res.ok) {
+      toast.error(json.error ?? "Erro ao creditar saldo extra");
+      return;
+    }
+
+    setExtraBalanceOpen(false);
+    toast.success(
+      `Saldo extra creditado para ${json.affected ?? 0} cartola(s).`,
+    );
+    await fetchPot();
+  }
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 space-y-6">
       <header className="space-y-1">
         <h1 className="text-xl font-semibold tracking-tight">
-          Fiscal do leilão
+          Fiscal do Leilão
         </h1>
         <p className="text-sm text-zinc-400">
           Acompanhe os saldos atualizados automaticamente enquanto o admin opera
@@ -202,9 +236,9 @@ export default function AuctionFiscalPage() {
               <p className="text-sm font-medium text-zinc-200">
                 {payload?.championshipName ?? "…"}
               </p>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-yellow-400 mt-2">
                 {payload?.auctionOpen && potLabel
-                  ? `Leilão ativo: ${potLabel}`
+                  ? `Leilão Ativo: ${potLabel}`
                   : "Aguardando o admin abrir o leilão do pote no modo apresentação."}
               </p>
             </div>
@@ -213,7 +247,7 @@ export default function AuctionFiscalPage() {
               className="rounded-lg border border-zinc-600 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
               onClick={() => void fetchPot()}
             >
-              Atualizar agora
+              Atualizar Agora
             </button>
           </div>
 
@@ -224,7 +258,14 @@ export default function AuctionFiscalPage() {
               className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-medium hover:bg-amber-600 disabled:opacity-40"
               onClick={() => setConfirmBulk(true)}
             >
-              Multa geral (CC$ 2.000)
+              Multa Geral (CC$ 2.000)
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-emerald-600/50 bg-emerald-900/20 px-3 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-900/35"
+              onClick={() => setExtraBalanceOpen(true)}
+            >
+              Saldo Extra
             </button>
           </div>
 
@@ -267,10 +308,10 @@ export default function AuctionFiscalPage() {
                         <button
                           type="button"
                           disabled={!payload.auctionOpen}
-                          className="rounded-md border border-zinc-600 px-2 py-1 text-xs hover:bg-zinc-800 disabled:opacity-40"
+                          className="rounded-md border bg-amber-700 px-2 py-1 text-xs hover:bg-amber-600 disabled:opacity-40"
                           onClick={() => setProgressiveTarget(p)}
                         >
-                          Multa individual
+                          Multa Individual
                         </button>
                       </td>
                     </tr>
@@ -306,7 +347,7 @@ export default function AuctionFiscalPage() {
               Você confirma que deseja aplicar a multa geral agora?
             </p>
           </div>
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2">
             <button
               type="button"
               className="rounded-lg border border-zinc-600 px-3 py-2 text-sm"
@@ -363,7 +404,7 @@ export default function AuctionFiscalPage() {
               </p>
             </div>
           )}
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2">
             <button
               type="button"
               className="rounded-lg border border-zinc-600 px-3 py-2 text-sm"
@@ -379,6 +420,51 @@ export default function AuctionFiscalPage() {
               }
             >
               Sim, aplicar multa
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={extraBalanceOpen} onOpenChange={setExtraBalanceOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100">
+          <DialogHeader>
+            <DialogTitle>Creditar saldo extra</DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Crédito geral para todos os cartolas do campeonato selecionado.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-zinc-300">
+            <label className="block">
+              <span className="mb-1 block text-zinc-500">Valor por cartola</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2"
+                value={extraBalanceAmount}
+                onChange={(e) =>
+                  setExtraBalanceAmount(e.target.value.replace(/\D/g, ""))
+                }
+                placeholder="Ex.: 2000"
+              />
+            </label>
+            <p className="text-xs text-zinc-500">
+              Use múltiplos de CC$ 1.000.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <button
+              type="button"
+              className="rounded-lg border border-zinc-600 px-3 py-2 text-sm"
+              onClick={() => setExtraBalanceOpen(false)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-medium hover:bg-emerald-600"
+              onClick={() => void applyExtraBalance()}
+            >
+              Confirmar crédito
             </button>
           </DialogFooter>
         </DialogContent>

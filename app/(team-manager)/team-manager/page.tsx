@@ -106,14 +106,8 @@ export default function TeamManagerDashboard() {
           potBudget={session.potBudget}
         />
 
-        {/* Action grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <DashboardCard
-            icon={<Wallet className="w-6 h-6 text-emerald-400" />}
-            label="Saldo e Extrato"
-            onClick={() => router.push("/team-manager/balance")}
-          />
-
+        {/* Action grid - linha principal */}
+        <div className="grid grid-cols-2 gap-3">
           <DashboardCard
             icon={<Gavel className="w-6 h-6 text-blue-400" />}
             label="Lance de Habilitação"
@@ -135,6 +129,15 @@ export default function TeamManagerDashboard() {
               setActiveSpecialCardUseId(useId);
               setSpecialCardBidOpen(true);
             }}
+          />
+        </div>
+
+        {/* Action grid - linha secundária */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <DashboardCard
+            icon={<Wallet className="w-6 h-6 text-emerald-400" />}
+            label="Saldo e Extrato"
+            onClick={() => router.push("/team-manager/balance")}
           />
 
           <DashboardCard

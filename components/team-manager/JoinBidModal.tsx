@@ -295,7 +295,7 @@ export function JoinBidModal({
 
         <DialogFooter
           style={{ paddingBottom: 28 }}
-          className="shrink-0 border-t border-zinc-800/60 px-5 pt-4 sm:gap-3"
+          className="shrink-0 border-t border-zinc-800/60 px-5 pt-4 gap-2"
         >
           <button
             type="button"
