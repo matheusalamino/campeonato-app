@@ -77,7 +77,7 @@ export default function ManagersPage() {
 
   return (
     <div className="h-full flex">
-      <ManagersSection championshipId={championship.id} managers={managers} />
+      <ManagersSection managers={managers} />
     </div>
   );
 }

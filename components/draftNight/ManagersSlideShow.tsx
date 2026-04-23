@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import {
   useManagers,
   type ManagerPresentation,
@@ -60,6 +61,8 @@ function TrophyBadge({ name, count }: { name: string; count: number }) {
 
 // ── PHOTO FRAME ────────────────────────────────────────────
 function PhotoFrame({ src, name }: { src: string | null; name: string }) {
+  const [loadFailed, setLoadFailed] = useState(false);
+
   const initials = name
     .split(" ")
     .slice(0, 2)
@@ -152,14 +155,14 @@ function PhotoFrame({ src, name }: { src: string | null; name: string }) {
       </div>
 
       <div className="photo-circle">
-        {src ? (
-          <img
+        {src && !loadFailed ? (
+          <Image
             src={src}
             alt={name}
+            fill
             className="photo-img"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
-            }}
+            unoptimized
+            onError={() => setLoadFailed(true)}
           />
         ) : (
           <span className="photo-initials">{initials}</span>
@@ -181,7 +184,11 @@ function ManagerCard({
   return (
     <div className={`cartola-card ${visible ? "card-visible" : "card-hidden"}`}>
       <div className="card-photo-side">
-        <PhotoFrame src={manager.photo_url} name={manager.name} />
+        <PhotoFrame
+          key={`${manager.id}-${manager.photo_url ?? ""}`}
+          src={manager.photo_url}
+          name={manager.name}
+        />
       </div>
       <div className="card-info-side">
         <p className="card-eyebrow">Manager</p>

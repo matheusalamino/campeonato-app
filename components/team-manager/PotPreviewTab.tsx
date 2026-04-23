@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { PlayerSearchCard } from "@/components/team-manager/PlayerSearchCard";
 import { cn } from "@/lib/utils";
 
@@ -205,10 +206,12 @@ export function PotPreviewTab({
                 >
                   <div className="w-11 h-11 rounded-full bg-zinc-800 border border-zinc-600 overflow-hidden shrink-0">
                     {pl.photo ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <Image
                         src={pl.photo}
-                        alt=""
+                        alt={pl.name}
+                        width={44}
+                        height={44}
+                        unoptimized
                         className="w-full h-full object-cover"
                       />
                     ) : (
