@@ -84,18 +84,6 @@ function PositionIcon({ position }: { position: string }) {
   );
 }
 
-/** Evita última linha da grid com um único cartão (ex.: 4 potes em 3 colunas). */
-function potGridColumns(count: number): number {
-  if (count <= 1) return 1;
-  if (count === 2) return 2;
-  for (const cols of [3, 2, 4, 5]) {
-    if (cols > count) continue;
-    const rem = count % cols;
-    if (rem === 0 || rem >= 2 || count <= cols) return cols;
-  }
-  return Math.min(3, count);
-}
-
 function PotCard({
   pot,
   onClick,
@@ -109,7 +97,9 @@ function PotCard({
   delay: number;
   completed: boolean;
 }) {
-  const isGoalkeeper = pot.position.toLowerCase().includes("goleiro");
+  const pos = pot.position.toLowerCase();
+  const isGoalkeeper = pos === "gol" || pos.includes("goleiro");
+  const isExtra = pos === "extra" || pos.includes("adicional");
   const locked = completed || pot.is_finalized;
 
   return (
@@ -173,7 +163,9 @@ function PotCard({
           Pote {pot.pot_letter}
         </p>
         <p className="pm-position">{pot.position}</p>
-        {isGoalkeeper && <p className="pm-gk-note">Sem habilitação</p>}
+        {(isGoalkeeper || isExtra) && (
+          <p className="pm-gk-note">Sem habilitação</p>
+        )}
       </div>
 
       <div className="pm-stats-row">
@@ -207,7 +199,6 @@ export default function PotMenuSlide({
   onSelectPot: (pot: DraftPot) => void;
   onResetPot: (pot: DraftPot) => Promise<void>;
 }) {
-  const cols = potGridColumns(pots.length);
   const potKey = (p: DraftPot) => `${p.pot_number}:${p.position}`;
   const [resetTarget, setResetTarget] = useState<DraftPot | null>(null);
   const [resetting, setResetting] = useState(false);
@@ -225,7 +216,21 @@ export default function PotMenuSlide({
         @keyframes pmPulse{0%,100%{opacity:.4}50%{opacity:1}}
         @keyframes pmPop{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:scale(1)}}
 
-        .pm-wrap{display:flex;flex-direction:column;align-items:center;gap:clamp(20px,3vh,36px);width:100%;max-width:1200px;padding:0 clamp(16px,3vw,48px)}
+        .pm-wrap{
+          display:flex;
+          flex-direction:column;
+          align-items:center;
+          gap:clamp(20px,3vh,36px);
+          width:100%;
+          max-width:1200px;
+          max-height:calc(100vh - 92px);
+          overflow-y:auto;
+          overscroll-behavior:contain;
+          padding:clamp(14px,2.2vh,24px) clamp(16px,3vw,48px) clamp(84px,10vh,120px);
+          scrollbar-width:none;
+          -ms-overflow-style:none;
+        }
+        .pm-wrap::-webkit-scrollbar{width:0;height:0;display:none}
 
         .pm-header{display:flex;flex-direction:column;align-items:center;gap:8px}
         .pm-eyebrow{font-family:'Cinzel',serif;font-size:clamp(.6rem,.95vw,.8rem);letter-spacing:.45em;text-transform:uppercase;color:rgba(200,168,74,.55);margin:0}
@@ -236,9 +241,20 @@ export default function PotMenuSlide({
 
         .pm-all-done{font-family:'EB Garamond',serif;font-style:italic;font-size:clamp(.85rem,1.3vw,1rem);color:rgba(74,222,128,.75);animation:pmPop .4s both}
 
-        .pm-grid{display:grid;gap:clamp(12px,2vw,20px);width:100%;justify-content:center}
+        .pm-grid{
+          --pm-gap: clamp(12px,2vw,20px);
+          display:flex;
+          flex-wrap:wrap;
+          justify-content:center;
+          gap:var(--pm-gap);
+          width:100%;
+        }
+        .pm-card-slot{
+          width:calc((100% - (var(--pm-gap) * 3)) / 4);
+          min-width:0;
+        }
 
-        .pm-card{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(10px,1.5vh,16px);padding:clamp(20px,3vh,32px) clamp(16px,2.5vw,28px);background:rgba(0,0,0,.4);border:1px solid rgba(200,168,74,.25);border-radius:20px;cursor:pointer;transition:all .25s cubic-bezier(.22,1,.36,1);backdrop-filter:blur(6px);overflow:hidden;animation:pmIn .55s cubic-bezier(.22,1,.36,1) both;min-height:clamp(160px,20vh,240px)}
+        .pm-card{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(10px,1.5vh,16px);padding:clamp(20px,3vh,32px) clamp(16px,2.5vw,28px) clamp(62px,7vh,78px);background:rgba(0,0,0,.4);border:1px solid rgba(200,168,74,.25);border-radius:20px;cursor:pointer;transition:all .25s cubic-bezier(.22,1,.36,1);backdrop-filter:blur(6px);overflow:hidden;animation:pmIn .55s cubic-bezier(.22,1,.36,1) both;min-height:clamp(160px,20vh,240px)}
         .pm-card::before{content:'';position:absolute;inset:0;border-radius:20px;background:radial-gradient(ellipse at 50% 0%,rgba(200,168,74,.1) 0%,transparent 65%);opacity:0;transition:opacity .25s}
         .pm-card:hover{border-color:rgba(200,168,74,.7);background:rgba(0,0,0,.55);transform:translateY(-6px) scale(1.02);box-shadow:0 0 32px rgba(200,168,74,.22),0 20px 40px rgba(0,0,0,.4)}
         .pm-card:hover::before{opacity:1}
@@ -252,7 +268,7 @@ export default function PotMenuSlide({
         .pm-done-check{font-size:1rem;color:#4ade80;filter:drop-shadow(0 0 6px rgba(74,222,128,.5))}
         .pm-done-label{font-family:'Cinzel',serif;font-size:clamp(.38rem,.55vw,.48rem);letter-spacing:.2em;text-transform:uppercase;color:rgba(74,222,128,.7)}
         .pm-reset-btn{
-          position:absolute;bottom:10px;right:12px;
+          position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
           border:1px solid rgba(255,255,255,.18);
           background:rgba(0,0,0,.5);
           border-radius:8px;
@@ -296,6 +312,16 @@ export default function PotMenuSlide({
         .pm-spin-txt{font-family:'Cinzel',serif;font-size:.72rem;letter-spacing:.35em;text-transform:uppercase;color:rgba(200,168,74,.5);animation:pmPulse 1.5s ease-in-out infinite}
         .pm-err{font-family:'Cinzel',serif;color:rgba(200,80,80,.8);font-size:.85rem;letter-spacing:.08em}
         .pm-empty{font-family:'EB Garamond',serif;font-style:italic;color:rgba(240,210,140,.5);font-size:1rem}
+
+        @media (max-width: 1100px) {
+          .pm-card-slot{width:calc((100% - var(--pm-gap)) / 2)}
+          .pm-wrap{padding-bottom:96px}
+        }
+        @media (max-width: 680px) {
+          .pm-card-slot{width:100%}
+          .pm-wrap{max-height:calc(100vh - 84px);padding:10px 10px 96px}
+          .pm-card{padding-bottom:64px}
+        }
       `}</style>
 
       <div className="pm-wrap">
@@ -324,19 +350,20 @@ export default function PotMenuSlide({
         )}
 
         {!loading && !error && pots.length > 0 && (
-          <div
-            className="pm-grid"
-            style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
-          >
+          <div className="pm-grid">
             {pots.map((pot, i) => (
-              <PotCard
+              <div
                 key={`${pot.pot_number}-${pot.position}`}
-                pot={pot}
-                onClick={() => onSelectPot(pot)}
-                onReset={() => setResetTarget(pot)}
-                delay={i * 0.07}
-                completed={completedPots.has(potKey(pot)) || pot.is_finalized}
-              />
+                className="pm-card-slot"
+              >
+                <PotCard
+                  pot={pot}
+                  onClick={() => onSelectPot(pot)}
+                  onReset={() => setResetTarget(pot)}
+                  delay={i * 0.07}
+                  completed={completedPots.has(potKey(pot)) || pot.is_finalized}
+                />
+              </div>
             ))}
           </div>
         )}
