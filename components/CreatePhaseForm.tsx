@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useChampionship } from "@/components/ChampionshipContext";
 import { usePhases } from "@/features/hooks/usePhases";
 import { createClient } from "@/lib/supabase/client";
@@ -13,8 +13,9 @@ import type {
 } from "@/types/championship";
 import {
   generateGroupMatches,
+  generateGroupSlots,
   generateKnockoutMatches,
-  generateSlots,
+  generateMatchSlots,
 } from "@/features/helpers/matchGenerators";
 
 type Props = {
@@ -30,7 +31,7 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
   const isEditing = !!phase;
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
-  // ✅ STATE INICIAL BASEADO NA PHASE (SEM useEffect)
+  // ── Form state ─────────────────────────────────────────────────────────────
   const [name, setName] = useState(phase?.name ?? "");
   const [abbreviation, setAbbreviation] = useState(phase?.abbreviation ?? "");
   const [type, setType] = useState<PhaseType>(phase?.type ?? "group");
@@ -49,23 +50,120 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
     () =>
       Array.from({ length: numberOfMatches }).map(() => ({
         slots: [
-          { slot_order: 1, mode: "manual" },
-          { slot_order: 2, mode: "manual" },
+          { slot_order: 1 as const, mode: "manual" as const },
+          { slot_order: 2 as const, mode: "manual" as const },
         ],
       })),
   );
 
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // ── Extra data for dropdowns and edit mode ─────────────────────────────────
+  const [allPhases, setAllPhases] = useState<Phase[]>([]);
+  const [allKnockoutMatches, setAllKnockoutMatches] = useState<any[]>([]);
+
+  // 1. Fetch other phases and matches for the championship
+  useEffect(() => {
+    if (!championship?.id) return;
+    async function loadExtra() {
+      const { data: phasesData } = await supabase
+        .from("phases")
+        .select("*")
+        .eq("championship_id", championship!.id)
+        .order("order_number");
+      setAllPhases(phasesData ?? []);
+
+      if (phasesData && phasesData.length > 0) {
+        const { data: matchesData } = await supabase
+          .from("knockout_matches")
+          .select("id, code, name, phase_id")
+          .in("phase_id", phasesData.map((p) => p.id));
+        setAllKnockoutMatches(matchesData ?? []);
+      }
+    }
+    loadExtra();
+  }, [championship]);
+
+  // 2. Fetch existing settings if editing
+  useEffect(() => {
+    if (!isEditing || !phase) return;
+    async function loadEditingData() {
+      if (phase!.type === "knockout") {
+        const { data: settings } = await supabase
+          .from("phase_knockout_settings")
+          .select("*")
+          .eq("phase_id", phase!.id)
+          .single();
+        if (settings) {
+          setNumberOfMatches(settings.number_of_matches);
+          setAutoFill(settings.auto_fill);
+          setHomeAway(settings.is_home_away);
+
+          const { data: matches } = await supabase
+            .from("knockout_matches")
+            .select("id")
+            .eq("phase_id", phase!.id)
+            .order("round_number");
+
+          if (matches && matches.length > 0) {
+            const { data: sources } = await supabase
+              .from("knockout_match_sources")
+              .select("*")
+              .in("knockout_match_id", matches.map((m) => m.id))
+              .order("slot_order");
+            
+            const newConfig = matches.map((m) => {
+              const mSources = (sources ?? []).filter((s) => s.knockout_match_id === m.id);
+              return {
+                slots: [1, 2].map((order) => {
+                  const s = mSources.find((src) => src.slot_order === order);
+                  if (s) {
+                    return {
+                      slot_order: order as 1 | 2,
+                      mode: "auto" as const,
+                      source_type: s.source_type,
+                      source_phase_id: s.source_phase_id,
+                      source_group: s.source_group,
+                      source_position: s.source_position,
+                      source_match_code: s.source_match_code,
+                    };
+                  }
+                  return { slot_order: order as 1 | 2, mode: "manual" as const };
+                })
+              };
+            });
+            setMatchesConfig(newConfig);
+          }
+        }
+      } else if (phase!.type === "group") {
+        const { data: settings } = await supabase
+          .from("phase_group_settings")
+          .select("*")
+          .eq("phase_id", phase!.id)
+          .single();
+        if (settings) {
+          setNumberOfGroups(settings.number_of_groups);
+          setTeamsPerGroup(settings.teams_per_group);
+          setRoundType(settings.round_type);
+          setHomeAway(settings.matches_per_pair > 1);
+        }
+      }
+    }
+    loadEditingData();
+  }, [isEditing, phase]);
+
+  // ── Submit ─────────────────────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!championship) return;
 
     setLoading(true);
+    setError(null);
 
     let currentPhase: Phase | null = null;
 
-    // ✅ EDITAR
+    // ── EDIT ──────────────────────────────────────────────────────────────────
     if (isEditing && phase) {
       currentPhase = await updatePhase({
         id: phase.id,
@@ -74,144 +172,218 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
         order_number: order,
         abbreviation,
         is_home_away: homeAway,
+        // Settings are updated but structure (matches/slots) is NOT recreated.
+        // For structural changes the user must delete + recreate the phase.
+        ...(type === "group"
+          ? {
+              groupSettings: {
+                number_of_groups: numberOfGroups,
+                teams_per_group: teamsPerGroup,
+                round_type: roundType,
+                matches_per_pair: homeAway ? 2 : 1,
+              },
+            }
+          : {
+              knockoutSettings: {
+                number_of_matches: numberOfMatches,
+                is_home_away: homeAway,
+                auto_fill: autoFill,
+              },
+            }),
       });
+
+      if (!currentPhase) {
+        setError("Erro ao atualizar fase.");
+        setLoading(false);
+        return;
+      }
+
+      setLoading(false);
+      onClose();
+      return;
     }
 
-    // ✅ CRIAR
-    else {
-      const dto: CreatePhaseDTO = {
-        name,
-        type,
-        order_number: order,
-        championship_id: championship.id,
-        abbreviation,
-        is_home_away: homeAway,
-      };
+    // ── CREATE ────────────────────────────────────────────────────────────────
+    const dto: CreatePhaseDTO = {
+      name,
+      type,
+      order_number: order,
+      championship_id: championship.id,
+      abbreviation,
+      is_home_away: homeAway,
+    };
 
-      currentPhase = await createPhase(dto);
-    }
+    currentPhase = await createPhase(dto);
 
     if (!currentPhase) {
+      setError("Erro ao criar fase.");
       setLoading(false);
       return;
     }
 
-    // ⚠️ Só cria estrutura se for criação (evita duplicar)
-    if (!isEditing) {
-      // =========================
-      // GROUP
-      // =========================
-      if (type === "group") {
-        await supabase.from("phase_group_settings").insert({
-          phase_id: currentPhase.id,
+    const phaseId = currentPhase.id;
+
+    // ── GROUP structure ───────────────────────────────────────────────────────
+    if (type === "group") {
+      // 1. Settings
+      const { error: settingsErr } = await supabase
+        .from("phase_group_settings")
+        .insert({
+          phase_id: phaseId,
           teams_per_group: teamsPerGroup,
           round_type: roundType,
           matches_per_pair: homeAway ? 2 : 1,
           number_of_groups: numberOfGroups,
         });
 
-        const groups = Array.from({ length: numberOfGroups }).map((_, i) => ({
-          name: alphabet[i],
-          phase_id: currentPhase.id,
-        }));
-
-        await supabase.from("groups").insert(groups);
-
-        // 🔥 GERAR JOGOS
-        const matches = generateGroupMatches(
-          currentPhase.id,
-          numberOfGroups,
-          teamsPerGroup,
-          abbreviation,
-        );
-
-        const { data: createdMatches } = await supabase
-          .from("knockout_matches")
-          .insert(matches)
-          .select();
-
-        // 🔥 GERAR SLOTS (A1, A2...)
-        if (createdMatches) {
-          const slots = createdMatches.flatMap((match, i) =>
-            generateSlots(match.id, i),
-          );
-
-          await supabase.from("match_slots").insert(slots);
-        }
+      if (settingsErr) {
+        setError(`Erro ao criar configurações: ${settingsErr.message}`);
+        setLoading(false);
+        return;
       }
 
-      // =========================
-      // KNOCKOUT
-      // =========================
-      if (type === "knockout") {
-        await supabase.from("phase_knockout_settings").insert({
-          phase_id: currentPhase.id,
+      // 2. Groups (A, B, C...)
+      const groups = Array.from({ length: numberOfGroups }).map((_, i) => ({
+        name: alphabet[i],
+        phase_id: phaseId,
+      }));
+
+      const { error: groupsErr } = await supabase.from("groups").insert(groups);
+      if (groupsErr) {
+        setError(`Erro ao criar grupos: ${groupsErr.message}`);
+        setLoading(false);
+        return;
+      }
+
+      // 3. Group slots (A1, A2, A3, A4, B1, B2, B3, B4...)
+      //    This is the source of truth for team positions in groups.
+      const groupSlots = generateGroupSlots(phaseId, numberOfGroups, teamsPerGroup);
+      const { error: gsErr } = await supabase.from("group_slots").insert(groupSlots);
+      if (gsErr) {
+        setError(`Erro ao criar slots de grupo: ${gsErr.message}`);
+        setLoading(false);
+        return;
+      }
+
+      // 4. Match records (round-robin)
+      const matches = generateGroupMatches(
+        phaseId,
+        numberOfGroups,
+        teamsPerGroup,
+        abbreviation,
+      );
+
+      const { data: createdMatches, error: matchErr } = await supabase
+        .from("knockout_matches")
+        .insert(matches)
+        .select();
+
+      if (matchErr) {
+        setError(`Erro ao criar partidas: ${matchErr.message}`);
+        setLoading(false);
+        return;
+      }
+
+      // 5. Match slots (home/away) — descriptive only, not used for group position lookup
+      if (createdMatches && createdMatches.length > 0) {
+        const matchSlots = createdMatches.flatMap((m) => generateMatchSlots(m.id));
+        const { error: msErr } = await supabase.from("match_slots").insert(matchSlots);
+        if (msErr) {
+          setError(`Erro ao criar match slots: ${msErr.message}`);
+          setLoading(false);
+          return;
+        }
+      }
+    }
+
+    // ── KNOCKOUT structure ────────────────────────────────────────────────────
+    if (type === "knockout") {
+      // 1. Settings
+      const { error: settingsErr } = await supabase
+        .from("phase_knockout_settings")
+        .insert({
+          phase_id: phaseId,
           number_of_matches: numberOfMatches,
           is_home_away: homeAway,
           auto_fill: autoFill,
         });
 
-        const matches = generateKnockoutMatches(
-          currentPhase.id,
-          numberOfMatches,
-          abbreviation,
-        );
+      if (settingsErr) {
+        setError(`Erro ao criar configurações: ${settingsErr.message}`);
+        setLoading(false);
+        return;
+      }
 
-        const { data: createdMatches } = await supabase
-          .from("knockout_matches")
-          .insert(matches)
-          .select();
+      // 2. Match records
+      const matches = generateKnockoutMatches(phaseId, numberOfMatches, abbreviation);
 
-        if (createdMatches) {
-          const slots = createdMatches.flatMap((match, i) =>
-            generateSlots(match.id, i),
-          );
+      const { data: createdMatches, error: matchErr } = await supabase
+        .from("knockout_matches")
+        .insert(matches)
+        .select();
 
-          await supabase.from("match_slots").insert(slots);
+      if (matchErr) {
+        setError(`Erro ao criar confrontos: ${matchErr.message}`);
+        setLoading(false);
+        return;
+      }
 
-          // 🔥🔥🔥 AQUI ENTRA O AUTO FILL 🔥🔥🔥
-          if (autoFill) {
-            const sources = createdMatches.flatMap((match, matchIndex) => {
-              const config = matchesConfig[matchIndex];
+      if (createdMatches && createdMatches.length > 0) {
+        // 3. Match slots (home/away)
+        const matchSlots = createdMatches.flatMap((m) => generateMatchSlots(m.id));
+        const { error: msErr } = await supabase.from("match_slots").insert(matchSlots);
+        if (msErr) {
+          setError(`Erro ao criar match slots: ${msErr.message}`);
+          setLoading(false);
+          return;
+        }
 
-              return config.slots
-                .filter((s) => s.mode === "auto")
-                .map((slot) => ({
-                  knockout_match_id: match.id,
-                  slot_order: slot.slot_order,
-                  is_home: slot.slot_order === 1, // ✅ CORREÇÃO
-                  source_type: slot.source_type,
-                  source_phase_id: slot.source_phase_id,
-                  source_group: slot.source_group,
-                  source_position: slot.source_position,
-                  source_match_code: slot.source_match_code,
-                }));
-            });
+        // 4. Auto-fill sources
+        if (autoFill) {
+          const sources = createdMatches.flatMap((match, matchIndex) => {
+            const config = matchesConfig[matchIndex];
+            return (config?.slots ?? [])
+              .filter((s) => s.mode === "auto")
+              .map((slot) => ({
+                knockout_match_id: match.id,
+                slot_order: slot.slot_order,
+                is_home: slot.slot_order === 1,
+                source_type: slot.source_type,
+                source_phase_id: slot.source_phase_id,
+                source_group: slot.source_group,
+                source_position: slot.source_position,
+                source_match_code: slot.source_match_code,
+              }));
+          });
 
-            if (sources.length > 0) {
-              await supabase.from("knockout_match_sources").insert(sources);
+          if (sources.length > 0) {
+            const { error: srcErr } = await supabase
+              .from("knockout_match_sources")
+              .insert(sources);
+            if (srcErr) {
+              setError(`Erro ao criar fontes de preenchimento: ${srcErr.message}`);
+              setLoading(false);
+              return;
             }
           }
         }
       }
     }
+
+    setLoading(false);
+    onClose();
   }
 
+  // ── Slot config helpers ────────────────────────────────────────────────────
   function renderSlot(matchIndex: number, slotIndex: number, slot: SlotConfig) {
     function updateSlot(field: keyof SlotConfig, value: unknown) {
       setMatchesConfig((prev) => {
         const updated = [...prev];
         const match = { ...updated[matchIndex] };
         const slots = [...match.slots];
-
-        slots[slotIndex] = {
-          ...slots[slotIndex],
-          [field]: value,
-        };
-
+        slots[slotIndex] = { ...slots[slotIndex], [field]: value };
         match.slots = slots;
         updated[matchIndex] = match;
-
         return updated;
       });
     }
@@ -223,21 +395,15 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
       >
         <p className="text-xs text-zinc-400">Slot {slot.slot_order}</p>
 
-        {/* MODE */}
         <select
           value={slot.mode}
-          onChange={(e) =>
-            updateSlot("mode", e.target.value as "manual" | "auto")
-          }
+          onChange={(e) => updateSlot("mode", e.target.value as "manual" | "auto")}
           className="w-full p-2 rounded bg-zinc-700"
         >
           <option value="manual">Manual</option>
           <option value="auto">Automático</option>
         </select>
 
-        {/* ========================= */}
-        {/* MANUAL */}
-        {/* ========================= */}
         {slot.mode === "manual" && (
           <input
             placeholder="Selecionar time (ID)"
@@ -247,9 +413,6 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
           />
         )}
 
-        {/* ========================= */}
-        {/* AUTO */}
-        {/* ========================= */}
         {slot.mode === "auto" && (
           <>
             <select
@@ -263,19 +426,27 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
               <option value="match_loser">Perdedor</option>
             </select>
 
-            {/* GRUPO */}
             {slot.source_type === "group_position" && (
               <>
+                <select
+                  value={slot.source_phase_id ?? ""}
+                  onChange={(e) => updateSlot("source_phase_id", e.target.value)}
+                  className="w-full p-2 rounded bg-zinc-700"
+                >
+                  <option value="">Fase de origem...</option>
+                  {allPhases.filter(p => p.type === "group").map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
                 <input
                   placeholder="Grupo (A, B...)"
                   value={slot.source_group ?? ""}
-                  onChange={(e) => updateSlot("source_group", e.target.value)}
+                  onChange={(e) => updateSlot("source_group", e.target.value.toUpperCase())}
                   className="w-full p-2 rounded bg-zinc-700"
                 />
-
                 <input
                   type="number"
-                  placeholder="Posição"
+                  placeholder="Posição (1, 2...)"
                   value={slot.source_position ?? ""}
                   onChange={(e) =>
                     updateSlot("source_position", Number(e.target.value))
@@ -285,17 +456,31 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
               </>
             )}
 
-            {/* KNOCKOUT */}
             {(slot.source_type === "match_winner" ||
               slot.source_type === "match_loser") && (
-              <input
-                placeholder="Código do confronto (REP1)"
-                value={slot.source_match_code ?? ""}
-                onChange={(e) =>
-                  updateSlot("source_match_code", e.target.value)
-                }
-                className="w-full p-2 rounded bg-zinc-700"
-              />
+              <>
+                <select
+                  value={slot.source_phase_id ?? ""}
+                  onChange={(e) => updateSlot("source_phase_id", e.target.value)}
+                  className="w-full p-2 rounded bg-zinc-700"
+                >
+                  <option value="">Fase de origem...</option>
+                  {allPhases.filter(p => p.type === "knockout" && p.id !== phase?.id).map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={slot.source_match_code ?? ""}
+                  onChange={(e) => updateSlot("source_match_code", e.target.value)}
+                  className="w-full p-2 rounded bg-zinc-700"
+                  disabled={!slot.source_phase_id}
+                >
+                  <option value="">Confronto...</option>
+                  {allKnockoutMatches.filter(m => m.phase_id === slot.source_phase_id).map(m => (
+                    <option key={m.code} value={m.code}>{m.code} - {m.name}</option>
+                  ))}
+                </select>
+              </>
             )}
           </>
         )}
@@ -305,14 +490,13 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
 
   function handleChangeMatches(value: number) {
     setNumberOfMatches(value);
-
     setMatchesConfig((prev) =>
       Array.from({ length: value }).map((_, i) => {
         return (
           prev[i] ?? {
             slots: [
-              { slot_order: 1, mode: autoFill ? "auto" : "manual" },
-              { slot_order: 2, mode: autoFill ? "auto" : "manual" },
+              { slot_order: 1 as const, mode: autoFill ? ("auto" as const) : ("manual" as const) },
+              { slot_order: 2 as const, mode: autoFill ? ("auto" as const) : ("manual" as const) },
             ],
           }
         );
@@ -322,12 +506,11 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
 
   function handleToggleAutoFill(checked: boolean) {
     setAutoFill(checked);
-
     setMatchesConfig((prev) =>
       prev.map((match) => ({
         slots: match.slots.map((slot) => ({
           ...slot,
-          mode: checked ? "auto" : "manual",
+          mode: checked ? ("auto" as const) : ("manual" as const),
         })),
       })),
     );
@@ -335,23 +518,23 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
 
   function handleChangeType(newType: PhaseType) {
     setType(newType);
-
     if (newType === "group") {
       setNumberOfGroups(2);
       setTeamsPerGroup(4);
     }
-
     if (newType === "knockout") {
       handleChangeMatches(2);
     }
   }
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <form
       id="create-phase-form"
       onSubmit={handleSubmit}
       className="grid grid-cols-1 md:grid-cols-2 gap-6"
     >
+      {/* Name */}
       <div>
         <label className="text-sm text-zinc-400">Nome da fase</label>
         <input
@@ -362,6 +545,7 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
         />
       </div>
 
+      {/* Abbreviation */}
       <div>
         <label className="text-sm text-zinc-400">Abreviação</label>
         <input
@@ -372,23 +556,60 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
         />
       </div>
 
+      {/* Type */}
       <div>
         <label className="text-sm text-zinc-400">Tipo</label>
         <select
           value={type}
           onChange={(e) => handleChangeType(e.target.value as PhaseType)}
           className="w-full mt-1 p-2 rounded bg-zinc-800"
+          disabled={isEditing}
         >
           <option value="group">Grupos</option>
           <option value="knockout">Mata-mata</option>
         </select>
+        {isEditing && (
+          <p className="text-xs text-zinc-500 mt-1">
+            O tipo não pode ser alterado após a criação. Delete e recrie a fase para mudar.
+          </p>
+        )}
       </div>
 
+      {/* Order */}
+      <div>
+        <label className="text-sm text-zinc-400">Ordem</label>
+        <input
+          type="number"
+          value={order}
+          onChange={(e) => setOrder(Number(e.target.value))}
+          className="w-full mt-1 p-2 rounded bg-zinc-800"
+        />
+      </div>
+
+      {/* Home/Away */}
+      <div className="col-span-2">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={homeAway}
+            onChange={(e) => setHomeAway(e.target.checked)}
+          />
+          Ida e volta
+        </label>
+      </div>
+
+      {/* ── Group config ────────────────────────────────────────────────────── */}
       {type === "group" && (
         <div className="col-span-2 space-y-4">
           <h3 className="text-md font-semibold">Configuração dos Grupos</h3>
 
-          {/* Número de grupos */}
+          {isEditing && (
+            <p className="text-xs text-amber-400 bg-amber-900/30 rounded p-2">
+              ⚠️ Alterar número de grupos ou times não recria partidas e slots existentes.
+              Para reestruturar, delete e recrie a fase.
+            </p>
+          )}
+
           <div>
             <label>Número de grupos</label>
             <input
@@ -400,7 +621,6 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
             />
           </div>
 
-          {/* Times por grupo */}
           <div>
             <label>Times por grupo</label>
             <input
@@ -412,7 +632,6 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
             />
           </div>
 
-          {/* Tipo de rodada */}
           <div>
             <label>Formato</label>
             <select
@@ -427,6 +646,7 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
         </div>
       )}
 
+      {/* ── Knockout config ─────────────────────────────────────────────────── */}
       {type === "knockout" && (
         <div className="col-span-2 space-y-4">
           <h3 className="text-md font-semibold">Configuração dos Confrontos</h3>
@@ -470,25 +690,26 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
         </div>
       )}
 
-      <div>
-        <label className="flex items-center gap-2 mt-6">
-          <input
-            type="checkbox"
-            checked={homeAway}
-            onChange={(e) => setHomeAway(e.target.checked)}
-          />
-          Ida e volta
-        </label>
-      </div>
+      {/* Error */}
+      {error && (
+        <div className="col-span-2 text-red-400 text-sm bg-red-900/20 rounded p-2">
+          {error}
+        </div>
+      )}
 
-      <div>
-        <label className="text-sm text-zinc-400">Ordem</label>
-        <input
-          type="number"
-          value={order}
-          onChange={(e) => setOrder(Number(e.target.value))}
-          className="w-full mt-1 p-2 rounded bg-zinc-800"
-        />
+      {/* Submit */}
+      <div className="col-span-2">
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full p-3 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50 font-semibold"
+        >
+          {loading
+            ? "Salvando..."
+            : isEditing
+              ? "Salvar Alterações"
+              : "Criar Fase"}
+        </button>
       </div>
     </form>
   );
