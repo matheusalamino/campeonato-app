@@ -38,6 +38,19 @@ export type CreatePhaseDTO = {
   is_home_away: boolean;
 };
 
+export type UpdatePhaseGroupSettings = {
+  number_of_groups: number;
+  teams_per_group: number;
+  round_type: RoundType;
+  matches_per_pair: number;
+};
+
+export type UpdatePhaseKnockoutSettings = {
+  number_of_matches: number;
+  is_home_away: boolean;
+  auto_fill: boolean;
+};
+
 export type UpdatePhaseDTO = {
   id: string;
   name?: string;
@@ -45,6 +58,10 @@ export type UpdatePhaseDTO = {
   order_number?: number;
   abbreviation?: string;
   is_home_away?: boolean;
+  /** Optional: update related group settings (does NOT recreate matches/slots) */
+  groupSettings?: UpdatePhaseGroupSettings;
+  /** Optional: update related knockout settings */
+  knockoutSettings?: UpdatePhaseKnockoutSettings;
 };
 
 export type PhaseForm = {
@@ -81,8 +98,20 @@ export type MatchSlot = {
   id: string;
   match_id: string;
   slot_order: 1 | 2;
-  label: string; // A1, B2 etc
+  /** 'home' | 'away' for match slots; group position labels live in GroupSlot */
+  label: string;
   championship_team_id: string | null;
+};
+
+/** Global group position slot — source of truth for team assignment in group phases */
+export type GroupSlotRow = {
+  id: string;
+  phase_id: string;
+  group_letter: string;       // 'A', 'B'...
+  position: number;           // 1, 2, 3, 4...
+  label: string;              // 'A1', 'B3'...
+  championship_team_id: string | null;
+  created_at: string;
 };
 
 export type KnockoutSourceType =

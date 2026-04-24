@@ -12,7 +12,7 @@ export default function SettingsPage() {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedPhase, setSelectedPhase] = useState<Phase | null>(null);
 
-  const { phases, loading, deletePhase } = usePhases(championship?.id || null);
+  const { phases, loading, deletePhase, reload } = usePhases(championship?.id || null);
 
   if (!championship) {
     return <div className="p-6 text-zinc-400">Selecione um campeonato</div>;
@@ -21,6 +21,8 @@ export default function SettingsPage() {
   function handleCloseModal() {
     setIsOpen(false);
     setSelectedPhase(null);
+    // Reload phases so any creates/edits are reflected immediately
+    reload();
   }
 
   return (
@@ -131,22 +133,14 @@ export default function SettingsPage() {
                   phase={selectedPhase}
                 />
               </div>
-              {/* FOOTER */}
-              <div className="p-4 border-t border-zinc-800 flex justify-end gap-2">
+              {/* FOOTER — only Cancel; the form has its own submit button */}
+              <div className="p-4 border-t border-zinc-800 flex justify-end">
                 <button
                   type="button"
                   onClick={handleCloseModal}
                   className="px-4 py-2 bg-zinc-700 rounded"
                 >
                   Cancelar
-                </button>
-
-                <button
-                  type="submit"
-                  form="create-phase-form"
-                  className="px-4 py-2 bg-blue-600 rounded"
-                >
-                  Salvar
                 </button>
               </div>
             </div>

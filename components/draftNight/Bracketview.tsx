@@ -129,8 +129,8 @@ function resolveSourceLabel(
     };
 
     return {
-      primary: teamName ?? `${ordinal(pos)} Grupo ${group}`,
-      secondary: teamName ? `${ordinal(pos)} Grupo ${group}` : null,
+      primary: teamName ?? `${ordinal(pos)} COLOCADO ${group}`,
+      secondary: teamName ? `${ordinal(pos)} COLOCADO ${group}` : null,
     };
   }
 
