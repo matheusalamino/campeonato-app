@@ -5,6 +5,7 @@ type DraftPot = {
   player_id: string;
   pot_number: number;
   position: string;
+  pot_order: number;
   max_managers: number;
 };
 
@@ -14,6 +15,7 @@ type Player = {
 };
 
 type Registration = {
+  id: string;
   player_id: string;
   final_overall: number | null;
   profile_photo_link: string | null;
@@ -35,7 +37,7 @@ export async function GET(req: Request) {
   // 🔥 1. Buscar potes
   const { data: potsData, error: potsError } = await supabase
     .from("draft_pots")
-    .select("player_id, pot_number, position, max_managers")
+    .select("player_id, pot_number, position, pot_order, max_managers")
     .eq("championship_id", championshipId)
     .order("pot_order", { ascending: true });
 
@@ -66,7 +68,7 @@ export async function GET(req: Request) {
   // 🔥 3. Buscar registrations (overall + foto)
   const { data: registrationsData, error: regError } = await supabase
     .from("championship_registrations")
-    .select("player_id, final_overall, profile_photo_link")
+    .select("id, player_id, final_overall, profile_photo_link")
     .eq("championship_id", championshipId)
     .in("player_id", playerIds);
 
@@ -76,11 +78,12 @@ export async function GET(req: Request) {
 
   const registrationsMap = new Map<
     string,
-    { overall: number; photo: string | null }
+    { registrationId: string; overall: number; photo: string | null }
   >();
 
   (registrationsData as Registration[]).forEach((r) => {
     registrationsMap.set(r.player_id, {
+      registrationId: r.id,
       overall: r.final_overall ?? 0,
       photo: r.profile_photo_link ?? null,
     });
@@ -92,9 +95,12 @@ export async function GET(req: Request) {
     {
       pot_number: number;
       position: string;
+      pot_order: number;
       max_managers: number;
+      is_finalized: boolean;
       players: {
         id: string;
+        registrationId: string | null;
         name: string;
         overall: number;
         photo: string | null;
@@ -103,6 +109,24 @@ export async function GET(req: Request) {
     }
   > = {};
 
+  const { data: budgetRows, error: budgetErr } = await supabase
+    .from("draft_pot_budgets")
+    .select("pot_number, pot_position, settled")
+    .eq("championship_id", championshipId);
+
+  if (budgetErr) {
+    return NextResponse.json({ error: budgetErr.message }, { status: 500 });
+  }
+
+  const budgetStats = new Map<string, { total: number; open: number }>();
+  (budgetRows ?? []).forEach((row) => {
+    const key = `${row.pot_position}-${row.pot_number}`;
+    const prev = budgetStats.get(key) ?? { total: 0, open: 0 };
+    prev.total += 1;
+    if (!row.settled) prev.open += 1;
+    budgetStats.set(key, prev);
+  });
+
   pots.forEach((item) => {
     const key = `${item.position}-${item.pot_number}`;
 
@@ -110,8 +134,10 @@ export async function GET(req: Request) {
       grouped[key] = {
         pot_number: item.pot_number,
         position: item.position,
+        pot_order: item.pot_order,
         players: [],
         max_managers: item.max_managers,
+        is_finalized: false,
         average_overall: 0,
       };
     }
@@ -122,6 +148,7 @@ export async function GET(req: Request) {
     if (player) {
       grouped[key].players.push({
         id: player.id,
+        registrationId: reg?.registrationId ?? null,
         name: player.name,
         overall: reg?.overall ?? 0,
         photo: reg?.photo ?? null,
@@ -135,6 +162,9 @@ export async function GET(req: Request) {
 
     pot.average_overall =
       pot.players.length > 0 ? Math.round(total / pot.players.length) : 0;
+
+    const stat = budgetStats.get(`${pot.position}-${pot.pot_number}`);
+    pot.is_finalized = Boolean(stat && stat.total > 0 && stat.open === 0);
   });
 
   return NextResponse.json({

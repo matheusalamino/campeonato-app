@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useDraftPots, type DraftPot } from "@/features/hooks/useDraftPots";
 import PotMenuSlide from "./PotMenuSlide";
 import PotBidsSlide from "./PotBidsSlide";
 import PotAuctionSlide from "./PotAuctionSlide";
+import { toast } from "sonner";
 
 type QualifiedManager = {
   championship_manager_id: string;
@@ -48,8 +49,9 @@ export default function JogadoresSlideshow({
   onFinished,
   onGoToMenu,
 }: Props) {
-  const { pots, loading, error } = useDraftPots(championshipId);
+  const { pots, loading, error, refetch } = useDraftPots(championshipId);
   const [screen, setScreen] = useState<Screen>({ type: "menu" });
+  const [resolvingPotKey, setResolvingPotKey] = useState<string | null>(null);
   // Track which pots are done
   const [completedPots, setCompletedPots] = useState<Set<string>>(new Set());
 
@@ -60,6 +62,53 @@ export default function JogadoresSlideshow({
   function markCompleted(pot: DraftPot) {
     setCompletedPots((prev) => new Set([...prev, potKey(pot)]));
   }
+
+  async function openPot(pot: DraftPot) {
+    const key = potKey(pot);
+    if (resolvingPotKey === key) return;
+    setResolvingPotKey(key);
+    try {
+      const url =
+        `/api/draft/pot-entry-state?championshipId=${encodeURIComponent(championshipId)}` +
+        `&potNumber=${pot.pot_number}` +
+        `&potPosition=${encodeURIComponent(pot.position)}`;
+
+      const res = await fetch(url);
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        nextScreen?: "bids" | "auction";
+        qualifiedManagers?: QualifiedManager[];
+      };
+
+      if (!res.ok) {
+        throw new Error(body.error ?? "Falha ao abrir este pote.");
+      }
+
+      if (body.nextScreen === "auction") {
+        setScreen({
+          type: "auction",
+          pot,
+          qualified: body.qualifiedManagers ?? [],
+        });
+      } else {
+        setScreen({ type: "bids", pot });
+      }
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Não foi possível abrir o pote.",
+      );
+    } finally {
+      setResolvingPotKey(null);
+    }
+  }
+
+  const completedPotsMerged = useMemo(() => {
+    const merged = new Set(completedPots);
+    pots.forEach((p) => {
+      if (p.is_finalized) merged.add(potKey(p));
+    });
+    return merged;
+  }, [completedPots, pots]);
 
   const counterLabel = (() => {
     if (screen.type === "menu") return "Jogadores";
@@ -95,8 +144,33 @@ export default function JogadoresSlideshow({
             pots={pots}
             loading={loading}
             error={error}
-            completedPots={completedPots}
-            onSelectPot={(pot) => setScreen({ type: "bids", pot })}
+            completedPots={completedPotsMerged}
+            onSelectPot={(pot) => {
+              void openPot(pot);
+            }}
+            onResetPot={async (pot) => {
+              const res = await fetch("/api/draft/reset-pot", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  championshipId,
+                  potNumber: pot.pot_number,
+                  potPosition: pot.position,
+                }),
+              });
+              const body = (await res.json().catch(() => ({}))) as {
+                error?: string;
+              };
+              if (!res.ok) {
+                throw new Error(body.error ?? "Não foi possível resetar este pote");
+              }
+              setCompletedPots((prev) => {
+                const next = new Set(prev);
+                next.delete(potKey(pot));
+                return next;
+              });
+              await refetch();
+            }}
           />
         )}
 
@@ -118,6 +192,7 @@ export default function JogadoresSlideshow({
             qualifiedManagers={screen.qualified}
             onPotFinished={() => {
               markCompleted(screen.pot);
+              void refetch();
               setScreen({ type: "menu" });
             }}
           />
@@ -162,6 +237,9 @@ export default function JogadoresSlideshow({
       </div>
 
       {screen.type === "menu" && <p className="js-hint">Selecione um pote</p>}
+      {resolvingPotKey && (
+        <p className="js-hint">Abrindo pote…</p>
+      )}
     </>
   );
 }

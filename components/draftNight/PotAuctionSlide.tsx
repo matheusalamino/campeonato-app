@@ -1,12 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import PlayerCard, { PlayerRadar } from "./PlayerCard";
 import type {
   AuctionPlayer,
   PotAuctionPlayersResponse,
 } from "@/app/api/draft/pot-auction-players/route";
 import type { DraftPot } from "@/features/hooks/useDraftPots";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 type QualifiedManager = {
   championship_manager_id: string;
@@ -167,6 +176,8 @@ export default function PotAuctionSlide({
   const [sales, setSales] = useState<
     Record<string, { managerName: string; price: number }>
   >({});
+  const [confirmFinalizeOpen, setConfirmFinalizeOpen] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
   const isMounted = useRef(true);
 
   useEffect(() => {
@@ -207,6 +218,8 @@ export default function PotAuctionSlide({
           });
 
           setSales(pre);
+          const nextUnsoldIdx = data.players.findIndex((p) => !p.already_purchased);
+          setCurrentIdx(nextUnsoldIdx >= 0 ? nextUnsoldIdx : 0);
         } catch (err: unknown) {
           if (!isMounted.current) return;
           setError(err instanceof Error ? err.message : "Erro");
@@ -228,14 +241,57 @@ export default function PotAuctionSlide({
   const isLast = currentIdx === players.length - 1;
   const currentSale = current ? sales[current.registration_id] : null;
 
-  function advance(e?: React.MouseEvent) {
-    e?.stopPropagation();
-    if (isLast) onPotFinished();
-    else setCurrentIdx((i) => i + 1);
-  }
-  function goBack(e?: React.MouseEvent) {
-    e?.stopPropagation();
-    if (currentIdx > 0) setCurrentIdx((i) => i - 1);
+  const advance = useCallback(
+    (e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      if (isLast) {
+        setConfirmFinalizeOpen(true);
+        return;
+      }
+      setCurrentIdx((i) => i + 1);
+    },
+    [isLast],
+  );
+
+  const goBack = useCallback(
+    (e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      if (currentIdx > 0) setCurrentIdx((i) => i - 1);
+    },
+    [currentIdx],
+  );
+
+  async function finalizePot() {
+    if (finalizing) return;
+    setFinalizing(true);
+    try {
+      const res = await fetch("/api/draft/finalize-pot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          championshipId,
+          potNumber: pot.pot_number,
+          potPosition: pot.position,
+        }),
+      });
+
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+      };
+
+      if (!res.ok) {
+        throw new Error(body.error ?? "Não foi possível finalizar o pote");
+      }
+
+      setConfirmFinalizeOpen(false);
+      onPotFinished();
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Falha ao finalizar pote";
+      toast.error(message);
+    } finally {
+      setFinalizing(false);
+    }
   }
 
   useEffect(() => {
@@ -245,7 +301,7 @@ export default function PotAuctionSlide({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [currentIdx, players.length]);
+  }, [advance, goBack]);
 
   return (
     <>
@@ -503,6 +559,50 @@ export default function PotAuctionSlide({
           </button>
         </div>
       )}
+      {!loading && players.length > 0 && isLast && (
+        <button
+          type="button"
+          className="fixed bottom-4 right-4 rounded-xl border border-amber-500/55 bg-black/60 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-amber-300 backdrop-blur hover:bg-amber-900/30"
+          onClick={(e) => {
+            e.stopPropagation();
+            setConfirmFinalizeOpen(true);
+          }}
+        >
+          Finalizar Leilão do Pote
+        </button>
+      )}
+      <Dialog open={confirmFinalizeOpen} onOpenChange={setConfirmFinalizeOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100">
+          <DialogHeader>
+            <DialogTitle>Finalizar leilão deste pote?</DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Após confirmar, o pote será encerrado e não poderá ser reaberto para
+              habilitação ou leilão.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-zinc-300">
+            Confirma a finalização do <span className="font-medium text-amber-200">Pote {pot.pot_letter} ({pot.position})</span>?
+          </p>
+          <DialogFooter className="gap-2">
+            <button
+              type="button"
+              className="rounded-lg border border-zinc-600 px-3 py-2 text-sm"
+              onClick={() => setConfirmFinalizeOpen(false)}
+              disabled={finalizing}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-medium hover:bg-amber-600 disabled:opacity-40"
+              onClick={() => void finalizePot()}
+              disabled={finalizing}
+            >
+              {finalizing ? "Finalizando..." : "Sim, finalizar pote"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

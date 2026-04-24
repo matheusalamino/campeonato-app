@@ -70,11 +70,13 @@ export function usePotBidsStatus({
     isMounted.current = true;
 
     if (!enabled) {
-      setState({ data: null, loading: false, error: null });
+      // Stop polling but preserve the last known snapshot so consumers
+      // can keep rendering the final ranking after `revealed = true`.
+      setState((p) => ({ ...p, loading: false, error: null }));
       return;
     }
 
-    setState((p) => ({ ...p, loading: true, error: null }));
+    setState((p) => ({ ...p, loading: p.data === null, error: null }));
     void fetch_();
 
     intervalRef.current = setInterval(() => {

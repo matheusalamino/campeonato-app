@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminOrAuctionFiscal } from "@/lib/draft-auth";
 
@@ -38,110 +37,136 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    if (
-      !ch.draft_auction_open ||
-      ch.draft_auction_pot_number == null ||
-      !ch.draft_auction_pot_position
-    ) {
-      return NextResponse.json({
-        championshipId: ch.id,
-        championshipName: ch.name,
-        auctionOpen: false,
-        potNumber: null,
-        potPosition: null,
-        participants: [] as unknown[],
-      });
-    }
+    const auctionOpen =
+      Boolean(ch.draft_auction_open) &&
+      ch.draft_auction_pot_number != null &&
+      Boolean(ch.draft_auction_pot_position?.trim());
 
-    const potNumber = ch.draft_auction_pot_number;
-    const potPosition = ch.draft_auction_pot_position.trim();
+    const potNumber = auctionOpen ? ch.draft_auction_pot_number : null;
+    const potPosition = auctionOpen ? ch.draft_auction_pot_position.trim() : null;
 
-    const { data: budgets, error: bErr } = await supabase
-      .from("draft_pot_budgets")
+    const { data: allManagers, error: allMgrErr } = await supabase
+      .from("championship_managers")
       .select(
         `
-        id,
-        championship_manager_id,
-        remaining_budget,
-        initial_budget,
-        settled,
-        championship_managers (
           id,
           current_balance,
-          manager_id,
-          team_id,
-          managers ( name ),
-          teams ( name )
-        )
-      `,
+          managers ( name, photo_url ),
+          teams ( name, logo_url )
+        `,
       )
-      .eq("championship_id", championshipId)
-      .eq("pot_number", potNumber)
-      .eq("pot_position", potPosition)
-      .eq("settled", false);
+      .eq("championship_id", championshipId);
+    if (allMgrErr) throw allMgrErr;
 
-    if (bErr) throw bErr;
+    let budgets:
+      | {
+          id: string;
+          championship_manager_id: string;
+          remaining_budget: number;
+          initial_budget: number;
+        }[]
+      | null = null;
 
-    const cmIds =
-      budgets?.map((b) => b.championship_manager_id).filter(Boolean) ?? [];
+    if (auctionOpen && potNumber != null && potPosition) {
+      const { data: bRows, error: bErr } = await supabase
+        .from("draft_pot_budgets")
+        .select("id, championship_manager_id, remaining_budget, initial_budget")
+        .eq("championship_id", championshipId)
+        .eq("pot_number", potNumber)
+        .eq("pot_position", potPosition)
+        .eq("settled", false);
+      if (bErr) throw bErr;
+      budgets = bRows;
+    } else {
+      budgets = [];
+    }
 
-    const maxOccByCm = new Map<string, number>();
+    const budgetByCm = new Map<string, { id: string; remaining: number; initial: number }>();
+    (budgets ?? []).forEach((b) => {
+      budgetByCm.set(b.championship_manager_id, {
+        id: b.id,
+        remaining: b.remaining_budget,
+        initial: b.initial_budget,
+      });
+    });
+
+    const cmIds = (allManagers ?? []).map((m) => m.id as string);
 
     if (cmIds.length > 0) {
       const { data: fines, error: fErr } = await supabase
         .from("draft_fines")
-        .select("championship_manager_id, occurrence_number")
+        .select("championship_manager_id, occurrence_number, type, amount")
         .eq("championship_id", championshipId)
-        .eq("type", "over_budget")
         .in("championship_manager_id", cmIds);
 
       if (fErr) throw fErr;
 
+      const fineKey = (cmId: string, type: string) => `${cmId}:${type}`;
+      const maxOccByCmType = new Map<string, number>();
+      const totalFineByCm = new Map<string, number>();
+
       for (const row of fines ?? []) {
         const cmId = row.championship_manager_id as string;
         const occ = row.occurrence_number ?? 0;
-        maxOccByCm.set(cmId, Math.max(maxOccByCm.get(cmId) ?? 0, occ));
+        const type = (row.type as string) ?? "over_budget";
+        const key = fineKey(cmId, type);
+        maxOccByCmType.set(key, Math.max(maxOccByCmType.get(key) ?? 0, occ));
+        totalFineByCm.set(
+          cmId,
+          (totalFineByCm.get(cmId) ?? 0) + (row.amount ?? 0),
+        );
       }
+
+      const nextFine = (cmId: string, type: string) =>
+        (maxOccByCmType.get(fineKey(cmId, type)) ?? 0) + 1;
+
+      const participants = (allManagers ?? []).map((cmRow) => {
+        const cmId = cmRow.id as string;
+        const manager = firstJoined<{ name?: string; photo_url?: string | null }>(
+          cmRow.managers,
+        );
+        const team = firstJoined<{ name?: string; logo_url?: string | null }>(
+          cmRow.teams,
+        );
+        const budget = budgetByCm.get(cmId);
+        return {
+          draftPotBudgetId: budget?.id ?? null,
+          championshipManagerId: cmId,
+          managerName: manager?.name?.trim() || "Cartola",
+          managerPhotoUrl: manager?.photo_url ?? null,
+          teamName: team?.name?.trim() ?? null,
+          teamLogoUrl: team?.logo_url ?? null,
+          displayName:
+            team?.name?.trim()
+              ? `${manager?.name?.trim() || "Cartola"} (${team.name.trim()})`
+              : (manager?.name?.trim() || "Cartola"),
+          currentBalance: cmRow.current_balance ?? 0,
+          totalFineAmount: totalFineByCm.get(cmId) ?? 0,
+          remainingPotBudget: budget?.remaining ?? 0,
+          initialPotBudget: budget?.initial ?? 0,
+          nextProgressiveFineByType: {
+            over_budget: nextFine(cmId, "over_budget") * 2000,
+          },
+        };
+      });
+
+      return NextResponse.json({
+        championshipId: ch.id,
+        championshipName: ch.name,
+        auctionOpen,
+        potNumber,
+        potPosition,
+        participants,
+      });
     }
-
-    const participants = (budgets ?? []).map((row) => {
-      const cm = firstJoined<{
-        id: string;
-        current_balance: number;
-        managers?: unknown;
-        teams?: unknown;
-      }>(row.championship_managers);
-
-      const team = firstJoined<{ name: string }>(cm?.teams);
-      const manager = firstJoined<{ name: string }>(cm?.managers);
-
-      const displayName =
-        team?.name?.trim() ||
-        manager?.name?.trim() ||
-        "Cartola";
-
-      const maxOcc = cm ? (maxOccByCm.get(cm.id) ?? 0) : 0;
-      const nextOcc = maxOcc + 1;
-      const nextProgressiveFine = nextOcc * 2000;
-
-      return {
-        draftPotBudgetId: row.id,
-        championshipManagerId: row.championship_manager_id,
-        displayName,
-        currentBalance: cm?.current_balance ?? 0,
-        remainingPotBudget: row.remaining_budget,
-        initialPotBudget: row.initial_budget,
-        nextProgressiveOverBudgetFine: nextProgressiveFine,
-      };
-    });
 
     return NextResponse.json({
       championshipId: ch.id,
       championshipName: ch.name,
-      auctionOpen: true,
+      auctionOpen,
       potNumber,
       potPosition,
-      participants,
+      participants: [] as unknown[],
     });
   } catch (err) {
     console.error("fiscal pot-participants error:", err);

@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import {
   ChampionshipManagerRelation,
-  ChampionshipManagerWithManager,
   ManagerListItem,
 } from "@/types/manager";
 
@@ -17,13 +17,11 @@ type Championship = {
 export default function ManagerModal({
   open,
   onClose,
-  championshipId,
   onSuccess,
   initialData,
 }: {
   open: boolean;
   onClose: () => void;
-  championshipId: string;
   onSuccess: () => void;
   initialData?: ManagerListItem | null;
 }) {
@@ -48,6 +46,20 @@ export default function ManagerModal({
   const [cpf, setCpf] = useState(initialValues.cpf);
   const [phrase, setPhrase] = useState(initialValues.phrase);
   const [file, setFile] = useState<File | null>(null);
+
+  const photoPreviewSrc = useMemo(
+    () => (file ? URL.createObjectURL(file) : initialValues.photo_url ?? ""),
+    [file, initialValues.photo_url],
+  );
+
+  useEffect(() => {
+    if (!file) return;
+    return () => {
+      if (photoPreviewSrc.startsWith("blob:")) {
+        URL.revokeObjectURL(photoPreviewSrc);
+      }
+    };
+  }, [file, photoPreviewSrc]);
 
   // =============================
   // 🏆 CAMPEONATOS
@@ -227,10 +239,12 @@ export default function ManagerModal({
         {/* FOTO */}
         <div className="flex items-center gap-4">
           {(file || initialValues.photo_url) && (
-            <img
-              src={
-                file ? URL.createObjectURL(file) : initialValues.photo_url || ""
-              }
+            <Image
+              src={photoPreviewSrc}
+              alt="Prévia da foto"
+              width={64}
+              height={64}
+              unoptimized
               className="w-16 h-16 rounded-full object-cover"
             />
           )}

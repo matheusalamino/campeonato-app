@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { requireAdminOrAuctionFiscal } from "@/lib/draft-auth";
 
@@ -49,10 +48,18 @@ export async function POST(req: Request) {
     const potNumber = ch.draft_auction_pot_number;
     const potPosition = ch.draft_auction_pot_position.trim();
     const potLabel = `Pote ${potNumber} (${potPosition})`;
+    const isGoalkeeperPot = potPosition.toUpperCase() === "GOL";
+    const fineType = isGoalkeeperPot ? "no_bid_goalkeeper" : "no_bid_player";
+    const txType = isGoalkeeperPot
+      ? "FINE_NO_BID_GOALKEEPER"
+      : "FINE_NO_BID_PLAYER";
+    const fineLabel = isGoalkeeperPot
+      ? "Sem lance no goleiro"
+      : "Sem lance no jogador";
 
     const { data: budgets, error: bErr } = await supabase
       .from("draft_pot_budgets")
-      .select("championship_manager_id")
+      .select("id, championship_manager_id, remaining_budget")
       .eq("championship_id", championshipId)
       .eq("pot_number", potNumber)
       .eq("pot_position", potPosition)
@@ -67,37 +74,29 @@ export async function POST(req: Request) {
       );
     }
 
-    const cmIds = [...new Set(budgets.map((b) => b.championship_manager_id))];
-
-    const { data: managers, error: mErr } = await supabase
-      .from("championship_managers")
-      .select("id, current_balance")
-      .in("id", cmIds);
-
-    if (mErr) throw mErr;
-
     const applied: { championshipManagerId: string; amount: number }[] = [];
 
-    for (const cm of managers ?? []) {
-      const balance = cm.current_balance;
-      if (balance <= 0) continue;
-
-      const amount = Math.min(FIXED_FINE, balance);
+    for (const budget of budgets ?? []) {
+      const amount = Math.min(FIXED_FINE, Math.max(0, budget.remaining_budget));
       if (amount <= 0) continue;
 
-      const newBalance = balance - amount;
+      const newRemaining = Math.max(0, budget.remaining_budget - amount);
 
-      const { error: fineErr } = await supabase.from("draft_fines").insert({
-        championship_id: championshipId,
-        championship_manager_id: cm.id,
-        type: "manual",
-        amount,
-        pot_number: potNumber,
-        pot_position: potPosition,
-        description: `Multa geral do fiscal — ${potLabel} (CC$ 2.000 fixa)`,
-        is_automatic: false,
-        applied_by: auth.user.id,
-      });
+      const { data: fineRow, error: fineErr } = await supabase
+        .from("draft_fines")
+        .insert({
+          championship_id: championshipId,
+          championship_manager_id: budget.championship_manager_id,
+          type: fineType,
+          amount,
+          pot_number: potNumber,
+          pot_position: potPosition,
+          description: `Multa Geral — ${fineLabel} — ${potLabel} (CC$${FIXED_FINE.toLocaleString("pt-BR")} fixa)`,
+          is_automatic: false,
+          applied_by: auth.user.id,
+        })
+        .select("id")
+        .single();
 
       if (fineErr) throw fineErr;
 
@@ -105,22 +104,25 @@ export async function POST(req: Request) {
         .from("draft_balance_transactions")
         .insert({
           championship_id: championshipId,
-          championship_manager_id: cm.id,
-          type: "FINE_MANUAL",
+          championship_manager_id: budget.championship_manager_id,
+          type: txType,
           amount: -amount,
-          description: `Multa geral — ${potLabel}`,
+          reference_id: fineRow.id,
+          pot_number: potNumber,
+          pot_position: potPosition,
+          description: `Multa Geral — ${fineLabel} — ${potLabel}`,
         });
 
       if (txErr) throw txErr;
 
       const { error: upErr } = await supabase
-        .from("championship_managers")
-        .update({ current_balance: newBalance })
-        .eq("id", cm.id);
+        .from("draft_pot_budgets")
+        .update({ remaining_budget: newRemaining })
+        .eq("id", budget.id);
 
       if (upErr) throw upErr;
 
-      applied.push({ championshipManagerId: cm.id, amount });
+      applied.push({ championshipManagerId: budget.championship_manager_id, amount });
     }
 
     return NextResponse.json({ success: true, appliedCount: applied.length, applied });

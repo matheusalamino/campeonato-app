@@ -7,6 +7,7 @@ import TeamsSlideshow from "@/components/draftNight/TeamsSlideShow";
 import ChaveamentoSlideshow from "@/components/draftNight/Chaveamentoslideshow";
 import JogadoresSlideshow from "@/components/draftNight/JogadoresSlideshow";
 import { useSearchParams } from "next/navigation";
+import Image from "next/image";
 
 type Step =
   | "intro"
@@ -377,10 +378,12 @@ export default function DraftPresentation() {
 
         {/* Trophy */}
         {step !== "intro" && !isSlideshowStep && (
-          <img
+          <Image
             src="/images/taca.png"
             alt="Taça"
-            className="absolute animate-float"
+            width={1024}
+            height={1536}
+            className="absolute animate-float h-auto"
             style={{
               bottom: 16,
               right: 24,
@@ -413,10 +416,12 @@ export default function DraftPresentation() {
         >
           {step === "intro" && (
             <div className="flex flex-col items-center gap-6 animate-fadeInScale">
-              <img
+              <Image
                 src="/images/taca.png"
                 alt="Taça"
-                className="animate-float"
+                width={1024}
+                height={1536}
+                className="animate-float h-auto"
                 style={{
                   width: "clamp(180px,28vw,420px)",
                   filter:

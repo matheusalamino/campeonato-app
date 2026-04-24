@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useEffectEvent, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export type DraftPot = {
   pot_number: number;
@@ -9,6 +9,7 @@ export type DraftPot = {
   max_managers: number;
   pot_letter: string; // derived: A, B, C… by pot_order rank
   player_count: number;
+  is_finalized: boolean;
 };
 
 // Shape returned by /api/draft/get-pots
@@ -17,6 +18,7 @@ type ApiPotGroup = {
   position: string;
   pot_order: number;
   max_managers: number;
+  is_finalized?: boolean;
   players?: unknown[];
   average_overall?: number;
 };
@@ -31,16 +33,10 @@ export function useDraftPots(championshipId: string) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Eventos de efeito: encapsulam updates de estado
-  const startLoading = useEffectEvent(() => {
+  const refetch = useCallback(() => {
+    if (!championshipId) return;
     setLoading(true);
     setError(null);
-  });
-
-  useEffect(() => {
-    if (!championshipId) return;
-    startLoading();
-
     fetch(
       `/api/draft/get-pots?championshipId=${encodeURIComponent(championshipId)}`,
     )
@@ -67,6 +63,7 @@ export function useDraftPots(championshipId: string) {
           max_managers: p.max_managers ?? 0,
           pot_letter: String.fromCharCode(65 + i),
           player_count: Array.isArray(p.players) ? p.players.length : 0,
+          is_finalized: Boolean(p.is_finalized),
         }));
 
         setPots(mapped);
@@ -78,5 +75,12 @@ export function useDraftPots(championshipId: string) {
       });
   }, [championshipId]);
 
-  return { pots, loading, error };
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      refetch();
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [refetch]);
+
+  return { pots, loading, error, refetch };
 }

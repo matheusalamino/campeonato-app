@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { requireAdminOrAuctionFiscal } from "@/lib/draft-auth";
 
@@ -17,6 +16,7 @@ export async function POST(req: Request) {
     };
 
     const { championshipId, championshipManagerId } = body;
+    const fineType = "over_budget" as const;
 
     if (!championshipId || !championshipManagerId) {
       return NextResponse.json(
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
       .select("occurrence_number")
       .eq("championship_id", championshipId)
       .eq("championship_manager_id", championshipManagerId)
-      .eq("type", "over_budget");
+      .eq("type", fineType);
 
     if (pfErr) throw pfErr;
 
@@ -91,60 +91,116 @@ export async function POST(req: Request) {
     const nextOcc = maxOcc + 1;
     const amount = nextOcc * STEP;
 
-    const { data: cm, error: cmErr } = await supabase
-      .from("championship_managers")
-      .select("current_balance")
-      .eq("id", championshipManagerId)
-      .single();
+    const { data: budgetRow, error: brErr } = await supabase
+      .from("draft_pot_budgets")
+      .select("id, remaining_budget")
+      .eq("championship_id", championshipId)
+      .eq("championship_manager_id", championshipManagerId)
+      .eq("pot_number", potNumber)
+      .eq("pot_position", potPosition)
+      .eq("settled", false)
+      .maybeSingle();
 
-    if (cmErr || !cm) {
+    if (brErr) throw brErr;
+    if (!budgetRow) {
+      return NextResponse.json(
+        { error: "Cartola sem orçamento ativo neste pote" },
+        { status: 400 },
+      );
+    }
+
+    const { data: cmRow, error: cmErr } = await supabase
+      .from("championship_managers")
+      .select("id, current_balance")
+      .eq("id", championshipManagerId)
+      .eq("championship_id", championshipId)
+      .single();
+    if (cmErr || !cmRow) {
       return NextResponse.json(
         { error: "Cartola não encontrada" },
         { status: 404 },
       );
     }
 
-    const newBalance = cm.current_balance - amount;
+    const potAvailable = Math.max(0, budgetRow.remaining_budget);
+    const generalAvailable = Math.max(0, cmRow.current_balance);
+    const totalAvailable = potAvailable + generalAvailable;
 
-    const { error: fineErr } = await supabase.from("draft_fines").insert({
-      championship_id: championshipId,
-      championship_manager_id: championshipManagerId,
-      type: "over_budget",
-      amount,
-      pot_number: potNumber,
-      pot_position: potPosition,
-      description: `Multa por lance acima do saldo (${nextOcc}ª ocorrência)`,
-      is_automatic: false,
-      occurrence_number: nextOcc,
-      applied_by: auth.user.id,
-    });
+    const appliedAmount = Math.min(amount, totalAvailable);
+    if (appliedAmount <= 0) {
+      return NextResponse.json(
+        { error: "Saldo insuficiente para aplicar multa." },
+        { status: 400 },
+      );
+    }
+    const debitFromPot = Math.min(appliedAmount, potAvailable);
+    const debitFromGeneral = Math.max(0, appliedAmount - debitFromPot);
+
+    const fineLabel = "Lance acima do saldo";
+
+    const { data: fineRow, error: fineErr } = await supabase
+      .from("draft_fines")
+      .insert({
+        championship_id: championshipId,
+        championship_manager_id: championshipManagerId,
+        type: fineType,
+        amount: appliedAmount,
+        pot_number: potNumber,
+        pot_position: potPosition,
+        description: `Multa Progressiva — ${fineLabel} (${nextOcc}ª ocorrência)`,
+        is_automatic: false,
+        occurrence_number: nextOcc,
+        applied_by: auth.user.id,
+      })
+      .select("id")
+      .single();
 
     if (fineErr) throw fineErr;
+
+    const txType = "FINE_OVER_BUDGET";
 
     const { error: txErr } = await supabase
       .from("draft_balance_transactions")
       .insert({
         championship_id: championshipId,
         championship_manager_id: championshipManagerId,
-        type: "FINE_OVER_BUDGET",
-        amount: -amount,
-        description: `Multa progressiva (${nextOcc}× CC$ ${STEP.toLocaleString("pt-BR")})`,
+        type: txType,
+        amount: -appliedAmount,
+        reference_id: fineRow.id,
+        pot_number: potNumber,
+        pot_position: potPosition,
+        description: `Multa Progressiva (${nextOcc}× CC$ ${STEP.toLocaleString("pt-BR")}) — ${fineLabel} [Pote: CC$ ${debitFromPot.toLocaleString("pt-BR")} | Geral: CC$ ${debitFromGeneral.toLocaleString("pt-BR")}]`,
       });
 
     if (txErr) throw txErr;
 
-    const { error: upErr } = await supabase
-      .from("championship_managers")
-      .update({ current_balance: newBalance })
-      .eq("id", championshipManagerId);
+    if (debitFromPot > 0) {
+      const { error: upPotErr } = await supabase
+        .from("draft_pot_budgets")
+        .update({
+          remaining_budget: Math.max(0, budgetRow.remaining_budget - debitFromPot),
+        })
+        .eq("id", budgetRow.id);
+      if (upPotErr) throw upPotErr;
+    }
 
-    if (upErr) throw upErr;
+    if (debitFromGeneral > 0) {
+      const { error: upGeneralErr } = await supabase
+        .from("championship_managers")
+        .update({
+          current_balance: Math.max(0, cmRow.current_balance - debitFromGeneral),
+        })
+        .eq("id", cmRow.id);
+      if (upGeneralErr) throw upGeneralErr;
+    }
 
     return NextResponse.json({
       success: true,
+      fineType,
       occurrenceNumber: nextOcc,
-      amount,
-      newBalance,
+      amount: appliedAmount,
+      debitedFromPot: debitFromPot,
+      debitedFromGeneral: debitFromGeneral,
     });
   } catch (err) {
     console.error("apply-over-budget-fine error:", err);

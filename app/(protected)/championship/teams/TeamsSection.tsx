@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useLoading } from "@/components/ui/loading-provider";
@@ -128,9 +129,11 @@ export default function TeamsSection({
           >
             <div className="flex items-center gap-3">
               {team.logo_url ? (
-                <img
+                <Image
                   src={team.logo_url}
                   alt={team.name}
+                  width={40}
+                  height={40}
                   className="w-10 h-10 object-cover rounded-full border border-zinc-600"
                 />
               ) : (

@@ -14,7 +14,18 @@ const supabase = createClient();
 
 type Transaction = {
   id: string;
+  reference_id: string | null;
   type: string;
+  amount: number;
+  description: string | null;
+  created_at: string;
+  pot_number: number | null;
+  pot_position: string | null;
+};
+
+type FineRow = {
+  id: string;
+  type: "no_bid_goalkeeper" | "no_bid_player" | "remaining_budget" | "over_budget" | "manual";
   amount: number;
   description: string | null;
   created_at: string;
@@ -59,6 +70,7 @@ function txsEqual(a: Transaction[], b: Transaction[]): boolean {
     const y = b[i];
     if (
       x.id !== y.id ||
+      x.reference_id !== y.reference_id ||
       x.type !== y.type ||
       x.amount !== y.amount ||
       (x.description ?? "") !== (y.description ?? "") ||
@@ -103,13 +115,19 @@ export default function BalancePage() {
       if (isInitial) setLoading(true);
 
       try {
-        const [{ data: txData }, { data: ch }] = await Promise.all([
+        const [{ data: txData }, { data: fineData }, { data: ch }] = await Promise.all([
           supabase
             .from("draft_balance_transactions")
             .select(
-              "id, type, amount, description, created_at, pot_number, pot_position",
+              "id, reference_id, type, amount, description, created_at, pot_number, pot_position",
             )
             .eq("championship_manager_id", ctx.championshipManagerId)
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("draft_fines")
+            .select("id, type, amount, description, created_at, pot_number, pot_position")
+            .eq("championship_manager_id", ctx.championshipManagerId)
+            .in("type", ["remaining_budget", "no_bid_player", "no_bid_goalkeeper"])
             .order("created_at", { ascending: false }),
           supabase
             .from("championships")
@@ -122,7 +140,36 @@ export default function BalancePage() {
 
         if (cancelled) return;
 
-        const nextTx = (txData ?? []) as Transaction[];
+        const baseTx = (txData ?? []) as Transaction[];
+        const fineIdsInTx = new Set(
+          baseTx.map((tx) => tx.reference_id).filter((id): id is string => Boolean(id)),
+        );
+
+        const syntheticFineTx = ((fineData ?? []) as FineRow[])
+          .filter((fine) => !fineIdsInTx.has(fine.id))
+          .map((fine) => {
+            const txType =
+              fine.type === "remaining_budget"
+                ? "FINE_REMAINING_BUDGET"
+                : fine.type === "no_bid_player"
+                  ? "FINE_NO_BID_PLAYER"
+                  : "FINE_NO_BID_GOALKEEPER";
+            return {
+              id: `fine:${fine.id}`,
+              reference_id: fine.id,
+              type: txType,
+              amount: -Math.abs(fine.amount),
+              description: fine.description,
+              created_at: fine.created_at,
+              pot_number: fine.pot_number,
+              pot_position: fine.pot_position,
+            } satisfies Transaction;
+          });
+
+        const nextTx = [...baseTx, ...syntheticFineTx].sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        );
         const nextAuction: AuctionState = {
           open: Boolean(ch?.draft_auction_open),
           potNumber: ch?.draft_auction_pot_number ?? null,

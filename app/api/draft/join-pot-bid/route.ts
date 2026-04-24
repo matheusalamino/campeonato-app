@@ -141,7 +141,7 @@ export async function POST(req: Request) {
         amount: -bidAmount,
         pot_number: potNumber,
         pot_position: potPosition,
-        description: `Habilitação ${potLabel}: ${bidAmount.toLocaleString("pt-BR")}`,
+        description: `Habilitação ${potLabel}: CC$${bidAmount.toLocaleString("pt-BR")}`,
       });
 
     if (txError) throw txError;

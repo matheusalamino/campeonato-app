@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
@@ -9,10 +10,8 @@ import ManagerModal from "./ManagerModal";
 import { ManagerListItem } from "@/types/manager";
 
 export default function ManagersSection({
-  championshipId,
   managers,
 }: {
-  championshipId: string;
   managers: ManagerListItem[];
 }) {
   const supabase = createClient();
@@ -73,8 +72,12 @@ export default function ManagersSection({
 
             {/* FOTO */}
             {m.manager.photo_url && (
-              <img
+              <Image
                 src={m.manager.photo_url}
+                alt={m.manager.name}
+                width={64}
+                height={64}
+                unoptimized
                 className="w-16 h-16 rounded-full object-cover"
               />
             )}
@@ -124,7 +127,6 @@ export default function ManagersSection({
           setOpenModal(false);
           setSelectedManager(null);
         }}
-        championshipId={championshipId}
         initialData={selectedManager}
         onSuccess={() => router.refresh()}
       />

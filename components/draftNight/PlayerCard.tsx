@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   Radar,
   RadarChart,
@@ -295,10 +296,13 @@ export default function PlayerCard(props: PlayerCardProps) {
 
         <div className="pc-photo-wrap">
           {player.photo_url ? (
-            <img
+            <Image
               src={player.photo_url}
               alt={player.name}
+              fill
+              unoptimized
               className="pc-photo"
+              sizes="(max-width: 768px) 30vw, 400px"
             />
           ) : (
             <div className="pc-photo-placeholder">
