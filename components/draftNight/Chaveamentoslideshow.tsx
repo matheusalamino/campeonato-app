@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useChaveamento,
   assignTeamToSlot,
@@ -156,10 +156,14 @@ function LotteryGroupsView({
   groupPhases,
   teams,
   championshipId,
+  groupState,
+  onSlotAssigned,
 }: {
   groupPhases: PhaseWithGroups[];
   teams: Team[];
   championshipId: string;
+  groupState: GroupState;
+  onSlotAssigned: (phaseId: string, label: string, team: Team) => void;
 }) {
   // All slots across all group phases, shuffled once
   const shuffledSlots: SlotEntry[] = useMemo(() => {
@@ -181,15 +185,6 @@ function LotteryGroupsView({
   const [revealed, setReveal] = useState<boolean[]>(() =>
     new Array(totalSlots).fill(false),
   );
-
-  // Groups state per phase (for live update after modal save)
-  const [groupState, setGroupState] = useState<GroupState>(() => {
-    const init: GroupState = {};
-    groupPhases.forEach((p) => {
-      init[p.id] = p.groups;
-    });
-    return init;
-  });
 
   // Modal
   const [modalSlot, setModalSlot] = useState<{
@@ -220,25 +215,6 @@ function LotteryGroupsView({
   function openModal(slot: GroupSlot, phaseId: string, e: React.MouseEvent) {
     e.stopPropagation();
     setModalSlot({ slot, phaseId });
-  }
-
-  function handleSaved(label: string, team: Team, phaseId: string) {
-    setGroupState((prev) => ({
-      ...prev,
-      [phaseId]: (prev[phaseId] ?? []).map((g) => ({
-        ...g,
-        slots: g.slots.map((s) =>
-          s.slotLabel === label
-            ? {
-                ...s,
-                teamId: team.id,
-                teamName: team.name,
-                teamLogoUrl: team.logo_url,
-              }
-            : s,
-        ),
-      })),
-    }));
   }
 
   // How many columns for the lottery boxes — always fills evenly
@@ -388,7 +364,7 @@ function LotteryGroupsView({
           phaseId={modalSlot.phaseId}
           onClose={() => setModalSlot(null)}
           onSaved={(label, team) => {
-            handleSaved(label, team, modalSlot.phaseId);
+            onSlotAssigned(modalSlot.phaseId, label, team);
             setModalSlot(null);
           }}
         />
@@ -411,7 +387,58 @@ export default function ChaveamentoSlideshow({
 }: Props) {
   const { data, loading, error, reload } = useChaveamento(championshipId);
 
-  const groupPhases = data.phases.filter((p) => p.type === "group");
+  // Live, per-phase group state. Only stores phases the user has edited
+  // locally; everything else falls back to `data.phases` from the hook
+  // (see `mergedPhases` below and `LotteryGroupsView`). Deriving at render
+  // instead of seeding via effect avoids cascading renders.
+  const [groupState, setGroupState] = useState<GroupState>({});
+
+  const handleSlotAssigned = useCallback(
+    (phaseId: string, label: string, team: Team) => {
+      setGroupState((prev) => {
+        // Seed from the hook's phase data the first time we touch a phase,
+        // otherwise an empty `[]` would overwrite the real groups in
+        // `mergedPhases` and blank out the UI.
+        const seed =
+          data.phases.find((p) => p.id === phaseId)?.groups ?? [];
+        const source = prev[phaseId] ?? seed;
+        return {
+          ...prev,
+          [phaseId]: source.map((g) => ({
+            ...g,
+            slots: g.slots.map((s) =>
+              s.slotLabel === label
+                ? {
+                    ...s,
+                    teamId: team.id,
+                    teamName: team.name,
+                    teamLogoUrl: team.logo_url,
+                  }
+                : s,
+            ),
+          })),
+        };
+      });
+    },
+    [data.phases],
+  );
+
+  // Phases with groups overlayed by the latest groupState so that both the
+  // lottery view and the bracket view render the same, up-to-date data.
+  const mergedPhases: PhaseWithGroups[] = useMemo(
+    () =>
+      data.phases.map((phase) => {
+        if (phase.type !== "group") return phase;
+        const local = groupState[phase.id];
+        // Only overlay when we have a non-empty local copy — otherwise the
+        // hook's groups are still the source of truth.
+        if (!local || local.length === 0) return phase;
+        return { ...phase, groups: local };
+      }),
+    [data.phases, groupState],
+  );
+
+  const groupPhases = mergedPhases.filter((p) => p.type === "group");
 
   // 2 slides: "grupos" (lottery+groups) and "bracket"
   type SlideId = "grupos" | "bracket";
@@ -686,11 +713,13 @@ export default function ChaveamentoSlideshow({
             groupPhases={groupPhases}
             teams={data.teams}
             championshipId={championshipId}
+            groupState={groupState}
+            onSlotAssigned={handleSlotAssigned}
           />
         )}
 
         {!loading && !error && current === "bracket" && (
-          <BracketView phases={data.phases} />
+          <BracketView phases={mergedPhases} />
         )}
       </div>
 

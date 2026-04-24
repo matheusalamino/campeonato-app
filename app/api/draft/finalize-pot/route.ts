@@ -150,29 +150,6 @@ export async function POST(req: Request) {
       settledCount += 1;
     }
 
-    const { data: chState } = await supabase
-      .from("championships")
-      .select(
-        "draft_auction_open, draft_auction_pot_number, draft_auction_pot_position",
-      )
-      .eq("id", championshipId)
-      .single();
-
-    const shouldCloseAuction =
-      chState?.draft_auction_open &&
-      chState.draft_auction_pot_number === potNumber &&
-      chState.draft_auction_pot_position?.trim() === normalizedPosition;
-
-    if (shouldCloseAuction) {
-      const { error: rpcErr } = await supabase.rpc("set_draft_auction_state", {
-        p_championship_id: championshipId,
-        p_open: false,
-        p_pot_number: null,
-        p_pot_position: null,
-      });
-      if (rpcErr) throw rpcErr;
-    }
-
     const { data: potPlayers, error: potPlayersErr } = await supabase
       .from("draft_pots")
       .select("player_id")
@@ -248,7 +225,7 @@ export async function POST(req: Request) {
           nextPotOrder = (maxPotRow?.pot_order ?? 0) + 1;
         }
 
-        const { error: moveErr } = await supabase
+        const { data: movedRows, error: moveErr } = await supabase
           .from("draft_pots")
           .update({
             pot_number: nextPotNumber,
@@ -259,13 +236,49 @@ export async function POST(req: Request) {
           .eq("championship_id", championshipId)
           .eq("pot_number", potNumber)
           .eq("position", normalizedPosition)
-          .in("player_id", unsoldPlayerIds);
+          .in("player_id", unsoldPlayerIds)
+          .select("id, player_id");
 
         if (moveErr) throw moveErr;
 
+        // Defensive: if RLS (or anything else) silently drops rows, the update
+        // can succeed without moving all expected players. Fail loudly so we
+        // don't leave unsold players stuck in the original pot.
+        const movedCount = movedRows?.length ?? 0;
+        if (movedCount !== unsoldPlayerIds.length) {
+          const movedIds = new Set((movedRows ?? []).map((r) => r.player_id));
+          const missing = unsoldPlayerIds.filter((pid) => !movedIds.has(pid));
+          throw new Error(
+            `Falha ao mover jogadores não vendidos para o Pote Extra (${movedCount}/${unsoldPlayerIds.length}). Jogadores pendentes: ${missing.join(", ")}. Verifique as políticas de RLS em draft_pots.`,
+          );
+        }
+
         extraPotNumber = nextPotNumber;
-        movedToExtraCount = unsoldPlayerIds.length;
+        movedToExtraCount = movedCount;
       }
+    }
+
+    const { data: chState } = await supabase
+      .from("championships")
+      .select(
+        "draft_auction_open, draft_auction_pot_number, draft_auction_pot_position",
+      )
+      .eq("id", championshipId)
+      .single();
+
+    const shouldCloseAuction =
+      chState?.draft_auction_open &&
+      chState.draft_auction_pot_number === potNumber &&
+      chState.draft_auction_pot_position?.trim() === normalizedPosition;
+
+    if (shouldCloseAuction) {
+      const { error: rpcErr } = await supabase.rpc("set_draft_auction_state", {
+        p_championship_id: championshipId,
+        p_open: false,
+        p_pot_number: null,
+        p_pot_position: null,
+      });
+      if (rpcErr) throw rpcErr;
     }
 
     return NextResponse.json({

@@ -107,30 +107,26 @@ async function fetchKnockoutData(
 }
 
 // ── Resolve a source label ─────────────────────────────────
+//
+// Important: `source_type = "group_position"` references the FINAL standing
+// of a group (1º, 2º, 3º, …). A team slot's position in the group draw is
+// just the seeding order (A2 = second team drawn into group A), NOT its
+// final ranking, so we never resolve `group_position` to a team name — it
+// always renders as "Xº COLOCADO Y" until the phase is actually played out.
 function resolveSourceLabel(
   source: MatchSource,
-  phases: PhaseWithGroups[],
 ): { primary: string; secondary: string | null } {
   if (source.source_type === "group_position") {
     const group = source.source_group ?? "?";
     const pos = source.source_position ?? "?";
-    // Try to find the actual team name from the filled group data
-    const phase = phases.find((p) => p.id === source.source_phase_id);
-    const teamName =
-      phase?.groups
-        .find((g) => g.groupLetter === group)
-        ?.slots.find((s) => s.position === source.source_position)?.teamName ??
-      null;
-
     const ordinal = (n: number | string) => {
       const num = typeof n === "number" ? n : parseInt(String(n));
-      const suffix = num === 1 ? "º" : num === 2 ? "º" : num === 3 ? "º" : "º";
-      return `${num}${suffix}`;
+      return `${Number.isFinite(num) ? num : n}º`;
     };
 
     return {
-      primary: teamName ?? `${ordinal(pos)} COLOCADO ${group}`,
-      secondary: teamName ? `${ordinal(pos)} COLOCADO ${group}` : null,
+      primary: `${ordinal(pos)} COLOCADO ${group}`,
+      secondary: null,
     };
   }
 
@@ -153,21 +149,19 @@ function resolveSourceLabel(
 // ── Match card ─────────────────────────────────────────────
 function MatchCard({
   match,
-  phases,
   isLast = false,
 }: {
   match: KnockoutMatch;
-  phases: PhaseWithGroups[];
   isLast?: boolean;
 }) {
   const home = match.sources.find((s) => s.is_home) ?? match.sources[0];
   const away = match.sources.find((s) => !s.is_home) ?? match.sources[1];
 
   const homeLabel = home
-    ? resolveSourceLabel(home, phases)
+    ? resolveSourceLabel(home)
     : { primary: "A definir", secondary: null };
   const awayLabel = away
-    ? resolveSourceLabel(away, phases)
+    ? resolveSourceLabel(away)
     : { primary: "A definir", secondary: null };
 
   const matchTitle = match.name ?? match.group_label ?? match.code ?? null;
@@ -222,11 +216,9 @@ function GroupPanel({ phase }: { phase: PhaseWithGroups }) {
 // ── Knockout phase column ──────────────────────────────────
 function KnockoutColumn({
   phaseData,
-  phases,
   isFinal = false,
 }: {
   phaseData: KnockoutPhaseData;
-  phases: PhaseWithGroups[];
   isFinal?: boolean;
 }) {
   return (
@@ -235,13 +227,8 @@ function KnockoutColumn({
         {phaseData.phaseName}
       </p>
       <div className="bk-ko-matches">
-        {phaseData.matches.map((match, i) => (
-          <MatchCard
-            key={match.id}
-            match={match}
-            phases={phases}
-            isLast={isFinal}
-          />
+        {phaseData.matches.map((match) => (
+          <MatchCard key={match.id} match={match} isLast={isFinal} />
         ))}
       </div>
     </div>
@@ -476,18 +463,16 @@ export default function BracketView({ phases }: Props) {
         {/* Knockout bracket flow */}
         {!loading && knockoutData.length > 0 && (
           <div className="bk-flow">
-            {midPhases.map((phaseData, i) => (
+            {midPhases.map((phaseData) => (
               <div
                 key={phaseData.phaseId}
                 style={{ display: "flex", alignItems: "center" }}
               >
-                <KnockoutColumn phaseData={phaseData} phases={phases} />
+                <KnockoutColumn phaseData={phaseData} />
                 <Connector />
               </div>
             ))}
-            {finalPhase && (
-              <KnockoutColumn phaseData={finalPhase} phases={phases} isFinal />
-            )}
+            {finalPhase && <KnockoutColumn phaseData={finalPhase} isFinal />}
           </div>
         )}
 

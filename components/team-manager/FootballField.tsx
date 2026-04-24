@@ -95,6 +95,47 @@ function PositionRow({
   );
 }
 
+// Roster rules:
+//   • 10 total slots: 1 goalkeeper + 9 line players (ATA/MEI/ZAG).
+//   • Baseline layout: 3 ATA, 3 MEI, 3 ZAG, 1 GOL.
+//   • If a position exceeds its baseline (e.g. 4 MEI), the extra slot(s) are
+//     taken from other line positions that have not filled their baseline yet.
+//   • If the real count exceeds the 9-line budget (data inconsistency), we
+//     render every real player instead of truncating them away.
+function computeLineSlots(
+  ata: number,
+  mei: number,
+  zag: number,
+): { ATA: number; MEI: number; ZAG: number } {
+  const LINE_BUDGET = 9;
+  const BASELINE = 3;
+
+  const slots = { ATA: ata, MEI: mei, ZAG: zag };
+  const totalReal = ata + mei + zag;
+
+  if (totalReal >= LINE_BUDGET) return slots;
+
+  let remaining = LINE_BUDGET - totalReal;
+  const order: Array<"ZAG" | "MEI" | "ATA"> = ["ZAG", "MEI", "ATA"];
+
+  // Round-robin fill until we either exhaust remaining slots or every position
+  // has reached its baseline.
+  while (remaining > 0) {
+    let addedThisPass = false;
+    for (const pos of order) {
+      if (remaining === 0) break;
+      if (slots[pos] < BASELINE) {
+        slots[pos] += 1;
+        remaining -= 1;
+        addedThisPass = true;
+      }
+    }
+    if (!addedThisPass) break;
+  }
+
+  return slots;
+}
+
 export function FootballField({ players }: FootballFieldProps) {
   const grouped: Record<string, SquadPlayer[]> = {
     GOL: [],
@@ -107,6 +148,13 @@ export function FootballField({ players }: FootballFieldProps) {
     const pos = positionMap[p.position] ?? "MEI";
     grouped[pos].push(p);
   }
+
+  const lineSlots = computeLineSlots(
+    grouped.ATA.length,
+    grouped.MEI.length,
+    grouped.ZAG.length,
+  );
+  const gkSlots = Math.max(1, grouped.GOL.length);
 
   return (
     <div className="relative w-full aspect-3/4 max-w-md mx-auto rounded-2xl overflow-hidden">
@@ -123,10 +171,10 @@ export function FootballField({ players }: FootballFieldProps) {
 
       {/* Players overlay */}
       <div className="relative z-10 h-full flex flex-col justify-between py-6 px-2">
-        <PositionRow players={grouped.ATA} slots={Math.max(grouped.ATA.length, 3)} />
-        <PositionRow players={grouped.MEI} slots={Math.max(grouped.MEI.length, 3)} />
-        <PositionRow players={grouped.ZAG} slots={Math.max(grouped.ZAG.length, 3)} />
-        <PositionRow players={grouped.GOL} slots={1} />
+        <PositionRow players={grouped.ATA} slots={lineSlots.ATA} />
+        <PositionRow players={grouped.MEI} slots={lineSlots.MEI} />
+        <PositionRow players={grouped.ZAG} slots={lineSlots.ZAG} />
+        <PositionRow players={grouped.GOL} slots={gkSlots} />
       </div>
     </div>
   );
