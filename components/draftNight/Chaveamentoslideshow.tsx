@@ -396,7 +396,12 @@ export default function ChaveamentoSlideshow({
   const handleSlotAssigned = useCallback(
     (phaseId: string, label: string, team: Team) => {
       setGroupState((prev) => {
-        const source = prev[phaseId] ?? [];
+        // Seed from the hook's phase data the first time we touch a phase,
+        // otherwise an empty `[]` would overwrite the real groups in
+        // `mergedPhases` and blank out the UI.
+        const seed =
+          data.phases.find((p) => p.id === phaseId)?.groups ?? [];
+        const source = prev[phaseId] ?? seed;
         return {
           ...prev,
           [phaseId]: source.map((g) => ({
@@ -415,18 +420,21 @@ export default function ChaveamentoSlideshow({
         };
       });
     },
-    [],
+    [data.phases],
   );
 
   // Phases with groups overlayed by the latest groupState so that both the
   // lottery view and the bracket view render the same, up-to-date data.
   const mergedPhases: PhaseWithGroups[] = useMemo(
     () =>
-      data.phases.map((phase) =>
-        phase.type === "group" && groupState[phase.id]
-          ? { ...phase, groups: groupState[phase.id]! }
-          : phase,
-      ),
+      data.phases.map((phase) => {
+        if (phase.type !== "group") return phase;
+        const local = groupState[phase.id];
+        // Only overlay when we have a non-empty local copy — otherwise the
+        // hook's groups are still the source of truth.
+        if (!local || local.length === 0) return phase;
+        return { ...phase, groups: local };
+      }),
     [data.phases, groupState],
   );
 
