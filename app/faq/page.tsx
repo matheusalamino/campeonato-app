@@ -1,19 +1,30 @@
 import Link from "next/link";
 import {
-  Coins,
-  Users,
-  Layers,
-  Goal,
-  Gavel,
   AlertTriangle,
-  Sparkles,
-  PackagePlus,
-  Repeat,
-  Wallet,
-  ShieldCheck,
-  Presentation,
-  Lightbulb,
+  BarChart3,
+  Coins,
+  Gavel,
+  Goal,
+  Grid2x2,
+  Handshake,
   HelpCircle,
+  Layers,
+  Lightbulb,
+  ListChecks,
+  Medal,
+  PackagePlus,
+  Presentation,
+  Repeat,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  Swords,
+  Timer,
+  Trophy,
+  Users,
+  Wallet,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -63,8 +74,16 @@ function Tag({
   );
 }
 
-// ── FAQ content ──────────────────────────────────────────────
-const SECTIONS: Section[] = [
+function Formula({ children }: { children: ReactNode }) {
+  return (
+    <div className="my-1.5 rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-[13px] text-amber-200">
+      {children}
+    </div>
+  );
+}
+
+// ── FAQ — Noite de Gala + Leilão ─────────────────────────────
+const LEILAO_SECTIONS: Section[] = [
   {
     id: "visao-geral",
     title: "Visão Geral",
@@ -812,23 +831,903 @@ const SECTIONS: Section[] = [
   },
 ];
 
+// ── FAQ — Campeonato (Regulamento Oficial) ───────────────────
+const CAMPEONATO_SECTIONS: Section[] = [
+  {
+    id: "c-participacao",
+    title: "Quem pode participar",
+    icon: <Users className="size-5" />,
+    intro: (
+      <p>
+        O campeonato é destinado a <Emph>membros mensalistas e avulsos</Emph>{" "}
+        do Futebol de Domingo, <Emph>membros da IASD Campolim</Emph> e da
+        IASD Central de Sorocaba, e <Emph>convidados</Emph> com autorização
+        da organização.
+      </p>
+    ),
+    items: [
+      {
+        q: "Qual é a idade mínima?",
+        a: (
+          <p>
+            14 anos. Atletas com menos de 16 anos devem apresentar a{" "}
+            <Emph>
+              &ldquo;Carta de Autorização para Participação em
+              Campeonato&rdquo;
+            </Emph>{" "}
+            assinada pelo responsável legal.
+          </p>
+        ),
+      },
+    ],
+  },
+  {
+    id: "c-formato",
+    title: "Formato da Competição",
+    icon: <Grid2x2 className="size-5" />,
+    intro: (
+      <p>
+        <Emph>8 seleções</Emph> representando países da Copa do Mundo,
+        divididas em <Emph>2 grupos de 4</Emph>. Dentro de cada grupo, todos
+        se enfrentam em partida única. O campeonato terá ao todo{" "}
+        <Emph>17 partidas</Emph>.
+      </p>
+    ),
+    items: [
+      {
+        q: "Como funciona a pontuação da fase de grupos?",
+        a: (
+          <ul className="list-disc space-y-1 pl-5 text-zinc-300">
+            <li>
+              <Emph>Vitória</Emph>: 3 pontos
+            </li>
+            <li>
+              <Emph>Empate</Emph>: 1 ponto
+            </li>
+            <li>
+              <Emph>Derrota</Emph>: 0 pontos
+            </li>
+            <li>
+              Classifica-se a seleção com o maior número de pontos.
+            </li>
+          </ul>
+        ),
+      },
+      {
+        q: "Quais são os critérios de desempate?",
+        a: (
+          <ol className="list-decimal space-y-1 pl-5 text-zinc-300">
+            <li>Saldo de gols</li>
+            <li>Gols marcados</li>
+            <li>Confronto direto</li>
+            <li>Menor número de cartões (fair play)</li>
+            <li>Sorteio realizado pela organização</li>
+          </ol>
+        ),
+      },
+    ],
+  },
+  {
+    id: "c-eliminatoria",
+    title: "Fase Eliminatória",
+    icon: <Swords className="size-5" />,
+    intro: (
+      <p>
+        O <Emph>1º colocado</Emph> de cada grupo vai direto para a semifinal.
+        Os 2ºs e 3ºs colocados disputam uma fase prévia.
+      </p>
+    ),
+    items: [
+      {
+        q: "Como é o chaveamento da eliminatória?",
+        a: (
+          <ul className="list-disc space-y-1 pl-5 text-zinc-300">
+            <li>2º do Grupo A × 3º do Grupo B</li>
+            <li>2º do Grupo B × 3º do Grupo A</li>
+            <li>
+              Os vencedores dessas partidas enfrentam os respectivos 1ºs
+              colocados nas semifinais.
+            </li>
+            <li>
+              Haverá <Emph>disputa de 3º lugar</Emph> entre os perdedores das
+              semifinais.
+            </li>
+          </ul>
+        ),
+      },
+      {
+        q: "E se um mata-mata terminar empatado?",
+        a: (
+          <p>
+            A decisão é nos <Emph>pênaltis</Emph>: 5 cobranças iniciais,
+            seguidas de alternadas até sair o vencedor.
+          </p>
+        ),
+      },
+    ],
+  },
+  {
+    id: "c-duracao",
+    title: "Duração das Partidas",
+    icon: <Timer className="size-5" />,
+    intro: (
+      <p>
+        Cada partida tem <Emph>2 tempos de 7 minutos</Emph>, com intervalo de{" "}
+        <Emph>1 minuto</Emph> entre eles.
+      </p>
+    ),
+    items: [
+      {
+        q: "O cronômetro pode ser pausado?",
+        a: (
+          <p>
+            Sim. O cronômetro pode ser pausado ou ter acréscimos a critério
+            da <Emph>arbitragem</Emph>.
+          </p>
+        ),
+      },
+    ],
+  },
+  {
+    id: "c-regras-gerais",
+    title: "Regras Gerais de Jogo",
+    icon: <ListChecks className="size-5" />,
+    intro: (
+      <p>
+        Times enxutos, substituições ilimitadas e{" "}
+        <Emph>sem regra de impedimento</Emph>.
+      </p>
+    ),
+    items: [
+      {
+        q: "Quantos jogadores podem estar em campo?",
+        a: (
+          <p>
+            No máximo <Emph>10 jogadores</Emph> e no mínimo{" "}
+            <Emph>9 jogadores</Emph>, sendo 1 deles o goleiro.
+          </p>
+        ),
+      },
+      {
+        q: "Existe impedimento?",
+        a: <p>Não há regra de impedimento.</p>,
+      },
+      {
+        q: "As substituições têm limite?",
+        a: (
+          <p>
+            Não. As substituições são <Emph>ilimitadas</Emph>.
+          </p>
+        ),
+      },
+      {
+        q: "Qual o mínimo de jogadores para iniciar uma partida?",
+        a: (
+          <p>
+            <Emph>4 jogadores de linha + 1 goleiro</Emph>.
+          </p>
+        ),
+      },
+      {
+        q: "Qual a tolerância máxima de atraso?",
+        a: (
+          <p>
+            <Emph>3 minutos</Emph>. Após isso, a equipe atrasada pode sofrer
+            W.O.
+          </p>
+        ),
+      },
+      {
+        q: "Como funciona o W.O.?",
+        a: (
+          <p>
+            Vitória por W.O. é registrada como <Emph>3 × 0</Emph>. Duas
+            partidas perdidas por W.O. implicam{" "}
+            <Emph>exclusão da equipe</Emph> do campeonato.
+          </p>
+        ),
+      },
+      {
+        q: "Pode jogar com qualquer chuteira?",
+        a: (
+          <p>
+            Não. É <Emph>estritamente proibido</Emph> jogar com chuteira de
+            cravo (de campo).
+          </p>
+        ),
+      },
+    ],
+  },
+  {
+    id: "c-regras-especificas",
+    title: "Regras Específicas",
+    icon: <Goal className="size-5" />,
+    intro: <p>Detalhes técnicos para situações específicas em campo.</p>,
+    items: [
+      {
+        q: "Como são cobrados lateral e escanteio?",
+        a: (
+          <p>
+            Com as <Emph>mãos</Emph> e a bola <Emph>atrás da cabeça</Emph>.
+            Caso contrário, a cobrança é <Emph>revertida</Emph> para o
+            adversário.
+          </p>
+        ),
+      },
+      {
+        q: "Quais as regras específicas do goleiro?",
+        a: (
+          <ul className="list-disc space-y-1 pl-5 text-zinc-300">
+            <li>
+              Tempo máximo com a bola na mão: <Emph>5 segundos</Emph>.
+            </li>
+            <li>
+              O <Emph>recuo</Emph> só é permitido se a bola vier{" "}
+              <Emph>acima da linha da cintura</Emph>.
+            </li>
+          </ul>
+        ),
+      },
+      {
+        q: "Como é tratada a mão na bola?",
+        a: (
+          <ul className="list-disc space-y-1 pl-5 text-zinc-300">
+            <li>Falta com dois lances.</li>
+            <li>
+              Dentro da área, <Emph>pênalti</Emph>.
+            </li>
+            <li>Pode gerar cartão conforme avaliação da arbitragem.</li>
+          </ul>
+        ),
+      },
+      {
+        q: "E carrinho por trás?",
+        a: (
+          <p>
+            <Emph>Expulsão direta</Emph>.
+          </p>
+        ),
+      },
+      {
+        q: "E se os uniformes forem parecidos?",
+        a: (
+          <p>
+            É <Emph>obrigatório</Emph> o uso de colete fornecido pela
+            organização.
+          </p>
+        ),
+      },
+    ],
+  },
+  {
+    id: "c-cartoes",
+    title: "Cartões e Suspensões",
+    icon: <AlertTriangle className="size-5" />,
+    intro: (
+      <p>
+        Cartões podem tirar o atleta da próxima partida. Os{" "}
+        <Emph>cartões acumulados zeram</Emph> ao final da fase de grupos.
+      </p>
+    ),
+    items: [
+      {
+        q: "Cartão vermelho",
+        a: (
+          <ul className="list-disc space-y-1 pl-5 text-zinc-300">
+            <li>
+              O atleta <Emph>não retorna</Emph> à partida.
+            </li>
+            <li>A equipe joga com um jogador a menos até o final.</li>
+            <li>
+              O atleta fica <Emph>automaticamente suspenso</Emph> da próxima
+              partida.
+            </li>
+          </ul>
+        ),
+      },
+      {
+        q: "Cartão amarelo",
+        a: (
+          <ul className="list-disc space-y-1 pl-5 text-zinc-300">
+            <li>
+              <Emph>Dois amarelos na mesma partida</Emph> resultam em
+              expulsão.
+            </li>
+            <li>
+              <Emph>Dois amarelos em partidas diferentes</Emph> suspendem o
+              atleta da próxima partida.
+            </li>
+            <li>Os cartões acumulados zeram ao final da fase de grupos.</li>
+          </ul>
+        ),
+      },
+    ],
+  },
+  {
+    id: "c-arbitragem",
+    title: "Autoridade da Arbitragem",
+    icon: <Shield className="size-5" />,
+    intro: (
+      <p>
+        A arbitragem é <Emph>profissional e contratada</Emph> e possui
+        autoridade soberana dentro do campo.
+      </p>
+    ),
+    items: [
+      {
+        q: "Quem pode conversar com o árbitro?",
+        a: (
+          <p>
+            Apenas o <Emph>capitão</Emph>, e sempre de forma respeitosa.
+            Cercar ou pressionar a arbitragem pode gerar advertência ou
+            cartão.
+          </p>
+        ),
+      },
+      {
+        q: "As decisões da arbitragem podem ser contestadas?",
+        a: (
+          <p>
+            Dentro da partida, não. Decisões da arbitragem são{" "}
+            <Emph>definitivas</Emph>.
+          </p>
+        ),
+      },
+    ],
+  },
+  {
+    id: "c-interferencia",
+    title: "Interferência Externa",
+    icon: <ShieldAlert className="size-5" />,
+    intro: (
+      <p>
+        Em caso de invasão de quadra ou ofensas externas, o árbitro pode
+        tomar diversas providências.
+      </p>
+    ),
+    items: [
+      {
+        q: "Quais medidas podem ser tomadas?",
+        a: (
+          <ul className="list-disc space-y-1 pl-5 text-zinc-300">
+            <li>Paralisar a partida.</li>
+            <li>Acrescentar tempo.</li>
+            <li>Relatar o ocorrido para avaliação disciplinar.</li>
+          </ul>
+        ),
+      },
+      {
+        q: "E se a influência vier de atleta ou cartola?",
+        a: (
+          <p>
+            Pode haver <Emph>penalização</Emph> conforme a gravidade.
+          </p>
+        ),
+      },
+    ],
+  },
+  {
+    id: "c-conduta",
+    title: "Código de Conduta",
+    icon: <Handshake className="size-5" />,
+    intro: (
+      <p>
+        A Copa do Mundo Sorocaba é um campeonato entre amigos — o respeito é
+        a regra que sustenta todas as outras.
+      </p>
+    ),
+    items: [
+      {
+        q: "O que a organização espera da postura dos participantes?",
+        a: (
+          <ul className="list-disc space-y-1 pl-5 text-zinc-300">
+            <li>Respeito é prioridade.</li>
+            <li>Provocação pessoal não será tolerada.</li>
+            <li>
+              Discussões religiosas, políticas ou pessoais durante o evento
+              são proibidas.
+            </li>
+            <li>
+              <Emph>Fair play</Emph> é obrigatório.
+            </li>
+            <li>
+              Cumprimento antes e depois das partidas é fortemente
+              incentivado.
+            </li>
+          </ul>
+        ),
+      },
+    ],
+  },
+  {
+    id: "c-disciplinar",
+    title: "Comissão Disciplinar",
+    icon: <Gavel className="size-5" />,
+    intro: (
+      <p>
+        A organização pode atuar como <Emph>Comissão Disciplinar</Emph> para
+        avaliar casos extraordinários.
+      </p>
+    ),
+    items: [
+      {
+        q: "Que tipo de conduta é avaliada?",
+        a: (
+          <ul className="list-disc space-y-1 pl-5 text-zinc-300">
+            <li>Agressão física.</li>
+            <li>Ofensas graves.</li>
+            <li>Conduta antidesportiva.</li>
+            <li>Descumprimento do regulamento.</li>
+          </ul>
+        ),
+      },
+      {
+        q: "Como as decisões são divulgadas?",
+        a: (
+          <p>
+            Oficialmente, comunicadas diretamente às{" "}
+            <Emph>equipes envolvidas</Emph>.
+          </p>
+        ),
+      },
+    ],
+  },
+  {
+    id: "c-noite-gala",
+    title: "Noite de Gala — DRAFT",
+    icon: <Sparkles className="size-5" />,
+    intro: (
+      <p>
+        Evento de abertura em que os cartolas montam suas equipes via
+        leilão.
+      </p>
+    ),
+    items: [
+      {
+        q: "Quando acontece?",
+        a: (
+          <p>
+            <Emph>25/04/2026</Emph>, a partir das <Emph>19h</Emph>.
+          </p>
+        ),
+      },
+      {
+        q: "Há regras de comportamento durante o Draft?",
+        a: (
+          <ul className="list-disc space-y-1 pl-5 text-zinc-300">
+            <li>Atletas e cartolas devem respeitar os horários.</li>
+            <li>Não é permitido tumulto durante o evento.</li>
+            <li>O staff possui autoridade organizacional.</li>
+            <li>
+              O ambiente deve permanecer{" "}
+              <Emph>respeitoso e amigável</Emph>.
+            </li>
+          </ul>
+        ),
+      },
+      {
+        q: "Onde vejo os detalhes do leilão, multas e carta especial?",
+        a: (
+          <p>
+            Na aba{" "}
+            <Link
+              href="?tab=leilao"
+              className="font-semibold text-amber-200 underline decoration-amber-500/50 underline-offset-2 hover:text-amber-100"
+            >
+              Noite de Gala + Leilão
+            </Link>{" "}
+            logo acima.
+          </p>
+        ),
+      },
+    ],
+  },
+  {
+    id: "c-overall",
+    title: "Avaliação dos Atletas (Overall Rating)",
+    icon: <Star className="size-5" />,
+    intro: (
+      <p>
+        Todos os atletas recebem um <Emph>Overall Rating</Emph> oficial
+        definido antes do campeonato, calculado a partir de{" "}
+        <Emph>6 habilidades</Emph>. Cada habilidade considera a
+        autoavaliação do atleta, a média da organização e um acréscimo fixo
+        de 60 pontos.
+      </p>
+    ),
+    items: [
+      {
+        q: "Quais são as 6 habilidades avaliadas?",
+        a: (
+          <div className="space-y-3">
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-amber-300">
+                Jogadores de Linha
+              </p>
+              <ul className="list-disc space-y-0.5 pl-5 text-zinc-300">
+                <li>H1 — Visão de Jogo</li>
+                <li>H2 — Controle de Bola</li>
+                <li>H3 — Finalização</li>
+                <li>H4 — Velocidade</li>
+                <li>H5 — Desarme</li>
+                <li>H6 — Drible</li>
+              </ul>
+            </div>
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-amber-300">
+                Goleiros
+              </p>
+              <ul className="list-disc space-y-0.5 pl-5 text-zinc-300">
+                <li>H1 — Reposição</li>
+                <li>H2 — Comunicação</li>
+                <li>H3 — Posicionamento</li>
+                <li>H4 — Reflexo</li>
+                <li>H5 — Jogo Aéreo</li>
+                <li>H6 — Agilidade</li>
+              </ul>
+            </div>
+          </div>
+        ),
+      },
+      {
+        q: "Como é calculada cada habilidade?",
+        a: (
+          <div className="space-y-2">
+            <p>Para cada habilidade (H):</p>
+            <Formula>H = (2 × AA) + (1,5 × MO) + 60</Formula>
+            <ul className="list-disc space-y-1 pl-5 text-zinc-300">
+              <li>
+                <Emph>AA</Emph> = Autoavaliação do atleta (1 a 5 estrelas).
+              </li>
+              <li>
+                <Emph>MO</Emph> = Média das notas dos 4 membros da
+                organização (cada um dá nota de 6 a 10).
+              </li>
+              <li>
+                <Emph>60</Emph> é um acréscimo fixo de base.
+              </li>
+            </ul>
+          </div>
+        ),
+      },
+      {
+        q: "Como é calculado o Overall Rating final?",
+        a: (
+          <div className="space-y-2">
+            <p>
+              É a <Emph>média aritmética das 6 habilidades</Emph>,
+              arredondada para o inteiro mais próximo:
+            </p>
+            <Formula>
+              Overall = (H1 + H2 + H3 + H4 + H5 + H6) ÷ 6
+            </Formula>
+          </div>
+        ),
+      },
+      {
+        q: "Pode me dar um exemplo prático?",
+        a: (
+          <div className="space-y-2 text-zinc-300">
+            <p>
+              Suponha o cálculo de <Emph>H1 — Visão de Jogo</Emph> para um
+              jogador:
+            </p>
+            <Formula>AA = 4</Formula>
+            <Formula>MO = (8 + 7 + 8 + 9) ÷ 4 = 8</Formula>
+            <Formula>H1 = (2 × 4) + (1,5 × 8) + 60 = 80</Formula>
+            <p>
+              Se as outras habilidades dão 81, 78, 89, 85 e 79, o Overall
+              final fica:
+            </p>
+            <Formula>
+              Overall = (80 + 81 + 78 + 89 + 85 + 79) ÷ 6 = 82
+            </Formula>
+            <p>
+              O atleta encerra com <Emph>82 de Overall Rating</Emph>.
+            </p>
+          </div>
+        ),
+      },
+    ],
+  },
+  {
+    id: "c-estatisticas",
+    title: "Estatísticas",
+    icon: <BarChart3 className="size-5" />,
+    intro: (
+      <p>
+        Um <Emph>membro específico do staff</Emph> é responsável por
+        registrar as estatísticas oficiais da partida.
+      </p>
+    ),
+    items: [
+      {
+        q: "Quando as estatísticas são confirmadas?",
+        a: (
+          <p>
+            Ao final de cada <Emph>rodada</Emph>, validadas oficialmente pela
+            organização.
+          </p>
+        ),
+      },
+    ],
+  },
+  {
+    id: "c-premios-coletivos",
+    title: "Premiações Coletivas",
+    icon: <Trophy className="size-5" />,
+    intro: <p>Taça e medalhas para os melhores times da competição.</p>,
+    items: [
+      {
+        q: "Taça de Campeão",
+        a: (
+          <p>
+            Disponível no dia da final para comemoração. A{" "}
+            <Emph>organização mantém</Emph> a taça após o evento.
+          </p>
+        ),
+      },
+      {
+        q: "Medalhas",
+        a: (
+          <p>
+            Entregues aos jogadores das equipes que ficarem em{" "}
+            <Emph>1º, 2º e 3º lugares</Emph>.
+          </p>
+        ),
+      },
+    ],
+  },
+  {
+    id: "c-premios-individuais",
+    title: "Premiações Individuais",
+    icon: <Medal className="size-5" />,
+    intro: (
+      <p>
+        Seis categorias individuais para reconhecer os destaques do
+        campeonato.
+      </p>
+    ),
+    items: [
+      {
+        q: "Melhor Cartola",
+        a: (
+          <div className="space-y-2 text-zinc-300">
+            <p>
+              Avaliação a cada partida pela <Emph>arbitragem</Emph> + 1
+              membro fixo da organização (ou staff exclusivo). A nota é
+              composta por 5 quesitos, cada um de 0 a 2:
+            </p>
+            <ul className="list-disc space-y-0.5 pl-5">
+              <li>Organização da equipe</li>
+              <li>Estratégia e leitura tática</li>
+              <li>Disciplina da equipe</li>
+              <li>Gestão emocional do time</li>
+              <li>Liderança e fair play</li>
+            </ul>
+            <p>A nota base (0 a 10) é multiplicada pelo peso da fase:</p>
+            <ul className="list-disc space-y-0.5 pl-5">
+              <li>
+                Fase de Grupos: <Emph>peso 1</Emph>
+              </li>
+              <li>
+                Semifinal: <Emph>peso 2</Emph>
+              </li>
+              <li>
+                Final: <Emph>peso 3</Emph>
+              </li>
+            </ul>
+            <p>
+              Vence o cartola com a <Emph>maior pontuação acumulada</Emph>.
+            </p>
+          </div>
+        ),
+      },
+      {
+        q: "Melhor Jogador",
+        a: (
+          <div className="space-y-2 text-zinc-300">
+            <p>
+              Ao término de cada partida, os cartolas das equipes que se
+              enfrentaram indicam um <Emph>jogador destaque do time adversário</Emph>.
+              A arbitragem também indica um jogador destaque.
+            </p>
+            <p>Para evitar subjetividade, o voto deve considerar:</p>
+            <ul className="list-disc space-y-0.5 pl-5">
+              <li>Impacto real no resultado.</li>
+              <li>Participação ofensiva/defensiva relevante.</li>
+              <li>Regularidade ao longo do jogo.</li>
+              <li>Comportamento e fair play.</li>
+              <li>Decisão em momentos importantes.</li>
+            </ul>
+            <p>Pesos por fase:</p>
+            <ul className="list-disc space-y-0.5 pl-5">
+              <li>Fase de Grupos: 1 ponto por voto.</li>
+              <li>Semifinal: 2 pontos por voto.</li>
+              <li>Final: 3 pontos por voto.</li>
+            </ul>
+            <p>
+              Vence o atleta com a <Emph>maior pontuação acumulada</Emph>.
+            </p>
+          </div>
+        ),
+      },
+      {
+        q: "Artilheiro",
+        a: (
+          <p>
+            Jogador com <Emph>mais gols</Emph> no campeonato.
+          </p>
+        ),
+      },
+      {
+        q: "Maestro",
+        a: (
+          <p>
+            Jogador com <Emph>mais assistências</Emph> no campeonato.
+          </p>
+        ),
+      },
+      {
+        q: "Goleiro Destaque (IOG)",
+        a: (
+          <div className="space-y-2 text-zinc-300">
+            <p>
+              Definido pelo <Emph>Índice Oficial do Goleiro (IOG)</Emph>, que
+              pesa regularidade, decisão e atuação técnica:
+            </p>
+            <Formula>IOG = (5 − MGS) + (2 × PD) + (2 × MDD)</Formula>
+            <ul className="list-disc space-y-1 pl-5">
+              <li>
+                <Emph>MGS</Emph> = média de gols sofridos por partida (total
+                de gols sofridos ÷ partidas jogadas).
+              </li>
+              <li>
+                <Emph>PD</Emph> = pênaltis defendidos.
+              </li>
+              <li>
+                <Emph>MDD</Emph> = média de defesas decisivas por partida
+                (total de defesas decisivas ÷ partidas jogadas), anotadas
+                pelo staff da partida.
+              </li>
+            </ul>
+            <p>Essa fórmula:</p>
+            <ul className="list-disc space-y-0.5 pl-5">
+              <li>Penaliza gols sofridos.</li>
+              <li>Premia pênaltis defendidos.</li>
+              <li>Premia defesas decisivas.</li>
+            </ul>
+            <p>
+              Vence o goleiro que obtiver o <Emph>maior IOG</Emph> ao final
+              do campeonato.
+            </p>
+          </div>
+        ),
+      },
+      {
+        q: "Revelação",
+        a: (
+          <div className="space-y-2 text-zinc-300">
+            <p>
+              Elegíveis atletas com{" "}
+              <Emph>Overall Rating igual ou inferior a 79</Emph>, definido
+              pela organização. A escolha é feita pela organização com
+              auxílio da arbitragem, considerando:
+            </p>
+            <ul className="list-disc space-y-0.5 pl-5">
+              <li>Evolução perceptível durante o campeonato.</li>
+              <li>Desempenho acima da expectativa.</li>
+              <li>Impacto em jogos importantes.</li>
+              <li>Postura e dedicação.</li>
+            </ul>
+          </div>
+        ),
+      },
+    ],
+  },
+];
+
+// ── Tabs config ──────────────────────────────────────────────
+type TabId = "leilao" | "campeonato";
+
+const TABS: Record<
+  TabId,
+  {
+    label: string;
+    shortLabel: string;
+    icon: ReactNode;
+    heroEyebrow: string;
+    heroTitle: string;
+    heroSubtitle: string;
+    sections: Section[];
+    footer: string;
+  }
+> = {
+  leilao: {
+    label: "Noite de Gala + Leilão",
+    shortLabel: "Leilão",
+    icon: <Sparkles className="size-4" aria-hidden />,
+    heroEyebrow: "Regulamento & FAQ",
+    heroTitle: "Como funciona o Draft",
+    heroSubtitle:
+      "Tudo sobre potes, lances, multas, carta especial, transferências e o fluxo do leilão — explicado sem juridiquês, do jeito que acontece na prática durante a Noite de Gala.",
+    sections: LEILAO_SECTIONS,
+    footer:
+      "Em caso de dúvidas não previstas, a autoridade máxima de decisão cabe às apresentadoras junto com a comissão diretiva do campeonato.",
+  },
+  campeonato: {
+    label: "Campeonato",
+    shortLabel: "Campeonato",
+    icon: <Trophy className="size-4" aria-hidden />,
+    heroEyebrow: "Regulamento Oficial",
+    heroTitle: "Copa do Mundo Sorocaba",
+    heroSubtitle:
+      "Regras oficiais do campeonato: participação, formato, partidas, cartões, avaliação dos atletas e premiações.",
+    sections: CAMPEONATO_SECTIONS,
+    footer:
+      "Competimos para vencer. Jogamos para nos divertir. Permanecemos amigos acima de tudo.",
+  },
+};
+
+function resolveTab(raw: string | string[] | undefined): TabId {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value === "campeonato" ? "campeonato" : "leilao";
+}
+
 // ── Page ─────────────────────────────────────────────────────
-export default function FaqPage() {
+export default async function FaqPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string | string[] }>;
+}) {
+  const { tab } = await searchParams;
+  const active = resolveTab(tab);
+  const tabConfig = TABS[active];
+  const { sections } = tabConfig;
+
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:py-10">
+
+      {/* Tabs */}
+      <div
+        role="tablist"
+        aria-label="Selecionar regulamento"
+        className="mb-8 inline-flex w-full gap-1 rounded-xl border border-zinc-800 bg-zinc-900/50 p-1 sm:w-auto"
+      >
+        {(Object.keys(TABS) as TabId[]).map((id) => {
+          const isActive = id === active;
+          const t = TABS[id];
+          return (
+            <Link
+              key={id}
+              href={`?tab=${id}`}
+              scroll={false}
+              role="tab"
+              aria-selected={isActive}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition sm:flex-none sm:px-4 ${isActive
+                ? "bg-amber-500 text-zinc-950 shadow-sm"
+                : "text-zinc-300 hover:bg-zinc-800/70 hover:text-amber-200"
+                }`}
+            >
+              {t.icon}
+              <span className="hidden sm:inline">{t.label}</span>
+              <span className="sm:hidden">{t.shortLabel}</span>
+            </Link>
+          );
+        })}
+      </div>
+
       {/* Hero */}
-      <div className="mb-8">
+      <div className="mb-6">
         <div className="inline-flex items-center gap-2 rounded-md border border-amber-700/40 bg-amber-900/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-200">
           <HelpCircle className="size-3.5" aria-hidden />
-          Regulamento & FAQ
+          {tabConfig.heroEyebrow}
         </div>
         <h1 className="mt-2 text-2xl font-bold tracking-tight text-zinc-50 sm:text-3xl">
-          Como funciona o Draft
+          {tabConfig.heroTitle}
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-zinc-400 sm:text-base">
-          Tudo sobre potes, lances, multas, carta especial, transferências e
-          o fluxo do leilão — explicado sem juridiquês, do jeito que acontece
-          na prática durante a Noite de Gala do Draft.
+          {tabConfig.heroSubtitle}
         </p>
       </div>
 
@@ -841,10 +1740,10 @@ export default function FaqPage() {
           Sumário
         </p>
         <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-          {SECTIONS.map((s, i) => (
+          {sections.map((s, i) => (
             <li key={s.id}>
               <Link
-                href={`#${s.id}`}
+                href={`?tab=${active}#${s.id}`}
                 className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-zinc-300 transition hover:bg-zinc-800/60 hover:text-amber-200"
               >
                 <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-zinc-700 bg-zinc-950 text-[10px] font-bold text-zinc-400 group-hover:border-amber-700/60 group-hover:text-amber-300">
@@ -859,7 +1758,7 @@ export default function FaqPage() {
 
       {/* Seções */}
       <div className="space-y-10">
-        {SECTIONS.map((section) => (
+        {sections.map((section) => (
           <section
             key={section.id}
             id={section.id}
@@ -910,10 +1809,7 @@ export default function FaqPage() {
 
       {/* Rodapé */}
       <div className="mt-14 border-t border-zinc-800 pt-6 text-center">
-        <p className="text-xs text-zinc-500">
-          Em caso de dúvidas não previstas, a autoridade máxima de decisão
-          cabe às apresentadoras junto com a comissão diretiva do campeonato.
-        </p>
+        <p className="text-xs text-zinc-500">{tabConfig.footer}</p>
       </div>
     </main>
   );
