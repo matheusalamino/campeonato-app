@@ -235,24 +235,6 @@ function KnockoutColumn({
   );
 }
 
-// ── Connector ──────────────────────────────────────────────
-function Connector() {
-  return (
-    <div className="bk-connector">
-      <svg width="40" height="4" viewBox="0 0 40 4">
-        <line
-          x1="0"
-          y1="2"
-          x2="40"
-          y2="2"
-          stroke="rgba(200,168,74,0.35)"
-          strokeWidth="1.5"
-          strokeDasharray="5 3"
-        />
-      </svg>
-    </div>
-  );
-}
 
 // ── Main BracketView ───────────────────────────────────────
 type Props = { phases: PhaseWithGroups[] };
@@ -272,6 +254,8 @@ export default function BracketView({ phases }: Props) {
   const midPhases = knockoutData.slice(0, -1);
   const finalPhase = knockoutData[knockoutData.length - 1] ?? null;
 
+  const allGroups = groupPhases.flatMap((p) => p.groups.map((g) => ({ phaseId: p.id, phaseName: p.name, ...g })));
+
   return (
     <>
       <style>{`
@@ -283,59 +267,59 @@ export default function BracketView({ phases }: Props) {
         /* ── WRAPPER ── */
         .bk-wrap{
           display:flex;flex-direction:column;align-items:center;
-          gap:clamp(18px,2.5vh,32px);
-          width:100%;max-width:1360px;
-          padding:0 clamp(16px,3vw,48px);
+          gap:clamp(12px,2vh,24px);
+          width:100%;max-width:1800px;
+          padding:0 clamp(10px,2vw,32px);
           animation:bkIn .5s cubic-bezier(.22,1,.36,1) both;
         }
 
         /* ── HEADER ── */
-        .bk-header{display:flex;flex-direction:column;align-items:center;gap:6px}
+        .bk-header{display:flex;flex-direction:column;align-items:center;gap:4px}
         .bk-main-title{
           font-family:'Cinzel',serif;font-weight:900;
-          font-size:clamp(1.6rem,3.2vw,3rem);letter-spacing:.12em;text-transform:uppercase;margin:0;
+          font-size:clamp(1.4rem,2.8vw,2.5rem);letter-spacing:.12em;text-transform:uppercase;margin:0;
         }
-        .bk-eyebrow{font-family:'Cinzel',serif;font-size:clamp(.58rem,.9vw,.76rem);letter-spacing:.45em;text-transform:uppercase;color:rgba(200,168,74,.55);margin:0}
-        .bk-divider{display:flex;align-items:center;gap:12px;width:clamp(200px,35vw,440px)}
+        .bk-eyebrow{font-family:'Cinzel',serif;font-size:clamp(.5rem,.8vw,.7rem);letter-spacing:.45em;text-transform:uppercase;color:rgba(200,168,74,.55);margin:0}
+        .bk-divider{display:flex;align-items:center;gap:12px;width:clamp(180px,30vw,380px)}
         .bk-dline{flex:1;height:1px;background:linear-gradient(90deg,transparent,#c8a84a,transparent)}
         .bk-dgem{width:7px;height:7px;background:#c8a84a;transform:rotate(45deg);flex-shrink:0}
 
         /* ── GROUPS ── */
-        .bk-group-phase{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%}
+        .bk-group-phase{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%}
         .bk-phase-label{
-          font-family:'Cinzel',serif;font-size:clamp(.58rem,.9vw,.76rem);
+          font-family:'Cinzel',serif;font-size:clamp(.55rem,.8vw,.7rem);
           letter-spacing:.38em;text-transform:uppercase;color:rgba(200,168,74,.55);margin:0;text-align:center;
         }
-        .bk-groups-row{display:flex;gap:clamp(12px,2vw,24px);justify-content:center;flex-wrap:wrap;width:100%}
+        .bk-groups-row{display:flex;flex-direction:column;gap:12px;width:100%}
 
         .bk-group-card{
-          background:rgba(0,0,0,.4);border:1px solid rgba(200,168,74,.2);border-radius:14px;
-          overflow:hidden;flex:1;min-width:clamp(200px,22vw,300px);max-width:340px;
+          background:rgba(0,0,0,.4);border:1px solid rgba(200,168,74,.2);border-radius:12px;
+          overflow:hidden;width:100%;
           backdrop-filter:blur(4px);
         }
         .bk-group-letter{
           font-family:'Cinzel',serif;font-weight:900;
-          font-size:clamp(.9rem,1.5vw,1.2rem);letter-spacing:.14em;text-transform:uppercase;
+          font-size:clamp(.8rem,1.2vw,1rem);letter-spacing:.14em;text-transform:uppercase;
           background:linear-gradient(135deg,#e8c84a,#f5d76e,#c9952a);
           -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-          padding:clamp(10px,1.4vh,14px) clamp(14px,2vw,20px);
+          padding:8px 14px;
           border-bottom:1px solid rgba(200,168,74,.12);
           background-color:rgba(0,0,0,.18);margin:0;
         }
         .bk-group-slots{display:flex;flex-direction:column}
         .bk-group-slot{
-          display:flex;align-items:center;gap:10px;
-          padding:clamp(9px,1.3vh,13px) clamp(14px,2vw,20px);
+          display:flex;align-items:center;gap:8px;
+          padding:6px 14px;
           border-bottom:1px solid rgba(200,168,74,.07);
         }
         .bk-group-slot:last-child{border-bottom:none}
         .bk-gslot-tag{
           font-family:'Cinzel',serif;font-weight:700;
-          font-size:clamp(.68rem,1.05vw,.88rem);letter-spacing:.12em;color:#c8a84a;
-          flex-shrink:0;min-width:28px;
+          font-size:clamp(.6rem,.9vw,.8rem);letter-spacing:.12em;color:#c8a84a;
+          flex-shrink:0;min-width:24px;
         }
         .bk-gslot-name{
-          font-family:'Cinzel',serif;font-size:clamp(.68rem,1.05vw,.88rem);
+          font-family:'Cinzel',serif;font-size:clamp(.6rem,.9vw,.8rem);
           letter-spacing:.05em;text-transform:uppercase;
         }
         .bk-gslot-filled .bk-gslot-name{color:rgba(240,210,140,.92)}
@@ -343,27 +327,34 @@ export default function BracketView({ phases }: Props) {
 
         /* ── BRACKET FLOW ── */
         .bk-flow{
-          display:flex;align-items:center;justify-content:center;
-          gap:0;width:100%;overflow-x:auto;padding:4px 0;
+          width:100%;overflow-x:auto;padding:10px 0;
+        }
+        .bk-flow-inner{
+          display:flex;align-items:stretch;justify-content:center;
+          width:max-content;margin:0 auto;gap:clamp(24px, 3vw, 48px);
+          min-height: 400px;
         }
 
         /* ── KNOCKOUT COLUMN ── */
         .bk-ko-col{
           display:flex;flex-direction:column;align-items:center;
-          gap:clamp(8px,1.4vh,14px);
-          min-width:clamp(180px,20vw,260px);flex-shrink:0;
+          min-width:clamp(130px,14vw,180px);flex-shrink:0;
         }
-        .bk-ko-final{min-width:clamp(200px,22vw,280px)}
+        .bk-ko-final{min-width:clamp(140px,16vw,200px)}
 
-        .bk-ko-matches{display:flex;flex-direction:column;gap:clamp(8px,1.2vh,14px);width:100%}
+        .bk-ko-matches{
+          display:flex;flex-direction:column;justify-content:space-around;
+          height:100%;width:100%;gap:12px;flex:1;
+        }
 
         /* ── MATCH CARD ── */
         .bk-match{
           background:rgba(0,0,0,.42);
           border:1px solid rgba(200,168,74,.22);
-          border-radius:12px;overflow:hidden;
+          border-radius:8px;overflow:hidden;
           transition:border-color .2s,box-shadow .2s;
           width:100%;
+          position:relative;
         }
         .bk-match:hover{border-color:rgba(200,168,74,.45);box-shadow:0 0 16px rgba(200,168,74,.12)}
         .bk-match-final{
@@ -372,21 +363,21 @@ export default function BracketView({ phases }: Props) {
         }
 
         .bk-match-name{
-          font-family:'Cinzel',serif;font-size:clamp(.5rem,.78vw,.65rem);
-          letter-spacing:.3em;text-transform:uppercase;color:rgba(200,168,74,.5);
-          padding:6px 14px 0;margin:0;text-align:center;
+          font-family:'Cinzel',serif;font-size:clamp(.45rem,.65vw,.55rem);
+          letter-spacing:.25em;text-transform:uppercase;color:rgba(200,168,74,.5);
+          padding:4px 10px 0;margin:0;text-align:center;
         }
 
         .bk-match-slot{
-          display:flex;flex-direction:column;padding:clamp(9px,1.3vh,13px) clamp(14px,2vw,18px);
-          gap:2px;
+          display:flex;flex-direction:column;padding:6px 12px;
+          gap:1px;
         }
         .bk-slot-home{border-bottom:1px solid rgba(200,168,74,.1)}
         .bk-slot-away{}
 
         .bk-team-name{
           font-family:'Cinzel',serif;font-weight:700;
-          font-size:clamp(.72rem,1.1vw,.92rem);letter-spacing:.06em;text-transform:uppercase;
+          font-size:clamp(.65rem,.9vw,.8rem);letter-spacing:.06em;text-transform:uppercase;
           color:rgba(240,210,140,.92);
           /* single line truncate */
           white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -394,16 +385,16 @@ export default function BracketView({ phases }: Props) {
         .bk-match-final .bk-team-name{
           background:linear-gradient(135deg,#fff0a0,#f5c842,#c8860a);
           -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-          font-size:clamp(.78rem,1.2vw,1rem);
+          font-size:clamp(.7rem,1vw,.85rem);
         }
         .bk-team-sub{
           font-family:'EB Garamond',serif;font-style:italic;
-          font-size:clamp(.55rem,.82vw,.7rem);color:rgba(200,168,74,.45);
+          font-size:clamp(.5rem,.7vw,.65rem);color:rgba(200,168,74,.45);
         }
 
         .bk-match-vs{
           text-align:center;
-          font-family:'Cinzel',serif;font-size:clamp(.55rem,.85vw,.72rem);
+          font-family:'Cinzel',serif;font-size:clamp(.5rem,.7vw,.6rem);
           letter-spacing:.2em;color:rgba(200,168,74,.35);
           padding:2px 0;
           border-top:1px dashed rgba(200,168,74,.08);
@@ -412,8 +403,11 @@ export default function BracketView({ phases }: Props) {
 
         /* ── CONNECTOR ── */
         .bk-connector{
-          display:flex;align-items:center;padding:0 8px;flex-shrink:0;
-          align-self:center;
+          display:flex;flex-direction:column;justify-content:space-around;
+          padding:0 8px;flex-shrink:0;height:100%;
+        }
+        .bk-connector-line{
+          display:flex;align-items:center;height:100%;
         }
 
         /* ── TROPHY ── */
@@ -442,43 +436,65 @@ export default function BracketView({ phases }: Props) {
           </div>
         </div>
 
-        {/* Group phases */}
-        {groupPhases.map((gp) => (
-          <GroupPanel key={gp.id} phase={gp} />
-        ))}
-
         {/* Loading knockout */}
         {loading && (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              padding: "16px 0",
-            }}
-          >
+          <div style={{ display: "flex", justifyContent: "center", padding: "16px 0", width: "100%" }}>
             <div className="bk-spin" />
           </div>
         )}
 
         {/* Knockout bracket flow */}
-        {!loading && knockoutData.length > 0 && (
+        {!loading && (knockoutData.length > 0 || groupPhases.length > 0) && (
           <div className="bk-flow">
-            {midPhases.map((phaseData) => (
-              <div
-                key={phaseData.phaseId}
-                style={{ display: "flex", alignItems: "center" }}
-              >
-                <KnockoutColumn phaseData={phaseData} />
-                <Connector />
-              </div>
-            ))}
-            {finalPhase && <KnockoutColumn phaseData={finalPhase} isFinal />}
+            <div className="bk-flow-inner">
+              {/* GROUPS */}
+              {allGroups.length > 0 && (
+                <div style={{ display: "flex", alignItems: "stretch" }}>
+                  <div className="bk-ko-col" style={{ gap: '16px', justifyContent: 'space-around' }}>
+                    <p className="bk-phase-label" style={GT}>Grupos</p>
+                    {allGroups.map(g => (
+                      <div key={g.groupLetter} className="bk-group-card" style={{ flex: 'unset' }}>
+                        <p className="bk-group-letter">Grupo {g.groupLetter}</p>
+                        <div className="bk-group-slots">
+                          {g.slots.map(slot => (
+                            <div key={slot.slotLabel} className={`bk-group-slot ${slot.teamName ? "bk-gslot-filled" : "bk-gslot-empty"}`}>
+                              <span className="bk-gslot-tag">{slot.slotLabel}</span>
+                              <span className="bk-gslot-name">{slot.teamName ?? "—"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ALL KNOCKOUT PHASES */}
+              {knockoutData.map((phaseData, i) => {
+                const nextPhase = knockoutData[i + 1];
+                const isFinal = !nextPhase;
+                return (
+                  <div key={`ko-${phaseData.phaseId}`} style={{ display: "flex", alignItems: "stretch" }}>
+                    <KnockoutColumn phaseData={phaseData} isFinal={isFinal} />
+                    {isFinal && (
+                      <div style={{ display: "flex", alignItems: "center", marginLeft: "32px", paddingRight: "16px" }}>
+                        <div className="bk-trophy">
+                          <svg width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="rgba(200,168,74,0.9)" strokeWidth="1">
+                            <path d="M8 21h8m-4-4v4m-5.2-9c-2.4 0-4.8-.8-4.8-2.5s2.4-2.5 4.8-2.5h10.4c2.4 0 4.8.8 4.8 2.5s-2.4 2.5-4.8 2.5M12 17c-3 0-5.5-2.5-5.5-6V4h11v7c0 3.5-2.5 6-5.5 6z" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
-        {!loading && knockoutData.length === 0 && (
+        {!loading && knockoutData.length === 0 && groupPhases.length === 0 && (
           <p className="bk-note">
-            Configure as fases eliminatórias para ver o chaveamento completo.
+            Configure os grupos ou fases eliminatórias para ver o chaveamento.
           </p>
         )}
       </div>

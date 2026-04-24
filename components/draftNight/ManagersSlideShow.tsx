@@ -221,8 +221,8 @@ function ManagerCard({
           </div>
         ) : (
           <div className="card-titles">
-            <p className="titles-label" style={{ opacity: 0.4 }}>
-              Estreante no campeonato
+            <p className="titles-label">
+              {manager.name == "Gilberto Patez" ? "Campeão Champions League Sorocaba 2025" : manager.name == "Anderson Ferraz" ? "Disputou Champions League Sorocaba 2025" : manager.name == "Gabriel Lousan" ? "Vice-Campeão Champions League Sorocaba 2025" : "Estreante no campeonato"}
             </p>
           </div>
         )}
@@ -308,7 +308,7 @@ export default function ManagersSlideshow({
           background:radial-gradient(circle at 35% 35%,#3d2200,#0a0400);
           box-shadow:0 0 40px rgba(200,168,74,.25),0 0 80px rgba(200,100,0,.15),inset 0 0 30px rgba(0,0,0,.6);
         }
-        .photo-img { width:100%; height:100%; object-fit:cover; object-position:top center; }
+        .photo-img { width:100%; height:100%; object-fit:contain; object-position:center; }
         .photo-initials {
           position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
           font-family:'Cinzel',serif; font-size:clamp(3rem,6vw,5rem); font-weight:900;
