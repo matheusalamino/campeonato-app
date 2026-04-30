@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useState, useEffect } from "react";
 import { useChampionship } from "./ChampionshipContext";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 type Championship = {
   id: string;
@@ -15,8 +16,12 @@ export function Sidebar({ role }: { role: string | null }) {
   const router = useRouter();
   const pathname = usePathname();
   const supabase = createClient();
+  void role;
 
   const [open, setOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(() =>
+    pathname.startsWith("/championship/settings"),
+  );
   const [championships, setChampionships] = useState<Championship[]>([]);
 
   const { championship, setChampionship } = useChampionship();
@@ -50,6 +55,8 @@ export function Sidebar({ role }: { role: string | null }) {
   }
 
   const isActive = (href: string) => pathname === href;
+  const isSettingsRoute = pathname.startsWith("/championship/settings");
+  const isSettingsExpanded = isSettingsRoute || settingsOpen;
 
   return (
     <>
@@ -131,16 +138,48 @@ export function Sidebar({ role }: { role: string | null }) {
             Dashboard
           </Link>
 
-          <Link
-            href="/championship/settings"
-            className={`px-4 py-2 rounded-lg ${
-              isActive("/settings")
+          <button
+            type="button"
+            onClick={() => setSettingsOpen((current) => !current)}
+            className={`flex items-center justify-between px-4 py-2 rounded-lg text-left ${
+              isSettingsRoute
                 ? "bg-blue-600 text-white"
                 : "text-zinc-400 hover:bg-zinc-800"
             }`}
           >
-            Configurações
-          </Link>
+            <span>Configurações</span>
+            {isSettingsExpanded ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+          </button>
+
+          {isSettingsExpanded && (
+            <div className="ml-3 flex flex-col gap-1 border-l border-zinc-800 pl-3">
+              <Link
+                href="/championship/settings"
+                className={`px-4 py-2 rounded-lg text-sm ${
+                  isActive("/championship/settings")
+                    ? "bg-zinc-800 text-white"
+                    : "text-zinc-400 hover:bg-zinc-800"
+                }`}
+              >
+                Fases
+              </Link>
+
+              <Link
+                href="/championship/settings/games"
+                className={`px-4 py-2 rounded-lg text-sm ${
+                  isActive("/championship/settings/games")
+                    ? "bg-zinc-800 text-white"
+                    : "text-zinc-400 hover:bg-zinc-800"
+                }`}
+              >
+                Jogos
+              </Link>
+            </div>
+          )}
 
           <Link
             href="/championship/teams"

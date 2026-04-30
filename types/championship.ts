@@ -149,3 +149,17 @@ export type SlotConfig = {
 
   source_match_code?: string;
 };
+
+export type KnockoutMatch = {
+  id: string;
+  phase_id: string;
+  name: string | null;
+  round_number: number | null;
+  home_source?: string | null;
+  away_source?: string | null;
+  winner_to?: string | null;
+  loser_to?: string | null;
+  code: string | null;
+  group_label: string | null;
+  scheduled_at: string | null;
+};
