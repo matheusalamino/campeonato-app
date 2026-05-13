@@ -33,6 +33,7 @@ export type ChampionshipMatchItem = {
   roundNumber: number | null;
   groupLabel: string | null;
   scheduledAt: string | null;
+  isFinal: boolean;
   home: MatchSide;
   away: MatchSide;
 };
@@ -152,7 +153,7 @@ async function fetchChampionshipMatchGroups(
   ] = await Promise.all([
     supabase
       .from("knockout_matches")
-      .select("id, phase_id, name, round_number, code, group_label, scheduled_at")
+      .select("id, phase_id, name, round_number, code, group_label, scheduled_at, is_final")
       .in("phase_id", phaseIds),
     supabase
       .from("championship_teams")
@@ -335,6 +336,7 @@ async function fetchChampionshipMatchGroups(
         roundNumber: match.round_number,
         groupLabel: match.group_label,
         scheduledAt: match.scheduled_at,
+        isFinal: match.is_final ?? false,
         home: resolveSide(match, phaseMap[match.phase_id], 1),
         away: resolveSide(match, phaseMap[match.phase_id], 2),
       }))
@@ -393,12 +395,33 @@ export function useChampionshipMatches(championshipId: string | null) {
     };
   }, [championshipId]);
 
-  async function updateScheduledAt(matchId: string, value: string) {
-    const scheduledAt = toIsoFromDateTimeLocal(value);
+  async function saveMatchDetails(matchId: string, scheduledAtValue: string, roundNumber: number, isFinal: boolean = false) {
+    const scheduledAt = toIsoFromDateTimeLocal(scheduledAtValue);
+
+    if (isFinal) {
+      // Check if another match is already marked as final
+      const phaseIds = groups.map(g => g.id);
+      if (phaseIds.length > 0) {
+        const { data: existingFinals } = await supabase
+          .from("knockout_matches")
+          .select("id")
+          .in("phase_id", phaseIds)
+          .eq("is_final", true)
+          .neq("id", matchId);
+        
+        if (existingFinals && existingFinals.length > 0) {
+          return { error: "Já existe outro jogo marcado como final neste campeonato." };
+        }
+      }
+    }
 
     const { error } = await supabase
       .from("knockout_matches")
-      .update({ scheduled_at: scheduledAt })
+      .update({ 
+        scheduled_at: scheduledAt,
+        round_number: roundNumber,
+        is_final: isFinal
+      })
       .eq("id", matchId);
 
     if (error) {
@@ -410,7 +433,7 @@ export function useChampionshipMatches(championshipId: string | null) {
         ...group,
         matches: group.matches
           .map((match) =>
-            match.id === matchId ? { ...match, scheduledAt } : match,
+            match.id === matchId ? { ...match, scheduledAt, roundNumber, isFinal } : match,
           )
           .sort(sortMatches),
       })),
@@ -423,6 +446,6 @@ export function useChampionshipMatches(championshipId: string | null) {
     groups,
     loading,
     reload: load,
-    updateScheduledAt,
+    saveMatchDetails,
   };
 }

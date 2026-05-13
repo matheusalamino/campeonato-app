@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, ChevronRight, Shield } from "lucide-react";
+import Link from "next/link";
+import { CalendarDays, ChevronRight, Shield, Gamepad2 } from "lucide-react";
 import { toast } from "sonner";
 import { useChampionship } from "@/components/ChampionshipContext";
 import {
@@ -58,11 +59,13 @@ function TeamBadge({
 
 export default function ChampionshipGamesSettingsPage() {
   const { championship } = useChampionship();
-  const { groups, loading, updateScheduledAt } = useChampionshipMatches(
+  const { groups, loading, saveMatchDetails } = useChampionshipMatches(
     championship?.id ?? null,
   );
 
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [roundDrafts, setRoundDrafts] = useState<Record<string, number>>({});
+  const [finalDrafts, setFinalDrafts] = useState<Record<string, boolean>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
 
   if (!championship) {
@@ -121,8 +124,13 @@ export default function ChampionshipGamesSettingsPage() {
               {phase.matches.map((match) => {
                 const currentValue =
                   drafts[match.id] ?? toDateTimeLocalValue(match.scheduledAt);
+                const currentRound = roundDrafts[match.id] ?? match.roundNumber ?? 1;
+                const currentFinal = finalDrafts[match.id] ?? match.isFinal ?? false;
+
                 const hasChanges =
-                  currentValue !== toDateTimeLocalValue(match.scheduledAt);
+                  currentValue !== toDateTimeLocalValue(match.scheduledAt) ||
+                  currentRound !== (match.roundNumber ?? 1) ||
+                  currentFinal !== (match.isFinal ?? false);
 
                 return (
                   <div
@@ -131,12 +139,14 @@ export default function ChampionshipGamesSettingsPage() {
                   >
                     <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                       <div>
-                        <h2 className="text-base font-semibold">
+                        <h2 className="text-base font-semibold flex items-center gap-2">
                           {match.matchName ?? match.matchCode ?? "Confronto"}
+                          {currentFinal && <span className="text-[10px] uppercase tracking-widest bg-yellow-500 text-black px-1.5 py-0.5 rounded font-black">FINAL</span>}
                         </h2>
                         <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                           {match.matchCode ?? "SEM CODIGO"}
-                          {match.roundNumber ? ` • Rodada ${match.roundNumber}` : ""}
+                          {" • "}
+                          Rodada {currentRound}
                         </p>
                       </div>
 
@@ -187,34 +197,67 @@ export default function ChampionshipGamesSettingsPage() {
                         />
                       </div>
 
-                      <Button
-                        type="button"
-                        disabled={!hasChanges || savingId === match.id}
-                        className="md:w-auto"
-                        onClick={async () => {
-                          setSavingId(match.id);
-
-                          const { error } = await updateScheduledAt(
-                            match.id,
-                            currentValue,
-                          );
-
-                          setSavingId(null);
-
-                          if (error) {
-                            toast.error("Erro ao salvar horário do jogo");
-                            return;
+                      <div className="w-24 space-y-2">
+                        <label className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                          Rodada
+                        </label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={currentRound}
+                          onChange={(event) =>
+                            setRoundDrafts((current) => ({
+                              ...current,
+                              [match.id]: parseInt(event.target.value) || 1,
+                            }))
                           }
+                          className="border-zinc-700 bg-zinc-950 text-white"
+                        />
+                      </div>
 
-                          setDrafts((current) => ({
-                            ...current,
-                            [match.id]: currentValue,
-                          }));
-                          toast.success("Horário do jogo salvo");
-                        }}
-                      >
-                        {savingId === match.id ? "Salvando..." : "Salvar"}
-                      </Button>
+                      <div className="w-auto space-y-2 flex flex-col justify-end pb-3">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            className="w-4 h-4 rounded bg-zinc-900 border-zinc-700 accent-yellow-500"
+                            checked={currentFinal}
+                            onChange={(e) => setFinalDrafts(current => ({ ...current, [match.id]: e.target.checked }))}
+                          />
+                          <span className="text-xs uppercase tracking-[0.18em] text-zinc-400 font-bold">É Final?</span>
+                        </label>
+                      </div>
+
+                      <div className="flex gap-2 md:ml-auto">
+                        <Button
+                          type="button"
+                          disabled={!hasChanges || savingId === match.id}
+                          onClick={async () => {
+                            setSavingId(match.id);
+                            const { error } = await saveMatchDetails(
+                              match.id,
+                              currentValue,
+                              currentRound,
+                              currentFinal
+                            );
+                            setSavingId(null);
+                            if (error) { toast.error(error); return; }
+                            setDrafts((current) => ({ ...current, [match.id]: currentValue }));
+                            setRoundDrafts((current) => ({ ...current, [match.id]: currentRound }));
+                            setFinalDrafts((current) => ({ ...current, [match.id]: currentFinal }));
+                            toast.success("Dados do jogo salvos");
+                          }}
+                        >
+                          {savingId === match.id ? "Salvando..." : "Salvar"}
+                        </Button>
+
+                        <Link
+                          href={`/games/${match.id}`}
+                          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 transition-all"
+                        >
+                          <Gamepad2 className="h-4 w-4" />
+                          Súmula
+                        </Link>
+                      </div>
                     </div>
                   </div>
                 );

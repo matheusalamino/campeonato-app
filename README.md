@@ -1,36 +1,160 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# campeonato-app
 
-## Getting Started
+Aplicacao Next.js para gestao de campeonato usando Supabase.
 
-First, run the development server:
+## Arquitetura
+
+- App: Next.js 16
+- Banco: PostgreSQL via Supabase
+- Servicos locais: Supabase CLI com Docker
+- Migrations: `supabase/migrations/*.sql`
+- Seed local: `supabase/seed.sql`
+
+Observacao importante:
+
+Este projeto nao roda corretamente com um `docker compose` contendo apenas Postgres. O app depende do stack local do Supabase, incluindo Auth, API e Storage. Por isso, o fluxo local oficial continua sendo `supabase start`, encapsulado aqui pelos scripts `npm run local:*`.
+
+## Onboarding rapido
+
+### Pre-requisitos
+
+- Node.js 20 LTS
+- Docker Desktop ativo
+- Supabase CLI instalada
+- cliente `psql` instalado
+
+### Primeira subida local
+
+1. Instale dependencias:
+
+```bash
+npm install
+```
+
+2. Copie o arquivo de ambiente:
+
+```bash
+cp .env.example .env.local
+```
+
+3. Suba tudo e popule o ambiente local:
+
+```bash
+npm run local:setup
+```
+
+4. Rode o app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Credenciais locais:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- E-mail: `admin@local.test`
+- Senha: `Admin123!`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Fluxo local
 
-## Learn More
+Comandos principais:
 
-To learn more about Next.js, take a look at the following resources:
+- Subir o stack local: `npm run local:start`
+- Atualizar `.env.local`: `npm run local:env`
+- Setup completo: `npm run local:setup`
+- Reaplicar o seed local: `npm run local:seed`
+- Resetar o banco local: `npm run local:reset`
+- Parar o stack local: `npm run local:stop`
+- Apagar o stack local sem backup: `npm run local:purge`
+- Ver status do Supabase local: `npm run local:status`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Se quiser conectar com `psql`:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+psql "$SUPABASE_DB_URL"
+```
 
-## Deploy on Vercel
+## Clonar dados de staging
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Esse fluxo gera um dump sanitizado em `dumps/`, restaura no Supabase local e recria o admin local conhecido.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Crie o arquivo de secrets:
+
+```bash
+cp .secrets/staging.env.example .secrets/staging.env
+```
+
+2. Preencha as credenciais reais do banco de staging em `.secrets/staging.env`.
+
+3. Rode:
+
+```bash
+npm run local:pull:staging
+```
+
+Atalho equivalente:
+
+```bash
+make pull-stg
+```
+
+## Clonar dados de producao
+
+Use somente quando staging nao for suficiente.
+
+1. Crie o arquivo de secrets:
+
+```bash
+cp .secrets/production.env.example .secrets/production.env
+```
+
+2. Preencha as credenciais reais do banco de producao.
+
+3. Rode:
+
+```bash
+npm run local:pull:production
+```
+
+O script exige confirmacao explicita no terminal antes de continuar.
+
+Atalho equivalente:
+
+```bash
+make pull-prod
+```
+
+## Onde ficam os arquivos importantes
+
+- `docker-compose.staging.yml`: utilitario Docker para dump de staging
+- `docker-compose.prod.yml`: utilitario Docker para dump de producao
+- `scripts/pull-staging.sh`: gera dump sanitizado de staging e restaura localmente
+- `scripts/pull-prod.sh`: mesmo fluxo para producao, com confirmacao
+- `scripts/restore-local-from-dump.sh`: restaura qualquer dump compatibilizando com o schema local
+- `scripts/prepare-local-import.mjs`: adapta o dump para colunas que existem no schema local
+- `scripts/sanitize-dump.mjs`: remove dados sensiveis e vinculos de usuarios reais
+- `.secrets/`: credenciais locais ignoradas pelo Git
+- `dumps/`: dumps gerados localmente, ignorados pelo Git
+
+## Migrations
+
+Fluxo resumido:
+
+```bash
+npm run db:new -- nome_da_migration
+npm run db:up:local
+npm run dev
+```
+
+Quando a migration estiver validada:
+
+```bash
+npm run db:link:staging
+npm run db:push:dry
+npm run db:push
+```
+
+Guia detalhado: [MIGRATIONS.md](/Users/ALAMINO/Documents/projects/campeonato-app/MIGRATIONS.md)
+
+## Ambientes
+
+Guia detalhado de local, staging e producao: [ENVIRONMENTS.md](/Users/ALAMINO/Documents/projects/campeonato-app/ENVIRONMENTS.md)

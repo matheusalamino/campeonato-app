@@ -1,0 +1,4 @@
+-- Deprecated.
+-- O admin local agora e criado por scripts/seed-auth-local.sh via Auth Admin API,
+-- porque inserts diretos em auth.users/auth.identities podem quebrar quando o
+-- schema interno do Supabase muda.
