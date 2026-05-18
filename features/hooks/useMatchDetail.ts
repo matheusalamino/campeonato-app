@@ -6,6 +6,74 @@ import type { KnockoutMatch, MatchStatus, MatchPeriod } from "@/types/championsh
 
 const supabase = createClient();
 
+type PlayerRegistrationRow = {
+  id: string;
+  registration_id: string;
+  championship_registrations: PlayerRegistration | PlayerRegistration[] | null;
+};
+
+type PlayerRegistration = {
+  id: string;
+  profile_photo_link: string | null;
+  players:
+    | {
+        id: string;
+        name: string;
+        position: string | null;
+      }
+    | {
+        id: string;
+        name: string;
+        position: string | null;
+      }[]
+    | null;
+};
+
+function singleRelation<T>(relation: T | T[] | null): T | null {
+  return Array.isArray(relation) ? (relation[0] ?? null) : relation;
+}
+
+type MatchEventRow = {
+  id: string;
+  event_type: string;
+  event_time_s: number;
+  period: string;
+  player_id: string | null;
+  player: { players: { name: string | null } | { name: string | null }[] | null } | { players: { name: string | null } | { name: string | null }[] | null }[] | null;
+  assist_player_id: string | null;
+  assist: { players: { name: string | null } | { name: string | null }[] | null } | { players: { name: string | null } | { name: string | null }[] | null }[] | null;
+  player_in_id: string | null;
+  player_in: { players: { name: string | null } | { name: string | null }[] | null } | { players: { name: string | null } | { name: string | null }[] | null }[] | null;
+  team_id: string;
+  related_event_id: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+type MatchPenaltyRow = {
+  id: string;
+  team_id: string;
+  player_id: string | null;
+  championship_registrations:
+    | {
+        players: { name: string | null } | { name: string | null }[] | null;
+      }
+    | {
+        players: { name: string | null } | { name: string | null }[] | null;
+      }[]
+    | null;
+  shot_order: number;
+  result: MatchPenalty["result"];
+};
+
+type MatchLineupRow = {
+  id: string;
+  player_id: string;
+  championship_team_id: string;
+  is_starter: boolean;
+  is_captain: boolean;
+};
+
 export type MatchPlayer = {
   registrationId: string;
   name: string;
@@ -187,49 +255,51 @@ export function useMatchDetail(matchId: string) {
         : Promise.resolve({ data: [] }),
     ]);
 
-    function mapPlayers(rows: any[] | null, ctId: string, lps: MatchLineupPlayer[]): MatchPlayer[] {
-      return (rows ?? []).map((row: any) => {
+    function mapPlayers(rows: PlayerRegistrationRow[] | null, ctId: string, lps: MatchLineupPlayer[]): MatchPlayer[] {
+      return (rows ?? []).map((row) => {
         const lineup = lps.find((l) => l.playerId === row.registration_id);
+        const registration = singleRelation(row.championship_registrations);
+        const player = singleRelation(registration?.players ?? null);
         return {
           registrationId: row.registration_id,
-          name: row.championship_registrations?.players?.name ?? "Jogador",
-          position: row.championship_registrations?.players?.position ?? null,
+          name: player?.name ?? "Jogador",
+          position: player?.position ?? null,
           number: null,
           teamId: ctId,
           isStarter: lineup?.isStarter ?? false,
           isCaptain: lineup?.isCaptain ?? false,
-          photoUrl: row.championship_registrations?.profile_photo_link ?? null,
+          photoUrl: registration?.profile_photo_link ?? null,
         };
       });
     }
 
-    const events: MatchEventItem[] = (eventRows ?? []).map((ev: any) => ({
+    const events: MatchEventItem[] = ((eventRows ?? []) as MatchEventRow[]).map((ev) => ({
       id: ev.id,
       eventType: ev.event_type,
       eventTimeS: ev.event_time_s,
       period: ev.period,
       playerId: ev.player_id,
-      playerName: ev.player?.players?.name ?? null,
+      playerName: singleRelation(singleRelation(ev.player)?.players ?? null)?.name ?? null,
       assistPlayerId: ev.assist_player_id,
-      assistPlayerName: ev.assist?.players?.name ?? null,
+      assistPlayerName: singleRelation(singleRelation(ev.assist)?.players ?? null)?.name ?? null,
       playerInId: ev.player_in_id,
-      playerInName: ev.player_in?.players?.name ?? null,
+      playerInName: singleRelation(singleRelation(ev.player_in)?.players ?? null)?.name ?? null,
       teamId: ev.team_id,
       relatedEventId: ev.related_event_id,
       notes: ev.notes,
       createdAt: ev.created_at,
     }));
 
-    const penalties: MatchPenalty[] = (penaltyRows ?? []).map((p: any) => ({
+    const penalties: MatchPenalty[] = ((penaltyRows ?? []) as MatchPenaltyRow[]).map((p) => ({
       id: p.id,
       teamId: p.team_id,
       playerId: p.player_id,
-      playerName: p.championship_registrations?.players?.name ?? null,
+      playerName: singleRelation(singleRelation(p.championship_registrations)?.players ?? null)?.name ?? null,
       shotOrder: p.shot_order,
       result: p.result as MatchPenalty["result"],
     }));
 
-    const lineups: MatchLineupPlayer[] = (lineupRows ?? []).map((l: any) => ({
+    const lineups: MatchLineupPlayer[] = ((lineupRows ?? []) as MatchLineupRow[]).map((l) => ({
       id: l.id,
       playerId: l.player_id,
       championshipTeamId: l.championship_team_id,
@@ -273,7 +343,11 @@ export function useMatchDetail(matchId: string) {
     setLoading(false);
   }, [matchId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    queueMicrotask(() => {
+      void load();
+    });
+  }, [load]);
 
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);

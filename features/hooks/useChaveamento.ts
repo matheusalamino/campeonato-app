@@ -108,9 +108,10 @@ export function useChaveamento(championshipId: string) {
         .eq("championship_id", championshipId);
 
       const managerMap: Record<string, string> = {};
-      (cmRows ?? []).forEach((cm: any) => {
-        if (cm.team_id && cm.managers?.name) {
-          managerMap[cm.team_id] = cm.managers.name;
+      (cmRows ?? []).forEach((cm) => {
+        const manager = Array.isArray(cm.managers) ? cm.managers[0] : cm.managers;
+        if (cm.team_id && manager?.name) {
+          managerMap[cm.team_id] = manager.name;
         }
       });
 

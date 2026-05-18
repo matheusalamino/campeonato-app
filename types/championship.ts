@@ -4,6 +4,7 @@ export interface Championship {
   season?: string;
   status?: string;
   overall?: number;
+  champion_team_id?: string | null;
 
   // ── Configurações globais de pontuação (Módulo 1) ──────────────────────────
   /** Pontos por vitória. Default: 3 */

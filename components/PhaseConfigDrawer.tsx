@@ -101,8 +101,8 @@ export function PhaseConfigDrawer({ phase, onClose }: Props) {
       }
       toast.success("Configurações aplicadas com sucesso");
       onClose();
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao salvar");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro ao salvar");
     } finally {
       setSaving(false);
     }

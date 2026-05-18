@@ -12,6 +12,26 @@ import { Settings, Save, LayoutGrid, Trophy, Clock, Settings2 } from "lucide-rea
 
 const supabase = createClient();
 
+type GlobalSettings = {
+  points_win: number;
+  points_draw: number;
+  points_loss: number;
+  periods_count: number;
+  period_duration: number;
+};
+
+function settingsFromChampionship(
+  championship: NonNullable<ReturnType<typeof useChampionship>["championship"]>,
+): GlobalSettings {
+  return {
+    points_win: championship.points_win ?? 3,
+    points_draw: championship.points_draw ?? 1,
+    points_loss: championship.points_loss ?? 0,
+    periods_count: championship.periods_count ?? 2,
+    period_duration: championship.period_duration ?? 7,
+  };
+}
+
 export default function SettingsPage() {
   const { championship } = useChampionship();
 
@@ -21,7 +41,7 @@ export default function SettingsPage() {
 
   const { phases, loading, deletePhase, reload } = usePhases(championship?.id || null);
 
-  const [globalSettings, setGlobalSettings] = useState({
+  const [globalSettings, setGlobalSettings] = useState<GlobalSettings>({
     points_win: 3,
     points_draw: 1,
     points_loss: 0,
@@ -31,15 +51,9 @@ export default function SettingsPage() {
   const [savingGlobal, setSavingGlobal] = useState(false);
 
   useEffect(() => {
-    if (championship) {
-      setGlobalSettings({
-        points_win: (championship as any).points_win ?? 3,
-        points_draw: (championship as any).points_draw ?? 1,
-        points_loss: (championship as any).points_loss ?? 0,
-        periods_count: (championship as any).periods_count ?? 2,
-        period_duration: (championship as any).period_duration ?? 7,
-      });
-    }
+    if (!championship) return;
+    const nextSettings = settingsFromChampionship(championship);
+    queueMicrotask(() => setGlobalSettings(nextSettings));
   }, [championship]);
 
   async function handleSaveGlobal() {

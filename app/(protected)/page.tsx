@@ -14,8 +14,13 @@ export default function Dashboard() {
     async function loadChampion() {
       if (championship?.champion_team_id) {
         const supabase = createClient();
-        const { data } = await supabase.from("teams").select("name, logo_url").eq("id", championship.champion_team_id).single();
-        if (data) setChampionTeam(data);
+        const { data } = await supabase
+          .from("championship_teams")
+          .select("teams(name, logo_url)")
+          .eq("id", championship.champion_team_id)
+          .single();
+        const team = Array.isArray(data?.teams) ? data.teams[0] : data?.teams;
+        if (team) setChampionTeam(team);
       } else {
         setChampionTeam(null);
       }

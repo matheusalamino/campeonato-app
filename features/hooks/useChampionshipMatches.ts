@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type {
   MatchSlot,
-  KnockoutMatch,
   KnockoutMatchSource,
   Phase,
 } from "@/types/championship";
@@ -49,6 +48,17 @@ type GroupSlotRow = {
   phase_id: string;
   label: string;
   championship_team_id: string | null;
+};
+
+type ChampionshipMatchRow = {
+  id: string;
+  phase_id: string;
+  name: string | null;
+  round_number: number | null;
+  code: string | null;
+  group_label: string | null;
+  scheduled_at: string | null;
+  is_final: boolean | null;
 };
 
 function teamFromChampionshipTeamId(
@@ -165,7 +175,7 @@ async function fetchChampionshipMatchGroups(
       .in("phase_id", groupPhaseIds.length ? groupPhaseIds : ["__none__"]),
   ]);
 
-  const matches = (matchRows ?? []) as KnockoutMatch[];
+  const matches = (matchRows ?? []) as ChampionshipMatchRow[];
   const matchIds = matches.map((match) => match.id);
 
   const ctRows = (championshipTeams ?? []) as {
@@ -242,7 +252,7 @@ async function fetchChampionshipMatchGroups(
   const phaseMap = Object.fromEntries(phaseRows.map((phase) => [phase.id, phase]));
 
   function resolveSide(
-    match: KnockoutMatch,
+    match: ChampionshipMatchRow,
     phase: Phase,
     slotOrder: 1 | 2,
   ): MatchSide {

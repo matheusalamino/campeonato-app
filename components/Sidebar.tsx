@@ -10,6 +10,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 type Championship = {
   id: string;
   name: string;
+  champion_team_id: string | null;
 };
 
 export function Sidebar({ role }: { role: string | null }) {
@@ -31,7 +32,7 @@ export function Sidebar({ role }: { role: string | null }) {
     async function loadChampionships() {
       const { data } = await supabase
         .from("championships")
-        .select("id, name")
+        .select("id, name, champion_team_id")
         .order("name");
 
       setChampionships(data || []);

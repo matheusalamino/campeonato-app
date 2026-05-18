@@ -45,8 +45,19 @@ function resolveSourceLabel(
     if (team) return { label: team.name, logoUrl: team.logo_url, type: "team" };
   }
 
-  // 2. group_slots via name parsing
-  if (match.name) {
+  // 2. knockout_match_sources
+  const source = sources.find((s) => s.knockout_match_id === match.id && s.slot_order === slotOrder);
+  if (source) {
+    if (source.source_type === "group_position")
+      return { label: `${source.source_position ?? "?"}º ${source.source_group ?? "?"}`, logoUrl: null, type: "rule" };
+    if (source.source_type === "match_winner")
+      return { label: `Vencedor ${source.source_match_code ?? "?"}`, logoUrl: null, type: "rule" };
+    if (source.source_type === "match_loser")
+      return { label: `Perdedor ${source.source_match_code ?? "?"}`, logoUrl: null, type: "rule" };
+  }
+
+  // 3. group_slots via name parsing
+  if (match.name && match.name.toLowerCase().includes(" x ")) {
     const parts = match.name.split(/\s+x\s+/i).map((p) => p.trim());
     const label = slotOrder === 1 ? parts[0] : parts[1];
     if (label) {
@@ -60,33 +71,23 @@ function resolveSourceLabel(
     }
   }
 
-  // 3. knockout_match_sources
-  const source = sources.find((s) => s.knockout_match_id === match.id && s.slot_order === slotOrder);
-  if (source) {
-    if (source.source_type === "group_position")
-      return { label: `${source.source_position ?? "?"}º ${source.source_group ?? "?"}`, logoUrl: null, type: "rule" };
-    if (source.source_type === "match_winner")
-      return { label: `Vencedor ${source.source_match_code ?? "?"}`, logoUrl: null, type: "rule" };
-    if (source.source_type === "match_loser")
-      return { label: `Perdedor ${source.source_match_code ?? "?"}`, logoUrl: null, type: "rule" };
-  }
-
   return { label: "A definir", logoUrl: null, type: "pending" };
 }
 
 export function useMatchList() {
   const { championship } = useChampionship();
+  const championshipId = championship?.id ?? null;
   const [items, setItems] = useState<MatchListItem[]>([]);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
-    if (!championship?.id) { setItems([]); return; }
+    if (!championshipId) { setItems([]); return; }
     setLoading(true);
 
     const { data: phases } = await supabase
       .from("phases")
       .select("id, name, order_number, type")
-      .eq("championship_id", championship.id)
+      .eq("championship_id", championshipId)
       .order("order_number");
 
     if (!phases?.length) { setLoading(false); setItems([]); return; }
@@ -105,7 +106,7 @@ export function useMatchList() {
         .select("id, phase_id, name, code, round_number, group_label, scheduled_at, status, home_score, away_score, current_period, championship_id")
         .in("phase_id", phaseIds)
         .order("scheduled_at", { ascending: true, nullsFirst: false }),
-      supabase.from("championship_teams").select("id, team_id").eq("championship_id", championship.id),
+      supabase.from("championship_teams").select("id, team_id").eq("championship_id", championshipId),
       supabase.from("group_slots").select("phase_id, label, championship_team_id").in("phase_id", phaseIds),
       supabase.from("match_slots").select("match_id, slot_order, label, championship_team_id"),
       supabase.from("knockout_match_sources").select("knockout_match_id, slot_order, source_type, source_group, source_position, source_match_code"),
@@ -149,21 +150,23 @@ export function useMatchList() {
 
     setItems(result);
     setLoading(false);
-  }, [championship?.id]);
+  }, [championshipId]);
 
   useEffect(() => {
-    void load();
-    if (!championship?.id) return;
+    queueMicrotask(() => {
+      void load();
+    });
+    if (!championshipId) return;
 
     // Auto-refresh when match state or events change
     const channel = supabase
-      .channel(`match-list-${championship.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "knockout_matches", filter: `championship_id=eq.${championship.id}` }, () => { void load(); })
+      .channel(`match-list-${championshipId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "knockout_matches", filter: `championship_id=eq.${championshipId}` }, () => { void load(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "match_events_v2" }, () => { void load(); })
       .subscribe();
 
     return () => { void supabase.removeChannel(channel); };
-  }, [load, championship?.id]);
+  }, [load, championshipId]);
 
   return { items, loading, reload: load };
 }

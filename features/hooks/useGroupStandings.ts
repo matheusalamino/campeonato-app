@@ -6,6 +6,15 @@ import type { TieBreakerCriterion } from "@/types/championship";
 
 const supabase = createClient();
 
+type TeamRelation = {
+  name: string | null;
+  logo_url: string | null;
+};
+
+function singleTeamRelation(teams: TeamRelation | TeamRelation[] | null): TeamRelation | null {
+  return Array.isArray(teams) ? (teams[0] ?? null) : teams;
+}
+
 export type TeamStanding = {
   teamId: string;
   championshipTeamId: string;
@@ -91,10 +100,11 @@ export function useGroupStandings(championshipId: string | null, phaseId: string
       // ── 2. CT → team info map ─────────────────────────────────────────────
       const ctMap: Record<string, { teamId: string; name: string; logoUrl: string | null }> = {};
       (teamsRows ?? []).forEach((ct) => {
+        const team = singleTeamRelation(ct.teams);
         ctMap[ct.id] = {
           teamId: ct.team_id,
-          name: (ct.teams as any)?.name ?? "Time",
-          logoUrl: (ct.teams as any)?.logo_url ?? null,
+          name: team?.name ?? "Time",
+          logoUrl: team?.logo_url ?? null,
         };
       });
 
