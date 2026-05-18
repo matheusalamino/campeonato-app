@@ -23,6 +23,13 @@ type Props = {
   phase?: Phase | null;
 };
 
+type KnockoutMatchOption = {
+  id: string;
+  code: string | null;
+  name: string | null;
+  phase_id: string;
+};
+
 export function CreatePhaseForm({ onClose, phase }: Props) {
   const supabase = createClient();
   const { championship } = useChampionship();
@@ -61,7 +68,7 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
 
   // ── Extra data for dropdowns and edit mode ─────────────────────────────────
   const [allPhases, setAllPhases] = useState<Phase[]>([]);
-  const [allKnockoutMatches, setAllKnockoutMatches] = useState<any[]>([]);
+  const [allKnockoutMatches, setAllKnockoutMatches] = useState<KnockoutMatchOption[]>([]);
 
   // 1. Fetch other phases and matches for the championship
   useEffect(() => {
@@ -477,7 +484,7 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
                 >
                   <option value="">Confronto...</option>
                   {allKnockoutMatches.filter(m => m.phase_id === slot.source_phase_id).map(m => (
-                    <option key={m.code} value={m.code}>{m.code} - {m.name}</option>
+                    <option key={m.id} value={m.code ?? ""}>{m.code ?? "Sem código"} - {m.name}</option>
                   ))}
                 </select>
               </>

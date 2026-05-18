@@ -1,0 +1,10 @@
+# Utilitario para operacoes de dump contra o banco remoto de staging.
+# Nao sobe o app local nem substitui o stack do Supabase local.
+services:
+  db-tools:
+    image: postgres:17-alpine
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    env_file:
+      - ./.secrets/staging.env
