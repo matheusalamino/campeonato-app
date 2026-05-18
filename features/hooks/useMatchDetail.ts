@@ -14,6 +14,7 @@ export type MatchPlayer = {
   teamId: string; // championship_team_id
   isStarter?: boolean;
   isCaptain?: boolean;
+  photoUrl: string | null;
 };
 
 export type MatchEventItem = {
@@ -66,8 +67,8 @@ export type MatchDetail = {
     penalty_winner_team_id: string | null;
     championship_id: string;
   };
-  homeTeam: { id: string; name: string; logoUrl: string | null; championshipTeamId: string };
-  awayTeam: { id: string; name: string; logoUrl: string | null; championshipTeamId: string };
+  homeTeam: { id: string; name: string; logoUrl: string | null; championshipTeamId: string; uniformColor: string | null };
+  awayTeam: { id: string; name: string; logoUrl: string | null; championshipTeamId: string; uniformColor: string | null };
   homePlayers: MatchPlayer[];
   awayPlayers: MatchPlayer[];
   events: MatchEventItem[];
@@ -121,7 +122,7 @@ export function useMatchDetail(matchId: string) {
     // Resolve home/away via match_slots
     const { data: slots } = await supabase
       .from("match_slots")
-      .select("slot_order, championship_team_id")
+      .select("slot_order, championship_team_id, uniform_color")
       .eq("match_id", matchId)
       .order("slot_order");
 
@@ -173,13 +174,16 @@ export function useMatchDetail(matchId: string) {
     const homeTeamData = resolvedHomeCTId ? ctToTeam[resolvedHomeCTId] : null;
     const awayTeamData = resolvedAwayCTId ? ctToTeam[resolvedAwayCTId] : null;
 
+    const homeColor = slots?.find((s) => s.slot_order === 1)?.uniform_color ?? null;
+    const awayColor = slots?.find((s) => s.slot_order === 2)?.uniform_color ?? null;
+
     // Players for each team
     const [{ data: homePlayers }, { data: awayPlayers }] = await Promise.all([
       resolvedHomeCTId
-        ? supabase.from("championship_team_players").select("id, registration_id, championship_registrations(id, players(id, name, position))").eq("championship_team_id", resolvedHomeCTId)
+        ? supabase.from("championship_team_players").select("id, registration_id, championship_registrations(id, profile_photo_link, players(id, name, position))").eq("championship_team_id", resolvedHomeCTId)
         : Promise.resolve({ data: [] }),
       resolvedAwayCTId
-        ? supabase.from("championship_team_players").select("id, registration_id, championship_registrations(id, players(id, name, position))").eq("championship_team_id", resolvedAwayCTId)
+        ? supabase.from("championship_team_players").select("id, registration_id, championship_registrations(id, profile_photo_link, players(id, name, position))").eq("championship_team_id", resolvedAwayCTId)
         : Promise.resolve({ data: [] }),
     ]);
 
@@ -194,6 +198,7 @@ export function useMatchDetail(matchId: string) {
           teamId: ctId,
           isStarter: lineup?.isStarter ?? false,
           isCaptain: lineup?.isCaptain ?? false,
+          photoUrl: row.championship_registrations?.profile_photo_link ?? null,
         };
       });
     }
@@ -232,12 +237,33 @@ export function useMatchDetail(matchId: string) {
       isCaptain: l.is_captain
     }));
 
+    // ── Live score calculation ────────────────────────────────────────────────
+    // When a match is IN_PROGRESS, compute score from the events list rather
+    // than trusting the DB column (which may lag behind). This guarantees the
+    // Scoreboard updates the instant a new event arrives via Realtime.
+    const homeCTId = resolvedHomeCTId ?? "";
+    const awayCTId = resolvedAwayCTId ?? "";
+
+    const liveMatch = { ...match };
+    if (match.status === "IN_PROGRESS") {
+      liveMatch.home_score = events.filter(
+        (e) =>
+          (e.eventType === "GOAL" && e.teamId === homeCTId) ||
+          (e.eventType === "OWN_GOAL" && e.teamId === awayCTId),
+      ).length;
+      liveMatch.away_score = events.filter(
+        (e) =>
+          (e.eventType === "GOAL" && e.teamId === awayCTId) ||
+          (e.eventType === "OWN_GOAL" && e.teamId === homeCTId),
+      ).length;
+    }
+
     setDetail({
-      match,
-      homeTeam: { id: homeTeamData?.id ?? "", name: homeTeamData?.name ?? "Time A", logoUrl: homeTeamData?.logo_url ?? null, championshipTeamId: resolvedHomeCTId ?? "" },
-      awayTeam: { id: awayTeamData?.id ?? "", name: awayTeamData?.name ?? "Time B", logoUrl: awayTeamData?.logo_url ?? null, championshipTeamId: resolvedAwayCTId ?? "" },
-      homePlayers: mapPlayers(homePlayers, resolvedHomeCTId ?? "", lineups),
-      awayPlayers: mapPlayers(awayPlayers, resolvedAwayCTId ?? "", lineups),
+      match: liveMatch,
+      homeTeam: { id: homeTeamData?.id ?? "", name: homeTeamData?.name ?? "Time A", logoUrl: homeTeamData?.logo_url ?? null, championshipTeamId: homeCTId, uniformColor: homeColor },
+      awayTeam: { id: awayTeamData?.id ?? "", name: awayTeamData?.name ?? "Time B", logoUrl: awayTeamData?.logo_url ?? null, championshipTeamId: awayCTId, uniformColor: awayColor },
+      homePlayers: mapPlayers(homePlayers, homeCTId, lineups),
+      awayPlayers: mapPlayers(awayPlayers, awayCTId, lineups),
       events,
       penalties,
       lineups,

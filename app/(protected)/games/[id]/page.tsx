@@ -106,6 +106,28 @@ const EVENT_TYPES = [
   { type: "OWN_GOAL", icon: "🔴", label: "G. Contra" },
 ];
 
+function getTeamCurrentLineup(teamId: string, detail: MatchDetail) {
+  const teamPlayers = teamId === detail.homeTeam.championshipTeamId ? detail.homePlayers : detail.awayPlayers;
+  const starters = new Set(detail.lineups.filter(l => l.championshipTeamId === teamId && l.isStarter).map(l => l.playerId));
+  
+  const currentOnField = new Set(Array.from(starters));
+  
+  // Sort substitutions by time or creation
+  const subs = detail.events
+    .filter(e => e.teamId === teamId && e.eventType === "SUBSTITUTION")
+    .sort((a, b) => a.eventTimeS - b.eventTimeS);
+    
+  subs.forEach(s => {
+    if (s.playerId) currentOnField.delete(s.playerId); // player out
+    if (s.playerInId) currentOnField.add(s.playerInId); // player in
+  });
+  
+  const onField = teamPlayers.filter(p => currentOnField.has(p.registrationId));
+  const bench = teamPlayers.filter(p => !currentOnField.has(p.registrationId));
+  
+  return { onField, bench };
+}
+
 function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
   detail: MatchDetail; elapsed: number; onClose: () => void; onSaved: () => void;
 }) {
@@ -118,11 +140,25 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const players = teamId === detail.homeTeam.championshipTeamId ? detail.homePlayers : detail.awayPlayers;
-  const filtered = players.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
+  const { onField, bench } = getTeamCurrentLineup(teamId, detail);
+  
+  // Decide which list to show based on step and event type
+  let playersToPick = onField;
+  if (eventType === "SUBSTITUTION") {
+    if (step === 3) playersToPick = onField; // Who is going out
+    else if (step === 3.6) playersToPick = bench; // Who is coming in
+  } else {
+    // Goals, cards, saves, fouls, etc - usually by players on the field
+    playersToPick = onField;
+  }
 
-  // For assist or sub picking, exclude the already selected primary player
-  const filteredSecondary = filtered.filter(p => p.registrationId !== player?.registrationId);
+  const filtered = playersToPick.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
+
+  // For assist, exclude the already selected primary player
+  const filteredSecondary = onField.filter(p => 
+    p.registrationId !== player?.registrationId && 
+    p.name.toLowerCase().includes(search.toLowerCase())
+  );
 
   async function save() {
     setSaving(true);
@@ -136,8 +172,33 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
       event_time_s: elapsed,
       period: detail.match.current_period,
     });
+    if (error) { setSaving(false); toast.error("Erro ao salvar evento"); return; }
+
+    // If it's a scoring event, sync the DB score column so other screens stay up-to-date
+    if (eventType === "GOAL" || eventType === "OWN_GOAL") {
+      const { data: allGoals } = await supabase
+        .from("match_events_v2")
+        .select("event_type, team_id")
+        .eq("knockout_match_id", detail.match.id)
+        .is("deleted_at", null)
+        .in("event_type", ["GOAL", "OWN_GOAL"]);
+
+      const homeCT = detail.homeTeam.championshipTeamId;
+      const awayCT = detail.awayTeam.championshipTeamId;
+      const newHome = (allGoals ?? []).filter(
+        (e) => (e.event_type === "GOAL" && e.team_id === homeCT) || (e.event_type === "OWN_GOAL" && e.team_id === awayCT)
+      ).length;
+      const newAway = (allGoals ?? []).filter(
+        (e) => (e.event_type === "GOAL" && e.team_id === awayCT) || (e.event_type === "OWN_GOAL" && e.team_id === homeCT)
+      ).length;
+
+      await supabase
+        .from("knockout_matches")
+        .update({ home_score: newHome, away_score: newAway })
+        .eq("id", detail.match.id);
+    }
+
     setSaving(false);
-    if (error) { toast.error("Erro ao salvar evento"); return; }
     toast.success(`${EVENT_META[eventType]?.label ?? eventType} registrado em ${formatTime(elapsed)}`);
     onSaved();
     onClose();
@@ -219,14 +280,23 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
               <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
                 {filtered.map((p) => (
                   <button key={p.registrationId} onClick={() => handlePlayerSelect(p)}
-                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-zinc-800 transition-all text-left">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-700 text-xs font-bold text-zinc-300">{p.number ?? "?"}</span>
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-zinc-800 transition-all text-left group">
+                    <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden group-hover:border-blue-500/50">
+                      {p.photoUrl ? (
+                        <img src={p.photoUrl} alt={p.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="text-xs font-bold text-zinc-500">{p.number ?? "?"}</span>
+                      )}
+                    </div>
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-white">{p.name}</span>
+                        <span className="font-bold text-white group-hover:text-blue-400 transition-colors">{p.name}</span>
                         {p.isCaptain && <span className="flex h-4 w-4 items-center justify-center rounded bg-yellow-500 text-[10px] font-black text-black" title="Capitão">C</span>}
                       </div>
-                      {p.position && <span className="text-[10px] text-zinc-500 uppercase tracking-widest">{p.position}</span>}
+                      <div className="flex items-center gap-2">
+                        {p.position && <span className="text-[10px] text-zinc-500 uppercase tracking-widest">{p.position}</span>}
+                        {p.number && <span className="text-[10px] text-zinc-600 font-mono">#{p.number}</span>}
+                      </div>
                     </div>
                   </button>
                 ))}
@@ -262,14 +332,22 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
               <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
                 {filteredSecondary.map((p) => (
                   <button key={p.registrationId} onClick={() => { setAssistPlayer(p); setStep(4); }}
-                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-zinc-800 transition-all text-left">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-700 text-xs font-bold text-zinc-300">{p.number ?? "?"}</span>
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-zinc-800 transition-all text-left group">
+                    <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden group-hover:border-blue-500/50">
+                      {p.photoUrl ? (
+                        <img src={p.photoUrl} alt={p.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="text-xs font-bold text-zinc-500">{p.number ?? "?"}</span>
+                      )}
+                    </div>
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-white">{p.name}</span>
+                        <span className="font-bold text-white group-hover:text-blue-400 transition-colors">{p.name}</span>
                         {p.isCaptain && <span className="flex h-4 w-4 items-center justify-center rounded bg-yellow-500 text-[10px] font-black text-black" title="Capitão">C</span>}
                       </div>
-                      {p.position && <span className="text-[10px] text-zinc-500 uppercase tracking-widest">{p.position}</span>}
+                      <div className="flex items-center gap-2">
+                        {p.position && <span className="text-[10px] text-zinc-500 uppercase tracking-widest">{p.position}</span>}
+                      </div>
                     </div>
                   </button>
                 ))}
@@ -284,13 +362,19 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
               <p className="mb-3 text-sm font-semibold text-zinc-300">Quem está entrando?</p>
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 Buscar jogador..." className="mb-3 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none focus:border-blue-500" />
               <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
-                {filteredSecondary.map((p) => (
+                {filtered.map((p) => (
                   <button key={p.registrationId} onClick={() => { setPlayerIn(p); setStep(4); }}
-                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-zinc-800 transition-all text-left">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-700 text-xs font-bold text-zinc-300">{p.number ?? "?"}</span>
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-zinc-800 transition-all text-left group">
+                    <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden group-hover:border-blue-500/50">
+                      {p.photoUrl ? (
+                        <img src={p.photoUrl} alt={p.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="text-xs font-bold text-zinc-500">{p.number ?? "?"}</span>
+                      )}
+                    </div>
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-white">{p.name}</span>
+                        <span className="font-bold text-white group-hover:text-blue-400 transition-colors">{p.name}</span>
                         {p.isCaptain && <span className="flex h-4 w-4 items-center justify-center rounded bg-yellow-500 text-[10px] font-black text-black" title="Capitão">C</span>}
                       </div>
                       {p.position && <span className="text-[10px] text-zinc-500 uppercase tracking-widest">{p.position}</span>}
@@ -429,8 +513,17 @@ function Scoreboard({ detail, elapsed }: { detail: MatchDetail; elapsed: number 
       {/* Teams + Score */}
       <div className="flex items-center justify-center gap-4">
         <div className="flex flex-1 flex-col items-center gap-2">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-zinc-800 ring-2 ring-zinc-700">
-            {homeTeam.logoUrl ? <img src={homeTeam.logoUrl} alt={homeTeam.name} className="h-full w-full rounded-full object-cover" /> : <Shield className="h-7 w-7 text-zinc-500" />}
+          <div className="relative">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-zinc-800 ring-2 ring-zinc-700 overflow-hidden">
+              {homeTeam.logoUrl ? <img src={homeTeam.logoUrl} alt={homeTeam.name} className="h-full w-full object-cover" /> : <Shield className="h-7 w-7 text-zinc-500" />}
+            </div>
+            {homeTeam.uniformColor && (
+              <div 
+                className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-2 border-zinc-900 shadow-lg"
+                style={{ backgroundColor: homeTeam.uniformColor }}
+                title={`Uniforme: ${homeTeam.uniformColor}`}
+              />
+            )}
           </div>
           <span className="text-xs font-bold uppercase tracking-wide text-white max-w-[80px] truncate">{homeTeam.name}</span>
         </div>
@@ -447,8 +540,17 @@ function Scoreboard({ detail, elapsed }: { detail: MatchDetail; elapsed: number 
         </div>
 
         <div className="flex flex-1 flex-col items-center gap-2">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-zinc-800 ring-2 ring-zinc-700">
-            {awayTeam.logoUrl ? <img src={awayTeam.logoUrl} alt={awayTeam.name} className="h-full w-full rounded-full object-cover" /> : <Shield className="h-7 w-7 text-zinc-500" />}
+          <div className="relative">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-zinc-800 ring-2 ring-zinc-700 overflow-hidden">
+              {awayTeam.logoUrl ? <img src={awayTeam.logoUrl} alt={awayTeam.name} className="h-full w-full object-cover" /> : <Shield className="h-7 w-7 text-zinc-500" />}
+            </div>
+            {awayTeam.uniformColor && (
+              <div 
+                className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-2 border-zinc-900 shadow-lg"
+                style={{ backgroundColor: awayTeam.uniformColor }}
+                title={`Uniforme: ${awayTeam.uniformColor}`}
+              />
+            )}
           </div>
           <span className="text-xs font-bold uppercase tracking-wide text-white max-w-[80px] truncate">{awayTeam.name}</span>
         </div>

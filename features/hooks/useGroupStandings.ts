@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { TieBreakerCriterion } from "@/types/championship";
 
@@ -22,157 +22,272 @@ export type TeamStanding = {
   recentForm: ("W" | "D" | "L")[];
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// The hook fetches group standings for a given championship phase.
+// It includes IN_PROGRESS matches, computes live scores from events, and
+// auto-refreshes via polling (every 15 s) + Supabase Realtime.
+// ─────────────────────────────────────────────────────────────────────────────
 export function useGroupStandings(championshipId: string | null, phaseId: string | null) {
   const [standings, setStandings] = useState<Record<string, TeamStanding[]>>({});
   const [loading, setLoading] = useState(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const calculate = useCallback(async () => {
-    if (!championshipId || !phaseId) return;
-    setLoading(true);
-
-    // 1. Fetch rules, groups, teams, and matches
-    const [
-      { data: rules },
-      { data: groups },
-      { data: teamsRows },
-      { data: matches },
-      { data: champSettings }
-    ] = await Promise.all([
-      supabase.from("tie_breaker_rules").select("rule, priority").eq("phase_id", phaseId).order("priority"),
-      supabase.from("groups").select("id, name").eq("phase_id", phaseId),
-      supabase.from("championship_teams").select("id, team_id, teams(name, logo_url)").eq("championship_id", championshipId),
-      supabase.from("knockout_matches").select("*").eq("phase_id", phaseId).eq("status", "COMPLETED"),
-      supabase.from("championships").select("points_win, points_draw, points_loss").eq("id", championshipId).single()
-    ]);
-
-    const ptsWin = champSettings?.points_win ?? 3;
-    const ptsDraw = champSettings?.points_draw ?? 1;
-    const ptsLoss = champSettings?.points_loss ?? 0;
-
-    // Map championship_team_id to team info
-    const ctMap: Record<string, any> = {};
-    (teamsRows ?? []).forEach(ct => {
-      ctMap[ct.id] = { 
-        teamId: ct.team_id, 
-        name: ct.teams?.name ?? "Time", 
-        logoUrl: ct.teams?.logo_url ?? null 
-      };
-    });
-
-    // Initialize standings for each group
-    const groupStandings: Record<string, Record<string, TeamStanding>> = {};
-    (groups ?? []).forEach(g => {
-      groupStandings[g.id] = {};
-    });
-
-    // We also need to know which team belongs to which group
-    const { data: groupSlots } = await supabase.from("group_slots").select("group_letter, championship_team_id").eq("phase_id", phaseId);
-    
-    // Helper to find group id by letter (e.g. 'A' -> matches 'Grupo A' or 'A')
-    const findGroupIdByLetter = (letter: string) => {
-      return (groups ?? []).find(g => g.name === letter || g.name.endsWith(` ${letter}`))?.id;
-    };
-
-    (groupSlots ?? []).forEach(slot => {
-      const groupId = findGroupIdByLetter(slot.group_letter);
-      if (groupId && slot.championship_team_id && groupStandings[groupId]) {
-        const team = ctMap[slot.championship_team_id];
-        if (team) {
-          groupStandings[groupId][slot.championship_team_id] = {
-            teamId: team.teamId,
-            championshipTeamId: slot.championship_team_id,
-            name: team.name,
-            logoUrl: team.logoUrl,
-            played: 0, won: 0, drawn: 0, lost: 0,
-            goalsFor: 0, goalsAgainst: 0, goalDifference: 0,
-            points: 0,
-            recentForm: []
-          };
-        }
-      }
-    });
-
-    // Process matches
-    // Need match_slots to know who played in each knockout_match
-    const { data: slots } = await supabase.from("match_slots").select("match_id, slot_order, championship_team_id");
-    const matchToTeams: Record<string, { homeCT?: string, awayCT?: string }> = {};
-    (slots ?? []).forEach(s => {
-      if (!matchToTeams[s.match_id]) matchToTeams[s.match_id] = {};
-      if (s.slot_order === 1) matchToTeams[s.match_id].homeCT = s.championship_team_id;
-      if (s.slot_order === 2) matchToTeams[s.match_id].awayCT = s.championship_team_id;
-    });
-
-    (matches ?? []).forEach(m => {
-      const teams = matchToTeams[m.id];
-      if (!teams || !teams.homeCT || !teams.awayCT) return;
-
-      // Find which group these teams belong to
-      const homeSlot = (groupSlots ?? []).find(gs => gs.championship_team_id === teams.homeCT);
-      const groupId = homeSlot ? findGroupIdByLetter(homeSlot.group_letter) : null;
-      if (!groupId || !groupStandings[groupId]) return;
-
-      const home = groupStandings[groupId][teams.homeCT];
-      const away = groupStandings[groupId][teams.awayCT];
-      if (!home || !away) return;
-
-      const hScore = m.home_score ?? 0;
-      const aScore = m.away_score ?? 0;
-
-      home.played++;
-      away.played++;
-      home.goalsFor += hScore;
-      home.goalsAgainst += aScore;
-      away.goalsFor += aScore;
-      away.goalsAgainst += hScore;
-
-      if (hScore > aScore) {
-        home.won++; home.points += ptsWin; home.recentForm.push("W");
-        away.lost++; away.points += ptsLoss; away.recentForm.push("L");
-      } else if (hScore < aScore) {
-        away.won++; away.points += ptsWin; away.recentForm.push("W");
-        home.lost++; home.points += ptsLoss; home.recentForm.push("L");
-      } else {
-        home.drawn++; home.points += ptsDraw; home.recentForm.push("D");
-        away.drawn++; away.points += ptsDraw; away.recentForm.push("D");
-      }
-
-      home.goalDifference = home.goalsFor - home.goalsAgainst;
-      away.goalDifference = away.goalsFor - away.goalsAgainst;
-    });
-
-    // Sort function based on rules
-    const sortStandings = (a: TeamStanding, b: TeamStanding) => {
-      const criteria = rules?.length ? rules.map(r => r.rule as TieBreakerCriterion) : ["points", "goal_diff", "goals_for"];
-      
-      for (const rule of criteria) {
-        if (rule === "points") {
-          if (a.points !== b.points) return b.points - a.points;
-        }
-        if (rule === "goal_diff") {
-          if (a.goalDifference !== b.goalDifference) return b.goalDifference - a.goalDifference;
-        }
-        if (rule === "goals_for") {
-          if (a.goalsFor !== b.goalsFor) return b.goalsFor - a.goalsFor;
-        }
-        if (rule === "wins") {
-          if (a.won !== b.won) return b.won - a.won;
-        }
-      }
-      return a.name.localeCompare(b.name);
-    };
-
-    const finalStandings: Record<string, TeamStanding[]> = {};
-    Object.keys(groupStandings).forEach(gid => {
-      finalStandings[gid] = Object.values(groupStandings[gid]).sort(sortStandings);
-    });
-
-    setStandings(finalStandings);
-    setLoading(false);
-  }, [championshipId, phaseId]);
+  // Use refs so the calculate function is stable and doesn't re-create unnecessarily
+  const championshipIdRef = useRef(championshipId);
+  const phaseIdRef = useRef(phaseId);
 
   useEffect(() => {
-    calculate();
-  }, [calculate]);
+    championshipIdRef.current = championshipId;
+    phaseIdRef.current = phaseId;
+  });
+
+  const calculate = useCallback(async () => {
+    const cId = championshipIdRef.current;
+    const pId = phaseIdRef.current;
+    if (!cId || !pId) return;
+
+    setLoading(true);
+
+    try {
+      // ── 1. Fetch all needed data in parallel ─────────────────────────────
+      const [
+        { data: rules },
+        { data: groups },
+        { data: teamsRows },
+        { data: matches },
+        { data: champSettings },
+        { data: groupSlots },
+        { data: allSlots },
+        { data: goalEvents },
+      ] = await Promise.all([
+        supabase.from("tie_breaker_rules").select("rule, priority").eq("phase_id", pId).order("priority"),
+        supabase.from("groups").select("id, name").eq("phase_id", pId),
+        supabase.from("championship_teams").select("id, team_id, teams(name, logo_url)").eq("championship_id", cId),
+        // Include both COMPLETED and IN_PROGRESS — live games must appear immediately
+        supabase
+          .from("knockout_matches")
+          .select("id, status, home_score, away_score, name")
+          .eq("phase_id", pId)
+          .in("status", ["COMPLETED", "IN_PROGRESS"]),
+        supabase.from("championships").select("points_win, points_draw, points_loss").eq("id", cId).single(),
+        supabase.from("group_slots").select("group_letter, label, championship_team_id").eq("phase_id", pId),
+        // All slots (no phase filter) — filtered later by match ids
+        supabase
+          .from("match_slots")
+          .select("match_id, slot_order, championship_team_id")
+          .order("slot_order", { ascending: true }),
+        // Only goal events that are not soft-deleted
+        supabase
+          .from("match_events_v2")
+          .select("knockout_match_id, event_type, team_id")
+          .is("deleted_at", null)
+          .in("event_type", ["GOAL", "OWN_GOAL"]),
+      ]);
+
+      const ptsWin  = champSettings?.points_win  ?? 3;
+      const ptsDraw = champSettings?.points_draw ?? 1;
+      const ptsLoss = champSettings?.points_loss ?? 0;
+
+      // ── 2. CT → team info map ─────────────────────────────────────────────
+      const ctMap: Record<string, { teamId: string; name: string; logoUrl: string | null }> = {};
+      (teamsRows ?? []).forEach((ct) => {
+        ctMap[ct.id] = {
+          teamId: ct.team_id,
+          name: (ct.teams as any)?.name ?? "Time",
+          logoUrl: (ct.teams as any)?.logo_url ?? null,
+        };
+      });
+
+      // ── 3. Initialize standings per group ─────────────────────────────────
+      const groupStandings: Record<string, Record<string, TeamStanding>> = {};
+      (groups ?? []).forEach((g) => { groupStandings[g.id] = {}; });
+
+      // ── 4. Helper: find group ID by letter (robust, case-insensitive) ─────
+      const findGroupId = (letter: string): string | undefined => {
+        const l = (letter ?? "").trim().toUpperCase();
+        const found = (groups ?? []).find((g) => {
+          const n = g.name.toUpperCase();
+          return n === l || n.endsWith(` ${l}`) || n.includes(`GRUPO ${l}`);
+        });
+        if (found) return found.id;
+        // Single-group phase → always use that group as fallback
+        if ((groups ?? []).length === 1) return groups![0].id;
+        return undefined;
+      };
+
+      // ── 5. Seed each group with its teams at 0 stats ──────────────────────
+      (groupSlots ?? []).forEach((slot) => {
+        const groupId = findGroupId(slot.group_letter);
+        if (!groupId || !slot.championship_team_id || !groupStandings[groupId]) return;
+        const team = ctMap[slot.championship_team_id];
+        if (!team) return;
+        groupStandings[groupId][slot.championship_team_id] = {
+          teamId: team.teamId,
+          championshipTeamId: slot.championship_team_id,
+          name: team.name,
+          logoUrl: team.logoUrl,
+          played: 0, won: 0, drawn: 0, lost: 0,
+          goalsFor: 0, goalsAgainst: 0, goalDifference: 0,
+          points: 0,
+          recentForm: [],
+        };
+      });
+
+      // ── 6. match → {homeCT, awayCT} map ──────────────────────────────────
+      // Group-phase matches have championship_team_id = null in match_slots.
+      // Teams are resolved via the match name (e.g. "A1 x A3") against the
+      // group_slots.label column — same fallback useMatchDetail already uses.
+      const matchIds = new Set((matches ?? []).map((m) => m.id));
+
+      // Build label → championship_team_id map from group_slots
+      const labelToCT: Record<string, string> = {};
+      (groupSlots ?? []).forEach((gs) => {
+        if (gs.label && gs.championship_team_id) {
+          labelToCT[gs.label] = gs.championship_team_id;
+        }
+      });
+
+      const matchToTeams: Record<string, { homeCT: string; awayCT: string }> = {};
+      (matches ?? []).forEach((m) => {
+        // 1st priority: match_slots with non-null CT (knockout phases)
+        const homeSlot = (allSlots ?? []).find(
+          (s) => s.match_id === m.id && s.slot_order === 1 && s.championship_team_id,
+        );
+        const awaySlot = (allSlots ?? []).find(
+          (s) => s.match_id === m.id && s.slot_order === 2 && s.championship_team_id,
+        );
+        if (homeSlot?.championship_team_id && awaySlot?.championship_team_id) {
+          matchToTeams[m.id] = { homeCT: homeSlot.championship_team_id, awayCT: awaySlot.championship_team_id };
+          return;
+        }
+
+        // 2nd priority: parse match name ("A1 x A3") and look up label → CT
+        if (m.name) {
+          const parts = (m.name as string).split(/\s+x\s+/i).map((p) => p.trim());
+          const homeCT = labelToCT[parts[0]];
+          const awayCT = labelToCT[parts[1]];
+          if (homeCT && awayCT) {
+            matchToTeams[m.id] = { homeCT, awayCT };
+          }
+        }
+      });
+
+      // ── 7. Index goal events by match ─────────────────────────────────────
+      const goalsByMatch: Record<string, Array<{ event_type: string; team_id: string }>> = {};
+      (goalEvents ?? []).forEach((ev) => {
+        if (!goalsByMatch[ev.knockout_match_id]) goalsByMatch[ev.knockout_match_id] = [];
+        goalsByMatch[ev.knockout_match_id].push(ev);
+      });
+
+      // ── 8. Process each match ─────────────────────────────────────────────
+      (matches ?? []).forEach((m) => {
+        const teams = matchToTeams[m.id];
+        if (!teams?.homeCT || !teams?.awayCT) return;
+
+        const homeGroupSlot = (groupSlots ?? []).find((gs) => gs.championship_team_id === teams.homeCT);
+        const groupId = homeGroupSlot ? findGroupId(homeGroupSlot.group_letter) : undefined;
+        if (!groupId || !groupStandings[groupId]) return;
+
+        const home = groupStandings[groupId][teams.homeCT];
+        const away = groupStandings[groupId][teams.awayCT];
+        if (!home || !away) return;
+
+        let hScore: number;
+        let aScore: number;
+
+        if (m.status === "IN_PROGRESS") {
+          const evs = goalsByMatch[m.id] ?? [];
+          hScore = evs.filter(
+            (e) =>
+              (e.event_type === "GOAL"     && e.team_id === teams.homeCT) ||
+              (e.event_type === "OWN_GOAL" && e.team_id === teams.awayCT),
+          ).length;
+          aScore = evs.filter(
+            (e) =>
+              (e.event_type === "GOAL"     && e.team_id === teams.awayCT) ||
+              (e.event_type === "OWN_GOAL" && e.team_id === teams.homeCT),
+          ).length;
+        } else {
+          hScore = m.home_score ?? 0;
+          aScore = m.away_score ?? 0;
+        }
+
+        home.played++;
+        away.played++;
+        home.goalsFor     += hScore;
+        home.goalsAgainst += aScore;
+        away.goalsFor     += aScore;
+        away.goalsAgainst += hScore;
+
+        if (hScore > aScore) {
+          home.won++;   home.points  += ptsWin;  home.recentForm.push("W");
+          away.lost++;  away.points  += ptsLoss; away.recentForm.push("L");
+        } else if (hScore < aScore) {
+          away.won++;   away.points  += ptsWin;  away.recentForm.push("W");
+          home.lost++;  home.points  += ptsLoss; home.recentForm.push("L");
+        } else {
+          home.drawn++; home.points  += ptsDraw; home.recentForm.push("D");
+          away.drawn++; away.points  += ptsDraw; away.recentForm.push("D");
+        }
+
+        home.goalDifference = home.goalsFor - home.goalsAgainst;
+        away.goalDifference = away.goalsFor - away.goalsAgainst;
+      });
+
+      // ── 9. Sort by tie-breaker rules ──────────────────────────────────────
+      const criteria = (rules ?? []).length
+        ? (rules ?? []).map((r) => r.rule as TieBreakerCriterion)
+        : (["points", "goal_diff", "goals_for"] as TieBreakerCriterion[]);
+
+      const sortStandings = (a: TeamStanding, b: TeamStanding): number => {
+        for (const rule of criteria) {
+          if (rule === "points"    && a.points         !== b.points)         return b.points         - a.points;
+          if (rule === "goal_diff" && a.goalDifference !== b.goalDifference) return b.goalDifference - a.goalDifference;
+          if (rule === "goals_for" && a.goalsFor       !== b.goalsFor)       return b.goalsFor       - a.goalsFor;
+          if (rule === "wins"      && a.won            !== b.won)            return b.won            - a.won;
+        }
+        return a.name.localeCompare(b.name);
+      };
+
+      const finalStandings: Record<string, TeamStanding[]> = {};
+      Object.keys(groupStandings).forEach((gid) => {
+        finalStandings[gid] = Object.values(groupStandings[gid]).sort(sortStandings);
+      });
+
+      setStandings(finalStandings);
+    } finally {
+      setLoading(false);
+    }
+  }, []); // stable — reads IDs from refs
+
+  // ── 10. Run on mount / when IDs change + polling + Realtime ──────────────
+  useEffect(() => {
+    void calculate();
+
+    // ── Polling every 15 s ────────────────────────────────────────────────
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    pollingRef.current = setInterval(() => { void calculate(); }, 15_000);
+
+    // ── Supabase Realtime subscriptions ───────────────────────────────────
+    const cId = championshipIdRef.current;
+    const pId = phaseIdRef.current;
+    if (!cId || !pId) return;
+
+    const channel = supabase
+      .channel(`group-standings-${pId}-${Date.now()}`)
+      // Match status or score changed (started, finished, score synced)
+      .on("postgres_changes", { event: "*", schema: "public", table: "knockout_matches", filter: `phase_id=eq.${pId}` }, () => { void calculate(); })
+      // Goal inserted or soft-deleted
+      .on("postgres_changes", { event: "*", schema: "public", table: "match_events_v2" }, () => { void calculate(); })
+      // Tie-breaker rule change → re-sort immediately
+      .on("postgres_changes", { event: "*", schema: "public", table: "tie_breaker_rules", filter: `phase_id=eq.${pId}` }, () => { void calculate(); })
+      .subscribe();
+
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      void supabase.removeChannel(channel);
+    };
+  }, [championshipId, phaseId, calculate]);
 
   return { standings, loading, reload: calculate };
 }

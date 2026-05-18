@@ -151,7 +151,19 @@ export function useMatchList() {
     setLoading(false);
   }, [championship?.id]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    if (!championship?.id) return;
+
+    // Auto-refresh when match state or events change
+    const channel = supabase
+      .channel(`match-list-${championship.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "knockout_matches", filter: `championship_id=eq.${championship.id}` }, () => { void load(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "match_events_v2" }, () => { void load(); })
+      .subscribe();
+
+    return () => { void supabase.removeChannel(channel); };
+  }, [load, championship?.id]);
 
   return { items, loading, reload: load };
 }

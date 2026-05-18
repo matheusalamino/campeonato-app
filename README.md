@@ -117,6 +117,12 @@ npm run local:pull:production
 
 O script exige confirmacao explicita no terminal antes de continuar.
 
+Se voce ja tem um dump salvo e quer apenas restaurar o mais recente sem gerar outro:
+
+```bash
+npm run local:restore:last-production
+```
+
 Atalho equivalente:
 
 ```bash
@@ -130,6 +136,7 @@ make pull-prod
 - `scripts/pull-staging.sh`: gera dump sanitizado de staging e restaura localmente
 - `scripts/pull-prod.sh`: mesmo fluxo para producao, com confirmacao
 - `scripts/restore-local-from-dump.sh`: restaura qualquer dump compatibilizando com o schema local
+- `scripts/restore-last-production.sh`: restaura automaticamente o dump de producao mais recente
 - `scripts/prepare-local-import.mjs`: adapta o dump para colunas que existem no schema local
 - `scripts/sanitize-dump.mjs`: remove dados sensiveis e vinculos de usuarios reais
 - `.secrets/`: credenciais locais ignoradas pelo Git

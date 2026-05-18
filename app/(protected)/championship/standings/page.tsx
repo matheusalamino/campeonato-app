@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useChampionship } from "@/components/ChampionshipContext";
 import { usePhases } from "@/features/hooks/usePhases";
 import { useGroupStandings } from "@/features/hooks/useGroupStandings";
-import { Shield, Trophy, ChevronRight, Info } from "lucide-react";
+import { Shield, Trophy, Info, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function StandingsPage() {
@@ -14,10 +14,16 @@ export default function StandingsPage() {
   // Filter only group phases
   const groupPhases = phases.filter(p => p.type === "group");
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // If no phase selected and group phases exist, select the first one
   const activePhaseId = selectedPhaseId || groupPhases[0]?.id || null;
-  const { standings, loading: loadingStandings } = useGroupStandings(championship?.id || null, activePhaseId);
+  const { standings, loading: loadingStandings, reload } = useGroupStandings(championship?.id || null, activePhaseId);
+
+  const handleReload = useCallback(async () => {
+    await reload();
+    setLastUpdated(new Date());
+  }, [reload]);
 
   if (!championship) {
     return (
@@ -31,7 +37,7 @@ export default function StandingsPage() {
   return (
     <div className="space-y-6 p-4 md:p-6 pb-20">
       {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
             {championship.name}
@@ -40,26 +46,45 @@ export default function StandingsPage() {
             <Trophy className="h-6 w-6 text-yellow-500" />
             Classificação
           </h1>
+          {lastUpdated && (
+            <p className="text-[10px] text-zinc-600">
+              Atualizado às {lastUpdated.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </p>
+          )}
         </div>
 
-        {groupPhases.length > 1 && (
-          <div className="flex gap-2">
-            {groupPhases.map(p => (
-              <button
-                key={p.id}
-                onClick={() => setSelectedPhaseId(p.id)}
-                className={cn(
-                  "rounded-full px-4 py-2 text-xs font-bold transition-all",
-                  activePhaseId === p.id 
-                    ? "bg-blue-600 text-white" 
-                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                )}
-              >
-                {p.name}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Manual refresh button */}
+          <button
+            onClick={() => void handleReload()}
+            disabled={loadingStandings}
+            title="Atualizar classificação"
+            className="flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs font-bold text-zinc-400 hover:border-zinc-600 hover:text-white transition-all disabled:opacity-50"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", loadingStandings && "animate-spin")} />
+            Atualizar
+          </button>
+
+          {/* Phase tabs (only when there are multiple group phases) */}
+          {groupPhases.length > 1 && (
+            <div className="flex gap-2">
+              {groupPhases.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => setSelectedPhaseId(p.id)}
+                  className={cn(
+                    "rounded-full px-4 py-2 text-xs font-bold transition-all",
+                    activePhaseId === p.id
+                      ? "bg-blue-600 text-white"
+                      : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                  )}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {loadingPhases || loadingStandings ? (

@@ -7,6 +7,9 @@ pull-stg:
 pull-prod:
 	npm run local:pull:production
 
+restore-last-prod:
+	npm run local:restore:last-production
+
 check-stg:
 	npm run local:check:staging
 

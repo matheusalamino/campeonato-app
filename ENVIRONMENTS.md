@@ -119,6 +119,12 @@ npm run local:pull:production
 
 Esse fluxo pede confirmacao obrigatoria no terminal antes de iniciar.
 
+Se voce ja tem um dump de producao salvo e quer apenas reaplicar o mais recente no banco local:
+
+```bash
+npm run local:restore:last-production
+```
+
 ## Arquivos sensiveis
 
 Arquivos ignorados pelo Git:
@@ -159,6 +165,13 @@ npm run dev
 cp .secrets/production.env.example .secrets/production.env
 npm run local:check:production
 npm run local:pull:production
+npm run dev
+```
+
+### Quero reaplicar o ultimo dump de producao que ja possuo
+
+```bash
+npm run local:restore:last-production
 npm run dev
 ```
 
