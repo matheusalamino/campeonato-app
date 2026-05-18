@@ -33,6 +33,13 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# local database dumps and secrets
+/dumps/*
+!/dumps/.gitkeep
+/.secrets/*
+!/.secrets/.gitkeep
+!/.secrets/*.env.example
+
 # vercel
 .vercel
 
