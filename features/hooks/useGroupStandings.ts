@@ -31,6 +31,17 @@ export type TeamStanding = {
   recentForm: ("W" | "D" | "L")[];
 };
 
+function normalizeGroupName(name: string | null | undefined, fallbackLetter?: string | null): string {
+  const raw = (name ?? "").trim();
+  const fallback = (fallbackLetter ?? "").trim().toUpperCase();
+  const letterFromName = raw.match(/(?:^|\s)grupo\s+([A-Z])\b/i)?.[1] ?? raw.match(/^([A-Z])$/i)?.[1];
+  const letter = (letterFromName ?? fallback).toUpperCase();
+
+  if (letter) return `Grupo ${letter}`;
+  if (/^grupo\s+/i.test(raw)) return raw;
+  return raw ? `Grupo ${raw}` : "Grupo";
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // The hook fetches group standings for a given championship phase.
 // It includes IN_PROGRESS matches, computes live scores from events, and
@@ -38,6 +49,7 @@ export type TeamStanding = {
 // ─────────────────────────────────────────────────────────────────────────────
 export function useGroupStandings(championshipId: string | null, phaseId: string | null) {
   const [standings, setStandings] = useState<Record<string, TeamStanding[]>>({});
+  const [groupLabels, setGroupLabels] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -143,12 +155,30 @@ export function useGroupStandings(championshipId: string | null, phaseId: string
         };
       });
 
+      const orderedGroupLetters = Array.from(
+        new Set((groupSlots ?? []).map((slot) => slot.group_letter).filter(Boolean)),
+      ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+      const lettersByGroupId: Record<string, string> = {};
+      (groupSlots ?? []).forEach((slot) => {
+        const groupId = findGroupId(slot.group_letter);
+        if (groupId && !lettersByGroupId[groupId]) {
+          lettersByGroupId[groupId] = slot.group_letter;
+        }
+      });
+
+      const labelsByGroupId: Record<string, string> = {};
+      (groups ?? []).forEach((group, index) => {
+        labelsByGroupId[group.id] = normalizeGroupName(
+          group.name,
+          lettersByGroupId[group.id] ?? orderedGroupLetters[index],
+        );
+      });
+
       // ── 6. match → {homeCT, awayCT} map ──────────────────────────────────
       // Group-phase matches have championship_team_id = null in match_slots.
       // Teams are resolved via the match name (e.g. "A1 x A3") against the
       // group_slots.label column — same fallback useMatchDetail already uses.
-      const matchIds = new Set((matches ?? []).map((m) => m.id));
-
       // Build label → championship_team_id map from group_slots
       const labelToCT: Record<string, string> = {};
       (groupSlots ?? []).forEach((gs) => {
@@ -265,6 +295,7 @@ export function useGroupStandings(championshipId: string | null, phaseId: string
       });
 
       setStandings(finalStandings);
+      setGroupLabels(labelsByGroupId);
     } finally {
       setLoading(false);
     }
@@ -299,5 +330,5 @@ export function useGroupStandings(championshipId: string | null, phaseId: string
     };
   }, [championshipId, phaseId, calculate]);
 
-  return { standings, loading, reload: calculate };
+  return { standings, groupLabels, loading, reload: calculate };
 }

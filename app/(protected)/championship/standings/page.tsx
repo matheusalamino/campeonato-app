@@ -18,7 +18,7 @@ export default function StandingsPage() {
 
   // If no phase selected and group phases exist, select the first one
   const activePhaseId = selectedPhaseId || groupPhases[0]?.id || null;
-  const { standings, loading: loadingStandings, reload } = useGroupStandings(championship?.id || null, activePhaseId);
+  const { standings, groupLabels, loading: loadingStandings, reload } = useGroupStandings(championship?.id || null, activePhaseId);
 
   const handleReload = useCallback(async () => {
     await reload();
@@ -104,8 +104,7 @@ export default function StandingsPage() {
             <div key={groupId} className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-xl">
               <div className="bg-zinc-900/50 px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
                 <h3 className="font-bold text-sm uppercase tracking-widest text-zinc-300">
-                  Grupo {teams[0]?.name?.split(' ')[0] === 'Grupo' ? '' : (phases.find(p => p.id === activePhaseId)?.name || '')} 
-                  {/* Note: logic to show group name could be more robust */}
+                  {groupLabels[groupId] ?? "Grupo"}
                 </h3>
                 <span className="text-[10px] text-zinc-500 font-medium">JOGARES / PONTOS</span>
               </div>

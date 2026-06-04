@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  ArrowLeft, Shield, Clock, CheckCircle2, ChevronRight,
-  Plus, Trash2, Target, AlertCircle,
+  ArrowLeft, ArrowUpDown, Hand, Shield, ShieldCheck, Clock, CheckCircle2, ChevronRight,
+  Plus, Trash2, Target, AlertCircle, Square,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -12,24 +12,159 @@ import { useMatchDetail, formatTime, type MatchPlayer, type MatchDetail } from "
 import { useMatchStatus } from "@/features/hooks/useMatchStatus";
 import { PenaltyShootoutControl } from "@/components/PenaltyShootoutControl";
 import { LineupControl } from "@/components/LineupControl";
+import { MatchFieldView } from "@/components/MatchFieldView";
 import { cn } from "@/lib/utils";
 import type { MatchPeriod } from "@/types/championship";
 
 const supabase = createClient();
 
 // ─── EVENT ICONS ────────────────────────────────────────────────────────────
-const EVENT_META: Record<string, { icon: string; label: string; color: string }> = {
-  GOAL:             { icon: "⚽", label: "Gol",          color: "text-emerald-400" },
-  ASSIST:           { icon: "🅰️", label: "Assistência",  color: "text-blue-400" },
-  YELLOW_CARD:      { icon: "🟨", label: "Amarelo",      color: "text-yellow-400" },
-  RED_CARD:         { icon: "🟥", label: "Vermelho",     color: "text-red-400" },
-  BLUE_CARD:        { icon: "🟦", label: "Azul",         color: "text-blue-400" },
-  FOUL:             { icon: "👊", label: "Falta",        color: "text-orange-400" },
-  SAVE:             { icon: "🥅", label: "Defesa",       color: "text-purple-400" },
-  SUBSTITUTION_OUT: { icon: "🔄", label: "Substituição", color: "text-zinc-400" },
-  SUBSTITUTION_IN:  { icon: "🔄", label: "Entra",        color: "text-zinc-400" },
-  OWN_GOAL:         { icon: "🔴", label: "Gol Contra",   color: "text-red-400" },
+type EventIconKind =
+  | "goal"
+  | "own-goal"
+  | "assist"
+  | "yellow-card"
+  | "second-yellow"
+  | "red-card"
+  | "foul"
+  | "save"
+  | "substitution";
+
+const EVENT_META: Record<string, { icon: EventIconKind; label: string; color: string }> = {
+  GOAL:             { icon: "goal",         label: "Gol",          color: "text-emerald-400" },
+  ASSIST:           { icon: "assist",       label: "Assistência",  color: "text-blue-400" },
+  YELLOW_CARD:      { icon: "yellow-card",  label: "Amarelo",      color: "text-yellow-400" },
+  RED_CARD:         { icon: "red-card",     label: "Vermelho",     color: "text-red-400" },
+  FOUL:             { icon: "foul",         label: "Falta",        color: "text-orange-400" },
+  SAVE:             { icon: "save",         label: "Defesa",       color: "text-purple-400" },
+  SUBSTITUTION_OUT: { icon: "substitution", label: "Substituição", color: "text-zinc-400" },
+  SUBSTITUTION_IN:  { icon: "substitution", label: "Entra",        color: "text-zinc-400" },
+  SUBSTITUTION:     { icon: "substitution", label: "Substituição", color: "text-zinc-400" },
+  OWN_GOAL:         { icon: "own-goal",     label: "Gol Contra",   color: "text-red-400" },
 };
+
+function SoccerBallIcon({
+  className,
+  ballColor = "currentColor",
+  seamColor = "currentColor",
+}: {
+  className?: string;
+  ballColor?: string;
+  seamColor?: string;
+}) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none">
+      <circle cx="12" cy="12" r="9" fill={ballColor} opacity="0.14" />
+      <circle cx="12" cy="12" r="9" stroke={ballColor} strokeWidth="1.8" />
+      <path
+        d="M12 7.2 15.5 9.7 14.2 13.8H9.8L8.5 9.7 12 7.2Z"
+        stroke={seamColor}
+        strokeWidth="1.55"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8.5 9.7 5.1 8.9M15.5 9.7l3.4-.8M9.8 13.8l-2 3M14.2 13.8l2 3M12 7.2V3.4"
+        stroke={seamColor}
+        strokeWidth="1.55"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function EventIcon({
+  icon,
+  className = "h-5 w-5",
+}: {
+  icon: EventIconKind;
+  className?: string;
+}) {
+  if (icon === "goal") return <SoccerBallIcon className={className} />;
+  if (icon === "own-goal") return <SoccerBallIcon className={className} ballColor="#f8fafc" seamColor="#f87171" />;
+  if (icon === "substitution") return <ArrowUpDown className={className} strokeWidth={2.4} />;
+  if (icon === "foul") return <Hand className={className} strokeWidth={2.4} />;
+  if (icon === "save") return <ShieldCheck className={className} strokeWidth={2.4} />;
+  if (icon === "assist") {
+    return (
+      <span className={cn("inline-flex items-center justify-center font-black leading-none", className)}>
+        A
+      </span>
+    );
+  }
+  if (icon === "second-yellow") {
+    return (
+      <span className={cn("relative inline-flex items-center justify-center", className)}>
+        <Square className="absolute left-[1px] top-[1px] h-[72%] w-[72%] fill-current text-yellow-400" strokeWidth={2.2} />
+        <Square className="absolute bottom-[1px] right-[1px] h-[72%] w-[72%] fill-current text-red-400" strokeWidth={2.2} />
+      </span>
+    );
+  }
+
+  return (
+    <Square
+      className={cn(
+        className,
+        icon === "yellow-card" && "fill-current",
+        icon === "red-card" && "fill-current",
+      )}
+      strokeWidth={2.2}
+    />
+  );
+}
+
+function EventIconByType({ type, className }: { type: string; className?: string }) {
+  const meta = EVENT_META[type];
+  if (!meta) return <span className={cn("inline-block rounded-full bg-current", className)} />;
+  return <EventIcon icon={meta.icon} className={className} />;
+}
+
+function sortMatchEventsChronologically(events: MatchDetail["events"]) {
+  return [...events].sort(
+    (a, b) =>
+      a.eventTimeS - b.eventTimeS ||
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+}
+
+function getSecondYellowEventIds(events: MatchDetail["events"]) {
+  const yellowCounts = new Map<string, number>();
+  const secondYellowIds = new Set<string>();
+
+  for (const event of sortMatchEventsChronologically(events)) {
+    if (event.eventType !== "YELLOW_CARD" || !event.playerId) continue;
+
+    const nextCount = (yellowCounts.get(event.playerId) ?? 0) + 1;
+    yellowCounts.set(event.playerId, nextCount);
+
+    if (nextCount >= 2) secondYellowIds.add(event.id);
+  }
+
+  return secondYellowIds;
+}
+
+function getExpelledPlayerIds(events: MatchDetail["events"], teamId: string) {
+  const yellowCounts = new Map<string, number>();
+  const expelled = new Set<string>();
+
+  for (const event of sortMatchEventsChronologically(events)) {
+    if (event.teamId !== teamId || !event.playerId) continue;
+
+    if (event.eventType === "RED_CARD") {
+      expelled.add(event.playerId);
+      continue;
+    }
+
+    if (event.eventType === "YELLOW_CARD") {
+      const nextCount = (yellowCounts.get(event.playerId) ?? 0) + 1;
+      yellowCounts.set(event.playerId, nextCount);
+
+      if (nextCount >= 2) expelled.add(event.playerId);
+    }
+  }
+
+  return expelled;
+}
 
 const PERIOD_LABELS: Record<MatchPeriod, string> = {
   not_started:    "Não Iniciado",
@@ -96,14 +231,13 @@ function PeriodControls({ detail, elapsed, reload }: { detail: MatchDetail; elap
 
 // ─── ADD EVENT SHEET ─────────────────────────────────────────────────────────
 const EVENT_TYPES = [
-  { type: "GOAL", icon: "⚽", label: "Gol" },
-  { type: "YELLOW_CARD", icon: "🟨", label: "Amarelo" },
-  { type: "RED_CARD", icon: "🟥", label: "Vermelho" },
-  { type: "BLUE_CARD", icon: "🟦", label: "Azul" },
-  { type: "FOUL", icon: "👊", label: "Falta" },
-  { type: "SAVE", icon: "🥅", label: "Defesa" },
-  { type: "SUBSTITUTION", icon: "🔄", label: "Substituição" },
-  { type: "OWN_GOAL", icon: "🔴", label: "G. Contra" },
+  { type: "GOAL", label: "Gol" },
+  { type: "OWN_GOAL", label: "G. Contra" },
+  { type: "YELLOW_CARD", label: "Amarelo" },
+  { type: "RED_CARD", label: "Vermelho" },
+  { type: "FOUL", label: "Falta" },
+  { type: "SAVE", label: "Defesa" },
+  { type: "SUBSTITUTION", label: "Substituição" },
 ];
 
 function getTeamCurrentLineup(teamId: string, detail: MatchDetail) {
@@ -121,9 +255,14 @@ function getTeamCurrentLineup(teamId: string, detail: MatchDetail) {
     if (s.playerId) currentOnField.delete(s.playerId); // player out
     if (s.playerInId) currentOnField.add(s.playerInId); // player in
   });
+
+  const expelled = getExpelledPlayerIds(detail.events, teamId);
   
-  const onField = teamPlayers.filter(p => currentOnField.has(p.registrationId));
-  const bench = teamPlayers.filter(p => !currentOnField.has(p.registrationId));
+  // Remove expelled players from current on-field set
+  expelled.forEach(id => currentOnField.delete(id));
+  
+  const onField = teamPlayers.filter(p => currentOnField.has(p.registrationId) && !expelled.has(p.registrationId));
+  const bench = teamPlayers.filter(p => !currentOnField.has(p.registrationId) && !expelled.has(p.registrationId));
   
   return { onField, bench };
 }
@@ -241,7 +380,9 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
                 {EVENT_TYPES.map((e) => (
                   <button key={e.type} onClick={() => handleTypeSelect(e.type)}
                     className="flex flex-col items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 p-3 text-xs hover:border-blue-500 hover:bg-zinc-700 transition-all active:scale-95">
-                    <span className="text-xl">{e.icon}</span>
+                    <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900", EVENT_META[e.type].color)}>
+                      <EventIconByType type={e.type} className="h-5 w-5" />
+                    </span>
                     <span className="text-zinc-300 font-medium">{e.label}</span>
                   </button>
                 ))}
@@ -253,7 +394,10 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
           {step === 2 && (
             <div>
               <p className="mb-3 text-sm font-semibold text-zinc-300">
-                {EVENT_META[eventType]?.icon} {EVENT_META[eventType]?.label} — Selecione o time
+                <span className={cn("mr-1 inline-flex align-[-4px]", EVENT_META[eventType]?.color)}>
+                  <EventIconByType type={eventType} className="h-4 w-4" />
+                </span>
+                {EVENT_META[eventType]?.label} — Selecione o time
               </p>
               <div className="flex gap-3">
                 {[detail.homeTeam, detail.awayTeam].map((team, index) => (
@@ -393,7 +537,12 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
               <div className="rounded-2xl border border-zinc-700 bg-zinc-800/50 p-4 space-y-3 text-sm">
                 <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                   <span className="text-zinc-400">Tipo</span>
-                  <span className="font-bold text-white">{EVENT_META[eventType]?.icon} {EVENT_META[eventType]?.label}</span>
+                  <span className="inline-flex items-center gap-1.5 font-bold text-white">
+                    <span className={cn(EVENT_META[eventType]?.color)}>
+                      <EventIconByType type={eventType} className="h-4 w-4" />
+                    </span>
+                    {EVENT_META[eventType]?.label}
+                  </span>
                 </div>
                 
                 {eventType === "SUBSTITUTION" ? (
@@ -445,15 +594,22 @@ function EventList({ detail, readonly }: { detail: MatchDetail; readonly: boolea
     return <p className="py-6 text-center text-sm text-zinc-600">Nenhum evento registrado</p>;
   }
 
+  const secondYellowEventIds = getSecondYellowEventIds(detail.events);
+
   return (
     <div className="space-y-1">
       {[...detail.events].reverse().map((ev) => {
-        const meta = EVENT_META[ev.eventType] ?? { icon: "•", label: ev.eventType, color: "text-zinc-400" };
+        const isSecondYellow = secondYellowEventIds.has(ev.id);
+        const meta =
+          isSecondYellow
+            ? { icon: "second-yellow" as EventIconKind, label: "2º Amarelo", color: "text-red-400" }
+            : EVENT_META[ev.eventType] ?? { icon: "assist" as EventIconKind, label: ev.eventType, color: "text-zinc-400" };
         const isHome = ev.teamId === detail.homeTeam.championshipTeamId;
+
         return (
           <div key={ev.id} className={cn("flex gap-3", isHome ? "flex-row" : "flex-row-reverse text-right")}>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-800 text-lg border border-zinc-700/50 shadow-inner mt-1">
-              {meta.icon}
+            <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-800 border border-zinc-700/50 shadow-inner mt-1", meta.color)}>
+              <EventIcon icon={meta.icon} className="h-5 w-5" />
             </div>
             <div className="flex flex-col justify-center flex-1">
               <div className={cn("flex items-center gap-2", isHome ? "justify-start" : "justify-end")}>
@@ -471,7 +627,10 @@ function EventList({ detail, readonly }: { detail: MatchDetail; readonly: boolea
                 {ev.eventType === "GOAL" && ev.assistPlayerName && (
                   <>
                     <span className="text-zinc-600">•</span>
-                    <span className="text-zinc-400">🅰️ <span className="font-medium text-zinc-300">{ev.assistPlayerName}</span></span>
+                    <span className="inline-flex items-center gap-1 text-zinc-400">
+                      <EventIcon icon="assist" className="h-3.5 w-3.5 text-blue-400" />
+                      <span className="font-medium text-zinc-300">{ev.assistPlayerName}</span>
+                    </span>
                   </>
                 )}
               </div>
@@ -610,6 +769,9 @@ export default function MatchPage() {
       {/* Scoreboard */}
       <Scoreboard detail={detail} elapsed={elapsed} />
 
+      {/* Visual field showing current on-field players */}
+      <MatchFieldView detail={detail} />
+
       {/* Escalação (Only when not started) */}
       {!isInProgress && !isCompleted && detail.match.current_period === "not_started" && (
         <LineupControl detail={detail} onSaved={reload} />
@@ -664,7 +826,13 @@ export default function MatchPage() {
               <div key={side} className="space-y-1 px-4">
                 <p className="text-xs font-bold uppercase tracking-wide text-zinc-400 truncate">{team.name}</p>
                 <p className="text-lg font-black text-white">{goals} <span className="text-sm font-normal text-zinc-500">gols</span></p>
-                <p className="text-xs text-zinc-500">🟨 {yellows} · 🟥 {reds}</p>
+                <p className="flex items-center justify-center gap-1.5 text-xs text-zinc-500">
+                  <EventIcon icon="yellow-card" className="h-3 w-3 text-yellow-400" />
+                  <span>{yellows}</span>
+                  <span className="text-zinc-700">·</span>
+                  <EventIcon icon="red-card" className="h-3 w-3 text-red-400" />
+                  <span>{reds}</span>
+                </p>
               </div>
             );
           })}
