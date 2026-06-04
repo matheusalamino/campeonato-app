@@ -33,6 +33,9 @@ export type ChampionshipMatchItem = {
   groupLabel: string | null;
   scheduledAt: string | null;
   isFinal: boolean;
+  status: string;
+  homeScore: number | null;
+  awayScore: number | null;
   home: MatchSide;
   away: MatchSide;
 };
@@ -59,6 +62,9 @@ type ChampionshipMatchRow = {
   group_label: string | null;
   scheduled_at: string | null;
   is_final: boolean | null;
+  status: string | null;
+  home_score: number | null;
+  away_score: number | null;
 };
 
 function teamFromChampionshipTeamId(
@@ -163,7 +169,7 @@ async function fetchChampionshipMatchGroups(
   ] = await Promise.all([
     supabase
       .from("knockout_matches")
-      .select("id, phase_id, name, round_number, code, group_label, scheduled_at, is_final")
+      .select("id, phase_id, name, round_number, code, group_label, scheduled_at, is_final, status, home_score, away_score")
       .in("phase_id", phaseIds),
     supabase
       .from("championship_teams")
@@ -347,6 +353,9 @@ async function fetchChampionshipMatchGroups(
         groupLabel: match.group_label,
         scheduledAt: match.scheduled_at,
         isFinal: match.is_final ?? false,
+        status: match.status ?? "NOT_STARTED",
+        homeScore: match.home_score,
+        awayScore: match.away_score,
         home: resolveSide(match, phaseMap[match.phase_id], 1),
         away: resolveSide(match, phaseMap[match.phase_id], 2),
       }))

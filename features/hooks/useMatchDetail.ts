@@ -242,8 +242,12 @@ export function useMatchDetail(matchId: string) {
     const homeTeamData = resolvedHomeCTId ? ctToTeam[resolvedHomeCTId] : null;
     const awayTeamData = resolvedAwayCTId ? ctToTeam[resolvedAwayCTId] : null;
 
-    const homeColor = slots?.find((s) => s.slot_order === 1)?.uniform_color ?? null;
-    const awayColor = slots?.find((s) => s.slot_order === 2)?.uniform_color ?? null;
+    const homeColor = resolvedHomeCTId
+      ? (slots?.find((s) => s.championship_team_id === resolvedHomeCTId)?.uniform_color ?? slots?.find((s) => s.slot_order === 1)?.uniform_color ?? null)
+      : (slots?.find((s) => s.slot_order === 1)?.uniform_color ?? null);
+    const awayColor = resolvedAwayCTId
+      ? (slots?.find((s) => s.championship_team_id === resolvedAwayCTId)?.uniform_color ?? slots?.find((s) => s.slot_order === 2)?.uniform_color ?? null)
+      : (slots?.find((s) => s.slot_order === 2)?.uniform_color ?? null);
 
     // Players for each team
     const [{ data: homePlayers }, { data: awayPlayers }] = await Promise.all([
@@ -367,6 +371,7 @@ export function useMatchDetail(matchId: string) {
       .on("postgres_changes", { event: "*", schema: "public", table: "match_events_v2", filter: `knockout_match_id=eq.${matchId}` }, () => { void load(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "penalty_shootouts", filter: `knockout_match_id=eq.${matchId}` }, () => { void load(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "match_lineups", filter: `knockout_match_id=eq.${matchId}` }, () => { void load(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "match_slots", filter: `match_id=eq.${matchId}` }, () => { void load(); })
       .subscribe();
 
     return () => { void supabase.removeChannel(channel); };
