@@ -251,7 +251,7 @@ export function CreatePhaseForm({ onClose, phase }: Props) {
 
       // 2. Groups (A, B, C...)
       const groups = Array.from({ length: numberOfGroups }).map((_, i) => ({
-        name: alphabet[i],
+        name: `Grupo ${alphabet[i]}`,
         phase_id: phaseId,
       }));
 

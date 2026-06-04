@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Shield, Users, AlertCircle, CheckCircle2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Users, AlertCircle, CheckCircle2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { MatchDetail, MatchPlayer, MatchLineupPlayer } from "@/features/hooks/useMatchDetail";
+import type { MatchDetail, MatchPlayer } from "@/features/hooks/useMatchDetail";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
@@ -29,41 +29,51 @@ interface LineupControlProps {
 export function LineupControl({ detail, onSaved }: LineupControlProps) {
   const [activeTab, setActiveTab] = useState<"home" | "away">("home");
   const [saving, setSaving] = useState(false);
+  const [isOpen, setIsOpen] = useState(false); // Used when editing an already configured matchup
 
   const team = activeTab === "home" ? detail.homeTeam : detail.awayTeam;
   const players = activeTab === "home" ? detail.homePlayers : detail.awayPlayers;
   const teamLineup = detail.lineups.filter((l) => l.championshipTeamId === team.championshipTeamId);
 
   // Local state for editing
-  const [localStarters, setLocalStarters] = useState<Set<string>>(() => {
-    const initial = new Set(teamLineup.filter(l => l.isStarter).map(l => l.playerId));
-    // If no starters yet, auto-select goalkeeper
-    if (initial.size === 0) {
-      const gk = players.find(p => p.position === "Goleiro");
-      if (gk) initial.add(gk.registrationId);
-    }
-    return initial;
-  });
-  const [localCaptain, setLocalCaptain] = useState<string | null>(() => teamLineup.find(l => l.isCaptain)?.playerId ?? null);
-  const [localColor, setLocalColor] = useState<string | null>(() => team.uniformColor);
+  const [localStarters, setLocalStarters] = useState<Set<string>>(new Set());
+  const [localCaptain, setLocalCaptain] = useState<string | null>(null);
+  const [localColor, setLocalColor] = useState<string | null>(null);
 
-  // Update local state when tab changes
-  const switchTab = (tab: "home" | "away") => {
-    setActiveTab(tab);
-    const newTeam = tab === "home" ? detail.homeTeam : detail.awayTeam;
-    const newPlayers = tab === "home" ? detail.homePlayers : detail.awayPlayers;
-    const newLineup = detail.lineups.filter((l) => l.championshipTeamId === newTeam.championshipTeamId);
-    
-    const nextStarters = new Set(newLineup.filter(l => l.isStarter).map(l => l.playerId));
+  // Helper to validate configuration for a team
+  const checkTeamConfigured = (teamId: string) => {
+    const isHome = teamId === detail.homeTeam.championshipTeamId;
+    const lineup = detail.lineups.filter(l => l.championshipTeamId === teamId && l.isStarter);
+    const color = isHome ? detail.homeTeam.uniformColor : detail.awayTeam.uniformColor;
+    const teamPlayers = isHome ? detail.homePlayers : detail.awayPlayers;
+
+    const selected = teamPlayers.filter(p => lineup.some(l => l.playerId === p.registrationId));
+    const gkCount = selected.filter(p => p.position === "Goleiro").length;
+    const fieldCount = selected.length - gkCount;
+
+    return gkCount === 1 && fieldCount === 5 && !!color;
+  };
+
+  const homeConfigured = checkTeamConfigured(detail.homeTeam.championshipTeamId);
+  const awayConfigured = checkTeamConfigured(detail.awayTeam.championshipTeamId);
+  const isFullyConfigured = homeConfigured && awayConfigured;
+
+  // Sync local state when tab changes, details change, or modal opens/closes
+  useEffect(() => {
+    const currentTeam = activeTab === "home" ? detail.homeTeam : detail.awayTeam;
+    const currentPlayers = activeTab === "home" ? detail.homePlayers : detail.awayPlayers;
+    const currentLineup = detail.lineups.filter((l) => l.championshipTeamId === currentTeam.championshipTeamId);
+
+    const nextStarters = new Set(currentLineup.filter(l => l.isStarter).map(l => l.playerId));
     if (nextStarters.size === 0) {
-      const gk = newPlayers.find(p => p.position === "Goleiro");
+      const gk = currentPlayers.find(p => p.position === "Goleiro");
       if (gk) nextStarters.add(gk.registrationId);
     }
-    
+
     setLocalStarters(nextStarters);
-    setLocalCaptain(newLineup.find(l => l.isCaptain)?.playerId ?? null);
-    setLocalColor(newTeam.uniformColor);
-  };
+    setLocalCaptain(currentLineup.find(l => l.isCaptain)?.playerId ?? null);
+    setLocalColor(currentTeam.uniformColor);
+  }, [activeTab, detail, isOpen]);
 
   const toggleStarter = (playerId: string) => {
     const next = new Set(localStarters);
@@ -102,17 +112,20 @@ export function LineupControl({ detail, onSaved }: LineupControlProps) {
 
     setSaving(true);
     
-    // First delete existing lineups for this team in this match
+    // Delete existing lineups for this team in this match
     await supabase.from("match_lineups")
       .delete()
       .eq("knockout_match_id", detail.match.id)
       .eq("championship_team_id", team.championshipTeamId);
 
-    // Update uniform color in match_slots
+    // Update uniform color and team ID in match_slots
     await supabase.from("match_slots")
-      .update({ uniform_color: localColor })
+      .update({ 
+        uniform_color: localColor,
+        championship_team_id: team.championshipTeamId
+      })
       .eq("match_id", detail.match.id)
-      .eq("championship_team_id", team.championshipTeamId);
+      .eq("slot_order", activeTab === "home" ? 1 : 2);
 
     if (localStarters.size > 0) {
       // Insert new
@@ -133,108 +146,164 @@ export function LineupControl({ detail, onSaved }: LineupControlProps) {
       }
     }
     
-    toast.success("Escalação e cor salvas com sucesso!");
+    toast.success(`Escalação e cor salvas para o ${team.name}!`);
     setSaving(false);
-    onSaved(); // trigger reload in parent
+    onSaved(); // reload in parent
   };
 
-  // Status computation
-  const homeLineupCount = detail.lineups.filter(l => l.championshipTeamId === detail.homeTeam.championshipTeamId && l.isStarter).length;
-  const awayLineupCount = detail.lineups.filter(l => l.championshipTeamId === detail.awayTeam.championshipTeamId && l.isStarter).length;
+  const showModal = !isFullyConfigured || isOpen;
+
+  // If already configured and modal is not open, show edit button
+  if (isFullyConfigured && !isOpen) {
+    return (
+      <div className="flex justify-center p-2">
+        <button
+          onClick={() => setIsOpen(true)}
+          className="inline-flex items-center gap-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-4 py-2.5 text-xs font-bold text-zinc-300 transition-all active:scale-95 shadow-md"
+        >
+          ✏️ Editar Escalações & Cores
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 overflow-hidden shadow-2xl">
-      <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
-        <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-zinc-300">
-          <Users className="h-4 w-4 text-zinc-500" />
-          Escalação Inicial
-        </h3>
-        <div className="flex items-center gap-3">
-          <StatusBadge team={detail.homeTeam.name} count={homeLineupCount} />
-          <StatusBadge team={detail.awayTeam.name} count={awayLineupCount} />
-        </div>
-      </div>
-
-      <div className="flex border-b border-zinc-800">
-        <button onClick={() => switchTab("home")} className={cn("flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-all", activeTab === "home" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900")}>
-          {detail.homeTeam.name}
-        </button>
-        <button onClick={() => switchTab("away")} className={cn("flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-all border-l border-zinc-800", activeTab === "away" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900")}>
-          {detail.awayTeam.name}
-        </button>
-      </div>
-
-      <div className="p-4 bg-zinc-900/30">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-xs text-zinc-500 font-medium">Selecione os titulares e defina um capitão.</p>
-          <span className="text-xs font-bold text-zinc-400 bg-zinc-800 px-2 py-1 rounded-full">{localStarters.size} Titulares</span>
-        </div>
-
-        <div className="max-h-64 overflow-y-auto space-y-1 pr-1 mb-6">
-          {players.map(p => {
-            const isStarter = localStarters.has(p.registrationId);
-            const isCaptain = localCaptain === p.registrationId;
-            const isGK = p.position === "Goleiro";
-            return (
-              <div key={p.registrationId} className={cn("flex items-center justify-between p-2 rounded-lg border transition-all", isStarter ? "bg-blue-600/10 border-blue-500/30" : "bg-zinc-900 border-zinc-800/50 hover:border-zinc-700")}>
-                <label className="flex items-center gap-3 flex-1 cursor-pointer">
-                  <div className="flex h-5 w-5 items-center justify-center rounded bg-zinc-800 border border-zinc-700">
-                    {isStarter && <CheckCircle2 className="h-3.5 w-3.5 text-blue-500" />}
-                  </div>
-                  <input type="checkbox" checked={isStarter} onChange={() => toggleStarter(p.registrationId)} className="sr-only" />
-                  <div className="flex flex-col">
-                    <span className={cn("text-sm font-bold", isStarter ? "text-white" : "text-zinc-400")}>{p.name}</span>
-                    {p.position && <span className={cn("text-[10px] uppercase tracking-widest", isGK ? "text-amber-500 font-bold" : "text-zinc-500")}>{p.position}</span>}
-                  </div>
-                </label>
-                {isStarter && (
-                  <button onClick={() => setCaptain(p.registrationId)} className={cn("px-2 py-1 rounded text-[10px] font-black transition-all ml-2", isCaptain ? "bg-yellow-500 text-black shadow-[0_0_10px_rgba(234,179,8,0.4)]" : "bg-zinc-800 text-zinc-500 hover:text-yellow-500")}>
-                    CAPITÃO
-                  </button>
-                )}
-              </div>
-            );
-          })}
-          {players.length === 0 && (
-            <p className="py-8 text-center text-sm text-zinc-500">Nenhum jogador cadastrado neste time.</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+      {/* Modal Card */}
+      <div className="relative w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4 shrink-0">
+          <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-zinc-300">
+            <Users className="h-4 w-4 text-zinc-500" />
+            Configurar Escalação
+          </h3>
+          {isFullyConfigured && (
+            <button 
+              onClick={() => setIsOpen(false)} 
+              className="text-zinc-500 hover:text-white transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
           )}
         </div>
 
-        {/* Uniform Color Selector */}
-        <div className="mb-6 pt-4 border-t border-zinc-800">
-          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">Cor do Uniforme</p>
-          <div className="flex flex-wrap gap-2">
-            {UNIFORM_COLORS.map((c) => (
-              <button
-                key={c.value}
-                onClick={() => setLocalColor(c.value)}
-                className={cn(
-                  "h-8 w-8 rounded-full border-2 transition-all hover:scale-110",
-                  localColor === c.value ? "border-blue-500 scale-110" : "border-zinc-800"
-                )}
-                style={{ backgroundColor: c.value }}
-                title={c.name}
-              />
-            ))}
+        {/* Global Progress Indicators */}
+        <div className="bg-zinc-900/60 border-b border-zinc-800/80 px-5 py-3 flex items-center justify-between text-[11px] font-bold tracking-wider uppercase shrink-0">
+          <div className="flex items-center gap-1.5">
+            {homeConfigured ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <AlertCircle className="h-3.5 w-3.5 text-red-500" />}
+            <span className={homeConfigured ? "text-emerald-400" : "text-zinc-400"}>
+              {detail.homeTeam.name}
+            </span>
+          </div>
+          <div className="text-zinc-600">vs</div>
+          <div className="flex items-center gap-1.5">
+            {awayConfigured ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <AlertCircle className="h-3.5 w-3.5 text-red-500" />}
+            <span className={awayConfigured ? "text-emerald-400" : "text-zinc-400"}>
+              {detail.awayTeam.name}
+            </span>
           </div>
         </div>
 
-        <div className="mt-4 pt-4 border-t border-zinc-800">
-          <button onClick={saveLineup} disabled={saving} className="w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-500 transition-all disabled:opacity-50 uppercase tracking-wider">
-            {saving ? "Salvando..." : `Salvar Escalação do ${team.name}`}
+        {/* Tabs for switching teams */}
+        <div className="flex border-b border-zinc-800 shrink-0">
+          <button 
+            onClick={() => setActiveTab("home")} 
+            className={cn(
+              "flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-all", 
+              activeTab === "home" ? "bg-zinc-900 text-white font-black" : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900"
+            )}
+          >
+            {detail.homeTeam.name}
+          </button>
+          <button 
+            onClick={() => setActiveTab("away")} 
+            className={cn(
+              "flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-all border-l border-zinc-800", 
+              activeTab === "away" ? "bg-zinc-900 text-white font-black" : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900"
+            )}
+          >
+            {detail.awayTeam.name}
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
 
-function StatusBadge({ team, count }: { team: string; count: number }) {
-  const isOk = count > 0;
-  return (
-    <div className="flex items-center gap-1.5" title={`${team}: ${isOk ? 'Escalado' : 'Pendente'}`}>
-      {isOk ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <AlertCircle className="h-4 w-4 text-red-500" />}
-      <span className="text-[10px] font-bold text-zinc-400 uppercase max-w-[60px] truncate">{team}</span>
+        {/* Scrollable Form Content */}
+        <div className="flex-1 overflow-y-auto p-5 bg-zinc-900/10 space-y-5">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs text-zinc-500 font-medium">Selecione 1 Goleiro + 5 Linha e defina o Capitão.</p>
+              <span className="text-xs font-bold text-zinc-400 bg-zinc-800 px-2.5 py-1 rounded-full shrink-0">
+                {localStarters.size} / 6
+              </span>
+            </div>
+
+            <div className="space-y-1">
+              {players.map(p => {
+                const isStarter = localStarters.has(p.registrationId);
+                const isCaptain = localCaptain === p.registrationId;
+                const isGK = p.position === "Goleiro";
+                return (
+                  <div key={p.registrationId} className={cn("flex items-center justify-between p-2 rounded-lg border transition-all", isStarter ? "bg-blue-600/10 border-blue-500/30" : "bg-zinc-900/50 border-zinc-800/50 hover:border-zinc-700")}>
+                    <label className="flex items-center gap-3 flex-1 cursor-pointer">
+                      <div className="flex h-5 w-5 items-center justify-center rounded bg-zinc-800 border border-zinc-700">
+                        {isStarter && <CheckCircle2 className="h-3.5 w-3.5 text-blue-500" />}
+                      </div>
+                      <input type="checkbox" checked={isStarter} onChange={() => toggleStarter(p.registrationId)} className="sr-only" />
+                      <div className="flex flex-col">
+                        <span className={cn("text-sm font-bold", isStarter ? "text-white" : "text-zinc-400")}>{p.name}</span>
+                        {p.position && <span className={cn("text-[10px] uppercase tracking-widest", isGK ? "text-amber-500 font-bold" : "text-zinc-500")}>{p.position}</span>}
+                      </div>
+                    </label>
+                    {isStarter && (
+                      <button onClick={() => setCaptain(p.registrationId)} className={cn("px-2 py-1 rounded text-[10px] font-black transition-all ml-2", isCaptain ? "bg-yellow-500 text-black shadow-[0_0_10px_rgba(234,179,8,0.4)]" : "bg-zinc-800 text-zinc-500 hover:text-yellow-500")}>
+                        CAPITÃO
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {players.length === 0 && (
+                <p className="py-8 text-center text-sm text-zinc-500">Nenhum jogador cadastrado neste time.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Uniform Color Selector */}
+          <div className="pt-4 border-t border-zinc-800/80">
+            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">Cor do Uniforme</p>
+            <div className="flex flex-wrap gap-2">
+              {UNIFORM_COLORS.map((c) => (
+                <button
+                  key={c.value}
+                  onClick={() => setLocalColor(c.value)}
+                  className={cn(
+                    "h-8 w-8 rounded-full border-2 transition-all hover:scale-110",
+                    localColor === c.value ? "border-blue-500 scale-110" : "border-zinc-800"
+                  )}
+                  style={{ backgroundColor: c.value }}
+                  title={c.name}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer with Actions */}
+        <div className="p-4 border-t border-zinc-800 shrink-0 bg-zinc-950">
+          <button 
+            onClick={saveLineup} 
+            disabled={saving} 
+            className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold transition-all disabled:opacity-50 uppercase tracking-wider"
+          >
+            {saving ? "Salvando..." : `Salvar Escalação do ${team.name}`}
+          </button>
+          {!isFullyConfigured && (
+            <p className="mt-2 text-center text-[10px] text-red-400 font-semibold">
+              ⚠️ Ambas as equipes precisam ser escaladas e coloridas antes de prosseguir.
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
