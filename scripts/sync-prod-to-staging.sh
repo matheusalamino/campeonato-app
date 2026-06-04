@@ -66,7 +66,7 @@ fi
 
 mkdir -p "$DUMPS_DIR"
 
-echo "1/4 - Gerando dump de producao em $RAW_DUMP_REL..."
+echo "1/5 - Gerando dump de producao em $RAW_DUMP_REL..."
 cd "$ROOT_DIR"
 docker compose -f docker-compose.prod.yml run --rm \
   -e DUMP_PATH="/workspace/$RAW_DUMP_REL" \
@@ -87,11 +87,11 @@ docker compose -f docker-compose.prod.yml run --rm \
       "$REMOTE_DB_NAME" > "$DUMP_PATH"
   '
 
-echo "2/4 - Sanitizando dump..."
+echo "2/5 - Sanitizando dump..."
 node scripts/sanitize-dump.mjs "$RAW_DUMP" "$FINAL_DUMP"
 rm -f "$RAW_DUMP"
 
-echo "3/4 - Adicionando bloco de truncate..."
+echo "3/5 - Adicionando bloco de truncate..."
 TRUNCATE_BLOCK=$(cat <<'EOSQL'
 DO $$
 DECLARE t TEXT;
@@ -111,7 +111,7 @@ EOSQL
 printf '%s\n\n' "$TRUNCATE_BLOCK" | cat - "$FINAL_DUMP" > "${FINAL_DUMP}.tmp"
 mv "${FINAL_DUMP}.tmp" "$FINAL_DUMP"
 
-echo "4/4 - Restaurando no banco de staging..."
+echo "4/5 - Restaurando no banco de staging..."
 docker compose -f docker-compose.staging.yml run --rm \
   -e DUMP_FILE="/workspace/$FINAL_DUMP_REL" \
   db-tools \
@@ -125,6 +125,18 @@ docker compose -f docker-compose.staging.yml run --rm \
       --dbname="$REMOTE_DB_NAME" \
       -f "$DUMP_FILE"
   '
+
+echo "5/5 - Reconectando managers aos usuarios de staging por nome..."
+docker compose -f docker-compose.staging.yml run --rm db-tools sh -lc '
+  export PGPASSWORD="$REMOTE_DB_PASSWORD"
+  export PGSSLMODE="${REMOTE_DB_SSLMODE:-require}"
+  psql \
+    --host="$REMOTE_DB_HOST" \
+    --port="$REMOTE_DB_PORT" \
+    --username="$REMOTE_DB_USER" \
+    --dbname="$REMOTE_DB_NAME" \
+    -c "UPDATE managers m SET user_id = p.id FROM profiles p WHERE LOWER(TRIM(m.name)) = LOWER(TRIM(p.name)) AND p.role = '\''manager'\'' AND m.user_id IS NULL;"
+'
 
 echo "Sincronizacao concluida."
 echo "Dump salvo em: $FINAL_DUMP_REL"
