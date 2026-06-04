@@ -11,6 +11,7 @@ RAW_DUMP_REL="dumps/.prod-to-stg_${TIMESTAMP}.raw.sql"
 FINAL_DUMP_REL="dumps/prod-to-stg_${TIMESTAMP}.sql"
 RAW_DUMP="$ROOT_DIR/$RAW_DUMP_REL"
 FINAL_DUMP="$ROOT_DIR/$FINAL_DUMP_REL"
+trap 'rm -f "$RAW_DUMP"' EXIT
 
 if [ ! -f "$PROD_SECRETS" ]; then
   echo "Arquivo de secrets de producao nao encontrado: $PROD_SECRETS" >&2
