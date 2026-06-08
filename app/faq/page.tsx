@@ -989,11 +989,13 @@ const CAMPEONATO_SECTIONS: Section[] = [
     ),
     items: [
       {
-        q: "Quantos jogadores podem estar em campo?",
+        q: "Quantos jogadores cada time tem e quantos jogam em campo?",
         a: (
           <p>
-            No máximo <Emph>10 jogadores</Emph> e no mínimo{" "}
-            <Emph>9 jogadores</Emph>, sendo 1 deles o goleiro.
+            Cada time tem um elenco de <Emph>10 jogadores</Emph> (9 de linha
+            + 1 goleiro). Em campo, no modelo <Emph>society</Emph>, jogam{" "}
+            <Emph>6 por equipe</Emph>: 5 jogadores de linha + 1 goleiro. Os
+            demais ficam disponíveis para as substituições ilimitadas.
           </p>
         ),
       },
