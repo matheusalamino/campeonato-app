@@ -47,7 +47,10 @@ export function LineupControl({ detail, onSaved }: LineupControlProps) {
     const color = isHome ? detail.homeTeam.uniformColor : detail.awayTeam.uniformColor;
     const teamPlayers = isHome ? detail.homePlayers : detail.awayPlayers;
 
-    const selected = teamPlayers.filter(p => lineup.some(l => l.playerId === p.registrationId));
+    const selected = teamPlayers.filter(p =>
+      lineup.some(l => l.playerId === p.registrationId) &&
+      !detail.suspendedRegistrationIds.has(p.registrationId)
+    );
     const gkCount = selected.filter(p => p.position === "Goleiro").length;
     const fieldCount = selected.length - gkCount;
 
