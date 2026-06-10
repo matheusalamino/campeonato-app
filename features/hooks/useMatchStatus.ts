@@ -249,6 +249,12 @@ export function useMatchStatus({
                 .eq("id", freshMatch.championship_id);
             }
           }
+
+          await supabase
+            .from("suspensions")
+            .update({ served: true })
+            .eq("suspended_match_id", match.id)
+            .eq("served", false);
         }
 
         return { success: true };
