@@ -18,8 +18,9 @@ CREATE TABLE IF NOT EXISTS public.suspensions (
   created_at          TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX idx_suspensions_registration_id ON public.suspensions(registration_id);
-CREATE INDEX idx_suspensions_suspended_match  ON public.suspensions(suspended_match_id);
+CREATE INDEX IF NOT EXISTS idx_suspensions_registration_id ON public.suspensions(registration_id);
+CREATE INDEX IF NOT EXISTS idx_suspensions_suspended_match  ON public.suspensions(suspended_match_id);
+CREATE INDEX IF NOT EXISTS idx_suspensions_origin_match ON public.suspensions(origin_match_id);
 
 ALTER TABLE public.suspensions ENABLE ROW LEVEL SECURITY;
 
@@ -40,8 +41,6 @@ CREATE TABLE IF NOT EXISTS public.player_card_stats (
   active_yellow_cards  INTEGER NOT NULL DEFAULT 0,
   updated_at           TIMESTAMPTZ DEFAULT now()
 );
-
-CREATE INDEX idx_player_card_stats_registration ON public.player_card_stats(registration_id);
 
 ALTER TABLE public.player_card_stats ENABLE ROW LEVEL SECURITY;
 
