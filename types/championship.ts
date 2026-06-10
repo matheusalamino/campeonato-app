@@ -42,6 +42,8 @@ export type Phase = {
   order_number: number;
   is_home_away: boolean;
   created_at: string;
+  reset_yellow_cards: boolean;
+  yellow_cards_reset_done: boolean;
 };
 
 export type CreatePhaseDTO = {
