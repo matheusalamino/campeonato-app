@@ -189,6 +189,8 @@ export function useMatchStatus({
               }
 
               if (cardUpdateOk) {
+                // Intentionally best-effort — if this write fails, the reset re-fires
+                // on next match start (idempotent for zero-valued stats)
                 await supabase
                   .from("phases")
                   .update({ yellow_cards_reset_done: true })
