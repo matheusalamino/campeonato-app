@@ -242,7 +242,8 @@ const EVENT_TYPES = [
 ];
 
 function getTeamCurrentLineup(teamId: string, detail: MatchDetail) {
-  const teamPlayers = teamId === detail.homeTeam.championshipTeamId ? detail.homePlayers : detail.awayPlayers;
+  const teamPlayers = (teamId === detail.homeTeam.championshipTeamId ? detail.homePlayers : detail.awayPlayers)
+    .filter(p => !detail.suspendedRegistrationIds.has(p.registrationId));
   const starters = new Set(detail.lineups.filter(l => l.championshipTeamId === teamId && l.isStarter).map(l => l.playerId));
   
   const currentOnField = new Set(Array.from(starters));
@@ -440,9 +441,12 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
                       )}
                     </div>
                     <div className="flex flex-col">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-white group-hover:text-blue-400 transition-colors">{p.name}</span>
                         {p.isCaptain && <span className="flex h-4 w-4 items-center justify-center rounded bg-yellow-500 text-[10px] font-black text-black" title="Capitão">C</span>}
+                        {detail.bookedRegistrationIds.has(p.registrationId) && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-yellow-900/60 text-yellow-400 uppercase tracking-wide">Pendurado</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         {p.position && <span className="text-[10px] text-zinc-500 uppercase tracking-widest">{p.position}</span>}
@@ -492,9 +496,12 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
                       )}
                     </div>
                     <div className="flex flex-col">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-white group-hover:text-blue-400 transition-colors">{p.name}</span>
                         {p.isCaptain && <span className="flex h-4 w-4 items-center justify-center rounded bg-yellow-500 text-[10px] font-black text-black" title="Capitão">C</span>}
+                        {detail.bookedRegistrationIds.has(p.registrationId) && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-yellow-900/60 text-yellow-400 uppercase tracking-wide">Pendurado</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         {p.position && <span className="text-[10px] text-zinc-500 uppercase tracking-widest">{p.position}</span>}
@@ -524,9 +531,12 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
                       )}
                     </div>
                     <div className="flex flex-col">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-white group-hover:text-blue-400 transition-colors">{p.name}</span>
                         {p.isCaptain && <span className="flex h-4 w-4 items-center justify-center rounded bg-yellow-500 text-[10px] font-black text-black" title="Capitão">C</span>}
+                        {detail.bookedRegistrationIds.has(p.registrationId) && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-yellow-900/60 text-yellow-400 uppercase tracking-wide">Pendurado</span>
+                        )}
                       </div>
                       {p.position && <span className="text-[10px] text-zinc-500 uppercase tracking-widest">{p.position}</span>}
                     </div>
