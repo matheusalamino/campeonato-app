@@ -171,27 +171,29 @@ export function useMatchStatus({
             .single();
 
           if (!phaseError && phase?.reset_yellow_cards && !phase.yellow_cards_reset_done) {
-            const { data: regs } = await supabase
+            const { data: regs, error: regsError } = await supabase
               .from("championship_registrations")
               .select("id")
               .eq("championship_id", championshipId);
 
-            const regIds = (regs ?? []).map((r: { id: string }) => r.id);
+            if (!regsError) {
+              const regIds = (regs ?? []).map((r: { id: string }) => r.id);
 
-            let cardUpdateOk = true;
-            if (regIds.length > 0) {
-              const { error: cardError } = await supabase
-                .from("player_card_stats")
-                .update({ active_yellow_cards: 0 })
-                .in("registration_id", regIds);
-              if (cardError) cardUpdateOk = false;
-            }
+              let cardUpdateOk = true;
+              if (regIds.length > 0) {
+                const { error: cardError } = await supabase
+                  .from("player_card_stats")
+                  .update({ active_yellow_cards: 0 })
+                  .in("registration_id", regIds);
+                if (cardError) cardUpdateOk = false;
+              }
 
-            if (cardUpdateOk) {
-              await supabase
-                .from("phases")
-                .update({ yellow_cards_reset_done: true })
-                .eq("id", matchRow.phase_id);
+              if (cardUpdateOk) {
+                await supabase
+                  .from("phases")
+                  .update({ yellow_cards_reset_done: true })
+                  .eq("id", matchRow.phase_id);
+              }
             }
           }
         }
