@@ -47,7 +47,10 @@ export function LineupControl({ detail, onSaved }: LineupControlProps) {
     const color = isHome ? detail.homeTeam.uniformColor : detail.awayTeam.uniformColor;
     const teamPlayers = isHome ? detail.homePlayers : detail.awayPlayers;
 
-    const selected = teamPlayers.filter(p => lineup.some(l => l.playerId === p.registrationId));
+    const selected = teamPlayers.filter(p =>
+      lineup.some(l => l.playerId === p.registrationId) &&
+      !detail.suspendedRegistrationIds.has(p.registrationId)
+    );
     const gkCount = selected.filter(p => p.position === "Goleiro").length;
     const fieldCount = selected.length - gkCount;
 
@@ -64,7 +67,11 @@ export function LineupControl({ detail, onSaved }: LineupControlProps) {
     const currentPlayers = activeTab === "home" ? detail.homePlayers : detail.awayPlayers;
     const currentLineup = detail.lineups.filter((l) => l.championshipTeamId === currentTeam.championshipTeamId);
 
-    const nextStarters = new Set(currentLineup.filter(l => l.isStarter).map(l => l.playerId));
+    const nextStarters = new Set(
+      currentLineup
+        .filter(l => l.isStarter && !detail.suspendedRegistrationIds.has(l.playerId))
+        .map(l => l.playerId)
+    );
     if (nextStarters.size === 0) {
       const gk = currentPlayers.find(p => p.position === "Goleiro");
       if (gk) nextStarters.add(gk.registrationId);
@@ -95,8 +102,19 @@ export function LineupControl({ detail, onSaved }: LineupControlProps) {
   };
 
   const saveLineup = async () => {
-    // Validation: Exactly 1 GK + 5 Field (Total 6)
     const selectedPlayers = players.filter(p => localStarters.has(p.registrationId));
+
+    // Block save if any selected player is suspended for this match
+    const suspendedStarters = selectedPlayers.filter(p =>
+      detail.suspendedRegistrationIds.has(p.registrationId)
+    );
+    if (suspendedStarters.length > 0) {
+      const names = suspendedStarters.map(p => p.name).join(", ");
+      toast.error(`Escalação inválida: jogador(es) suspenso(s) na titularidade — ${names}`);
+      return;
+    }
+
+    // Validation: Exactly 1 GK + 5 Field (Total 6)
     const gkCount = selectedPlayers.filter(p => p.position === "Goleiro").length;
     const fieldCount = selectedPlayers.length - gkCount;
 
@@ -242,19 +260,51 @@ export function LineupControl({ detail, onSaved }: LineupControlProps) {
                 const isStarter = localStarters.has(p.registrationId);
                 const isCaptain = localCaptain === p.registrationId;
                 const isGK = p.position === "Goleiro";
+                const isSuspended = detail.suspendedRegistrationIds.has(p.registrationId);
+                const isBooked = !isSuspended && detail.bookedRegistrationIds.has(p.registrationId);
                 return (
-                  <div key={p.registrationId} className={cn("flex items-center justify-between p-2 rounded-lg border transition-all", isStarter ? "bg-blue-600/10 border-blue-500/30" : "bg-zinc-900/50 border-zinc-800/50 hover:border-zinc-700")}>
-                    <label className="flex items-center gap-3 flex-1 cursor-pointer">
+                  <div key={p.registrationId} className={cn(
+                    "flex items-center justify-between p-2 rounded-lg border transition-all",
+                    isSuspended
+                      ? "bg-red-900/10 border-red-900/40"
+                      : isStarter
+                        ? "bg-blue-600/10 border-blue-500/30"
+                        : "bg-zinc-900/50 border-zinc-800/50 hover:border-zinc-700"
+                  )}>
+                    <label className={cn("flex items-center gap-3 flex-1", isSuspended ? "cursor-not-allowed" : "cursor-pointer")}>
                       <div className="flex h-5 w-5 items-center justify-center rounded bg-zinc-800 border border-zinc-700">
-                        {isStarter && <CheckCircle2 className="h-3.5 w-3.5 text-blue-500" />}
+                        {isStarter && !isSuspended && <CheckCircle2 className="h-3.5 w-3.5 text-blue-500" />}
                       </div>
-                      <input type="checkbox" checked={isStarter} onChange={() => toggleStarter(p.registrationId)} className="sr-only" />
+                      <input
+                        type="checkbox"
+                        checked={isStarter && !isSuspended}
+                        onChange={() => !isSuspended && toggleStarter(p.registrationId)}
+                        disabled={isSuspended}
+                        className="sr-only"
+                      />
                       <div className="flex flex-col">
-                        <span className={cn("text-sm font-bold", isStarter ? "text-white" : "text-zinc-400")}>{p.name}</span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={cn("text-sm font-bold", isSuspended ? "text-red-400" : isStarter ? "text-white" : "text-zinc-400")}>
+                            {p.name}
+                          </span>
+                          {isSuspended && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-red-900/60 text-red-400 uppercase tracking-wide">
+                              Suspenso
+                            </span>
+                          )}
+                          {isBooked && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-yellow-900/60 text-yellow-400 uppercase tracking-wide">
+                              Pendurado
+                            </span>
+                          )}
+                        </div>
                         {p.position && <span className={cn("text-[10px] uppercase tracking-widest", isGK ? "text-amber-500 font-bold" : "text-zinc-500")}>{p.position}</span>}
+                        {isSuspended && isStarter && (
+                          <span className="text-[10px] text-amber-400 font-semibold">⚠️ Suspenso — remova da escalação</span>
+                        )}
                       </div>
                     </label>
-                    {isStarter && (
+                    {isStarter && !isSuspended && (
                       <button onClick={() => setCaptain(p.registrationId)} className={cn("px-2 py-1 rounded text-[10px] font-black transition-all ml-2", isCaptain ? "bg-yellow-500 text-black shadow-[0_0_10px_rgba(234,179,8,0.4)]" : "bg-zinc-800 text-zinc-500 hover:text-yellow-500")}>
                         CAPITÃO
                       </button>

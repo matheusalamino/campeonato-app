@@ -142,6 +142,8 @@ export type MatchDetail = {
   events: MatchEventItem[];
   penalties: MatchPenalty[];
   lineups: MatchLineupPlayer[];
+  suspendedRegistrationIds: Set<string>;
+  bookedRegistrationIds: Set<string>;
 };
 
 /** Acumulado de períodos anteriores em segundos */
@@ -259,6 +261,29 @@ export function useMatchDetail(matchId: string) {
         : Promise.resolve({ data: [] }),
     ]);
 
+    const allRegIds = [
+      ...(homePlayers ?? []),
+      ...(awayPlayers ?? []),
+    ].map((r) => r.registration_id);
+
+    const [{ data: suspRows }, { data: bookedRows }] = await Promise.all([
+      supabase
+        .from("v_suspended_players")
+        .select("registration_id")
+        .eq("suspended_match_id", matchId),
+      supabase
+        .from("v_booked_players")
+        .select("registration_id")
+        .in("registration_id", allRegIds.length ? allRegIds : ["__none__"]),
+    ]);
+
+    const suspendedRegistrationIds = new Set(
+      (suspRows ?? []).map((r: { registration_id: string }) => r.registration_id)
+    );
+    const bookedRegistrationIds = new Set(
+      (bookedRows ?? []).map((r: { registration_id: string }) => r.registration_id)
+    );
+
     function mapPlayers(rows: PlayerRegistrationRow[] | null, ctId: string, lps: MatchLineupPlayer[]): MatchPlayer[] {
       return (rows ?? []).map((row) => {
         const lineup = lps.find((l) => l.playerId === row.registration_id);
@@ -341,6 +366,8 @@ export function useMatchDetail(matchId: string) {
       events,
       penalties,
       lineups,
+      suspendedRegistrationIds,
+      bookedRegistrationIds,
     });
 
     setElapsed(getTotalElapsed(match));
