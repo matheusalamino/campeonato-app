@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { 
-  X, Save, GripVertical, Trophy, Clock, Target, 
-  Settings2, ChevronRight, AlertCircle 
+import {
+  X, Save, GripVertical, Trophy, Clock, Target,
+  Settings2, ChevronRight, AlertCircle, RotateCcw
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -38,6 +38,9 @@ export function PhaseConfigDrawer({ phase, onClose }: Props) {
     has_extra_time: false,
     has_penalties: true
   });
+
+  // Yellow card reset state
+  const [resetYellows, setResetYellows] = useState(phase.reset_yellow_cards);
 
   useEffect(() => {
     async function load() {
@@ -82,7 +85,6 @@ export function PhaseConfigDrawer({ phase, onClose }: Props) {
     setSaving(true);
     try {
       if (phase.type === "group") {
-        // Delete old rules and insert new ones (simpler than update)
         await supabase.from("tie_breaker_rules").delete().eq("phase_id", phase.id);
         const { error } = await supabase.from("tie_breaker_rules").insert(
           rules.map((r, idx) => ({
@@ -99,6 +101,13 @@ export function PhaseConfigDrawer({ phase, onClose }: Props) {
           .eq("phase_id", phase.id);
         if (error) throw error;
       }
+
+      const { error: phaseError } = await supabase
+        .from("phases")
+        .update({ reset_yellow_cards: resetYellows })
+        .eq("id", phase.id);
+      if (phaseError) throw phaseError;
+
       toast.success("Configurações aplicadas com sucesso");
       onClose();
     } catch (err: unknown) {
@@ -237,6 +246,35 @@ export function PhaseConfigDrawer({ phase, onClose }: Props) {
                   As configurações de empate afetam o fluxo da súmula ao vivo, adicionando novos períodos automaticamente.
                 </p>
               </div>
+            </div>
+          )}
+
+          {!loading && (
+            <div className="space-y-4 pt-4 border-t border-zinc-800">
+              <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                <RotateCcw className="h-3.5 w-3.5" /> Amarelos
+              </h3>
+
+              <label className="flex items-start gap-3 p-4 rounded-2xl bg-zinc-900 border border-zinc-800 cursor-pointer hover:border-zinc-700 transition-all">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={resetYellows}
+                  disabled={phase.yellow_cards_reset_done}
+                  onChange={e => setResetYellows(e.target.checked)}
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-bold text-white">Zerar pendurados no início desta fase</p>
+                    {phase.yellow_cards_reset_done && (
+                      <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Já executado</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-zinc-500 leading-relaxed">
+                    Quando o primeiro jogo desta fase for iniciado, os cartões amarelos acumulados de todos os jogadores serão zerados automaticamente.
+                  </p>
+                </div>
+              </label>
             </div>
           )}
         </div>

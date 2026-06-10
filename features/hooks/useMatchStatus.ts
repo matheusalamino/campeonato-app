@@ -156,6 +156,50 @@ export function useMatchStatus({
           return { success: false, error: "DB_ERROR", message: error.message };
         }
 
+        // Yellow card reset: fires once on the first match of the phase (best-effort, non-blocking)
+        const { data: matchRow, error: matchRowError } = await supabase
+          .from("knockout_matches")
+          .select("phase_id")
+          .eq("id", matchId)
+          .single();
+
+        if (!matchRowError && matchRow?.phase_id) {
+          const { data: phase, error: phaseError } = await supabase
+            .from("phases")
+            .select("reset_yellow_cards, yellow_cards_reset_done")
+            .eq("id", matchRow.phase_id)
+            .single();
+
+          if (!phaseError && phase?.reset_yellow_cards && !phase.yellow_cards_reset_done) {
+            const { data: regs, error: regsError } = await supabase
+              .from("championship_registrations")
+              .select("id")
+              .eq("championship_id", championshipId);
+
+            if (!regsError) {
+              const regIds = (regs ?? []).map((r: { id: string }) => r.id);
+
+              let cardUpdateOk = true;
+              if (regIds.length > 0) {
+                const { error: cardError } = await supabase
+                  .from("player_card_stats")
+                  .update({ active_yellow_cards: 0 })
+                  .in("registration_id", regIds);
+                if (cardError) cardUpdateOk = false;
+              }
+
+              if (cardUpdateOk) {
+                // Intentionally best-effort — if this write fails, the reset re-fires
+                // on next match start (idempotent for zero-valued stats)
+                await supabase
+                  .from("phases")
+                  .update({ yellow_cards_reset_done: true })
+                  .eq("id", matchRow.phase_id);
+              }
+            }
+          }
+        }
+
         return { success: true };
       } finally {
         setLoading(false);
