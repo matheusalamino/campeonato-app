@@ -156,6 +156,42 @@ export function useMatchStatus({
           return { success: false, error: "DB_ERROR", message: error.message };
         }
 
+        // Yellow card reset: fires once on the first match of the phase
+        const { data: matchRow } = await supabase
+          .from("knockout_matches")
+          .select("phase_id")
+          .eq("id", matchId)
+          .single();
+
+        if (matchRow?.phase_id) {
+          const { data: phase } = await supabase
+            .from("phases")
+            .select("reset_yellow_cards, yellow_cards_reset_done")
+            .eq("id", matchRow.phase_id)
+            .single();
+
+          if (phase?.reset_yellow_cards && !phase.yellow_cards_reset_done) {
+            const { data: regs } = await supabase
+              .from("championship_registrations")
+              .select("id")
+              .eq("championship_id", championshipId);
+
+            const regIds = (regs ?? []).map((r: { id: string }) => r.id);
+
+            if (regIds.length > 0) {
+              await supabase
+                .from("player_card_stats")
+                .update({ active_yellow_cards: 0 })
+                .in("registration_id", regIds);
+            }
+
+            await supabase
+              .from("phases")
+              .update({ yellow_cards_reset_done: true })
+              .eq("id", matchRow.phase_id);
+          }
+        }
+
         return { success: true };
       } finally {
         setLoading(false);
