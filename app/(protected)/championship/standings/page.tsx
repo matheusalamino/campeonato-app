@@ -39,26 +39,40 @@ export default function StandingsPage() {
   const { bookedPlayers, suspensions: disciplinarySuspensions, cardHistory, loading: loadingDisc } =
     useDisciplinary(championship?.id || null, discPhaseId, discTeamId);
 
+  // Reset disciplinary state when championship changes
+  useEffect(() => {
+    setTeams([]);
+    setDiscPhaseId(null);
+    setDiscTeamId(null);
+  }, [championship?.id]);
+
   // Lazy-load teams when disciplinary tab is first opened
   useEffect(() => {
-    if (activeTab !== "disciplinary" || !championship?.id || teams.length > 0 || loadingTeams) return;
+    if (activeTab !== "disciplinary" || !championship?.id || teams.length > 0) return;
     setLoadingTeams(true);
+    let cancelled = false;
     const fetchTeams = async () => {
-      const { data } = await supabase
-        .from("championship_teams")
-        .select("id, teams(name)")
-        .eq("championship_id", championship.id);
-      setTeams(
-        (data ?? []).map(ct => {
-          const t = ct.teams as { name: string } | { name: string }[] | null;
-          const name = (Array.isArray(t) ? t[0]?.name : t?.name) ?? "—";
-          return { id: ct.id, name };
-        })
-      );
-      setLoadingTeams(false);
+      try {
+        const { data } = await supabase
+          .from("championship_teams")
+          .select("id, teams(name)")
+          .eq("championship_id", championship.id);
+        if (!cancelled) {
+          setTeams(
+            (data ?? []).map(ct => {
+              const t = ct.teams as { name: string } | { name: string }[] | null;
+              const name = (Array.isArray(t) ? t[0]?.name : t?.name) ?? "—";
+              return { id: ct.id, name };
+            })
+          );
+        }
+      } finally {
+        if (!cancelled) setLoadingTeams(false);
+      }
     };
     void fetchTeams();
-  }, [activeTab, championship?.id, teams.length, loadingTeams]);
+    return () => { cancelled = true; };
+  }, [activeTab, championship?.id, teams.length]);
 
   if (!championship) {
     return (
@@ -162,13 +176,13 @@ export default function StandingsPage() {
             </div>
           ) : (
             <div className="grid gap-8">
-              {Object.entries(standings).map(([groupId, teams]) => (
+              {Object.entries(standings).map(([groupId, groupTeams]) => (
                 <div key={groupId} className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-xl">
                   <div className="bg-zinc-900/50 px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
                     <h3 className="font-bold text-sm uppercase tracking-widest text-zinc-300">
                       {groupLabels[groupId] ?? "Grupo"}
                     </h3>
-                    <span className="text-[10px] text-zinc-500 font-medium">JOGARES / PONTOS</span>
+                    <span className="text-[10px] text-zinc-500 font-medium">JOGOS / PONTOS</span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-left text-sm">
@@ -187,7 +201,7 @@ export default function StandingsPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-800/30">
-                        {teams.map((t, idx) => (
+                        {groupTeams.map((t, idx) => (
                           <tr key={t.championshipTeamId} className={cn(
                             "hover:bg-zinc-900/40 transition-colors group",
                             idx < 2 ? "bg-emerald-500/[0.02]" : ""
