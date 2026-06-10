@@ -63,10 +63,12 @@ export async function addMatchEvent(params: AddMatchEventParams): Promise<void> 
 export async function removeMatchEvent(params: RemoveMatchEventParams): Promise<void> {
   const { eventId, knockoutMatchId, registrationId, eventType } = params;
 
-  await supabase
+  const { error: deleteError } = await supabase
     .from("match_events_v2")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", eventId);
+
+  if (deleteError) throw new Error(`Failed to remove match event: ${deleteError.message}`);
 
   if (!registrationId) return;
 
@@ -91,13 +93,15 @@ async function handleRedCard(
     championshipId,
   );
 
-  await supabase.from("suspensions").insert({
+  const { error } = await supabase.from("suspensions").insert({
     registration_id: registrationId,
     origin_match_id: knockoutMatchId,
     suspended_match_id: suspendedMatchId,
     reason: "red_card",
     served: false,
   });
+
+  if (error) throw new Error(`Failed to create red card suspension: ${error.message}`);
 }
 
 async function handleYellowCard(
@@ -142,7 +146,7 @@ async function handleYellowCard(
       .from("player_card_stats")
       .update({ active_yellow_cards: 1, updated_at: new Date().toISOString() })
       .eq("registration_id", registrationId);
-  } else {
+  } else if (activeYellows === 1) {
     // Second active yellow from a DIFFERENT match: suspend + reset counter.
     const suspendedMatchId = await findNextMatch(
       knockoutMatchId,
@@ -150,7 +154,7 @@ async function handleYellowCard(
       championshipId,
     );
 
-    await supabase.from("suspensions").insert({
+    const { error: suspError } = await supabase.from("suspensions").insert({
       registration_id: registrationId,
       origin_match_id: knockoutMatchId,
       suspended_match_id: suspendedMatchId,
@@ -158,10 +162,18 @@ async function handleYellowCard(
       served: false,
     });
 
+    if (suspError) throw new Error(`Failed to create two_yellows suspension: ${suspError.message}`);
+
     await supabase
       .from("player_card_stats")
       .update({ active_yellow_cards: 0, updated_at: new Date().toISOString() })
       .eq("registration_id", registrationId);
+  } else {
+    // Unexpected state: active_yellow_cards > 1. This should not happen in normal
+    // operation. Log and skip to avoid creating duplicate suspensions.
+    console.error(
+      `[match-events] Unexpected active_yellow_cards=${activeYellows} for registration ${registrationId}. Skipping suspension.`,
+    );
   }
 }
 
@@ -250,15 +262,17 @@ async function findNextMatch(
       .order("round_number", { ascending: true });
 
     if (laterSamePhase && laterSamePhase.length > 0) {
-      const matchIds = laterSamePhase.map((m) => m.id);
-      const { data: slot } = await supabase
-        .from("match_slots")
-        .select("match_id")
-        .eq("championship_team_id", championshipTeamId)
-        .in("match_id", matchIds)
-        .limit(1);
+      // matchIds is already ordered by round_number asc; check each in order
+      for (const match of laterSamePhase) {
+        const { data: slot } = await supabase
+          .from("match_slots")
+          .select("match_id")
+          .eq("championship_team_id", championshipTeamId)
+          .eq("match_id", match.id)
+          .maybeSingle();
 
-      if (slot && slot.length > 0) return slot[0].match_id;
+        if (slot) return slot.match_id;
+      }
     }
   }
 
@@ -292,15 +306,17 @@ async function findNextMatch(
 
   if (!nextPhaseMatches || nextPhaseMatches.length === 0) return null;
 
-  const nextPhaseMatchIds = nextPhaseMatches.map((m) => m.id);
-  const { data: nextSlot } = await supabase
-    .from("match_slots")
-    .select("match_id")
-    .eq("championship_team_id", championshipTeamId)
-    .in("match_id", nextPhaseMatchIds)
-    .limit(1);
+  // nextPhaseMatches is ordered by round_number asc; check each in order
+  for (const match of nextPhaseMatches) {
+    const { data: nextSlot } = await supabase
+      .from("match_slots")
+      .select("match_id")
+      .eq("championship_team_id", championshipTeamId)
+      .eq("match_id", match.id)
+      .maybeSingle();
 
-  if (nextSlot && nextSlot.length > 0) return nextSlot[0].match_id;
+    if (nextSlot) return nextSlot.match_id;
+  }
 
   // 4. Team not yet slotted in the next phase (group standings unresolved).
   // Suspension is created with suspended_match_id = null and resolved later.
