@@ -8,7 +8,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import { useMatchDetail, formatTime, type MatchPlayer, type MatchDetail } from "@/features/hooks/useMatchDetail";
+import { useMatchDetail, formatTime, type MatchPlayer, type MatchDetail, type MatchEventItem } from "@/features/hooks/useMatchDetail";
+import { addMatchEvent, removeMatchEvent } from "@/services/match-events.service";
 import { useMatchStatus } from "@/features/hooks/useMatchStatus";
 import { PenaltyShootoutControl } from "@/components/PenaltyShootoutControl";
 import { LineupControl } from "@/components/LineupControl";
@@ -301,17 +302,23 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
 
   async function save() {
     setSaving(true);
-    const { error } = await supabase.from("match_events_v2").insert({
-      knockout_match_id: detail.match.id,
-      team_id: teamId,
-      player_id: player?.registrationId ?? null,
-      assist_player_id: assistPlayer?.registrationId ?? null,
-      player_in_id: playerIn?.registrationId ?? null,
-      event_type: eventType,
-      event_time_s: elapsed,
-      period: detail.match.current_period,
-    });
-    if (error) { setSaving(false); toast.error("Erro ao salvar evento"); return; }
+    try {
+      await addMatchEvent({
+        knockoutMatchId: detail.match.id,
+        teamId,
+        registrationId: player?.registrationId ?? null,
+        eventType,
+        eventTimeS: elapsed,
+        period: detail.match.current_period,
+        assistPlayerId: assistPlayer?.registrationId ?? null,
+        playerInId: playerIn?.registrationId ?? null,
+        championshipId: detail.match.championship_id ?? "",
+      });
+    } catch {
+      setSaving(false);
+      toast.error("Erro ao salvar evento");
+      return;
+    }
 
     // If it's a scoring event, sync the DB score column so other screens stay up-to-date
     if (eventType === "GOAL" || eventType === "OWN_GOAL") {
@@ -584,10 +591,45 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
 
 // ─── EVENT LIST ──────────────────────────────────────────────────────────────
 function EventList({ detail, readonly }: { detail: MatchDetail; readonly: boolean }) {
-  async function deleteEvent(eventId: string) {
+  async function deleteEvent(ev: MatchEventItem) {
     if (!confirm("Remover este evento?")) return;
-    await supabase.from("match_events_v2").update({ deleted_at: new Date().toISOString() }).eq("id", eventId);
-    toast.success("Evento removido");
+    try {
+      await removeMatchEvent({
+        eventId: ev.id,
+        knockoutMatchId: detail.match.id,
+        registrationId: ev.playerId,
+        eventType: ev.eventType,
+      });
+
+      // If a goal was removed, resync the persisted score columns so other
+      // screens that read knockout_matches directly stay accurate.
+      if (ev.eventType === "GOAL" || ev.eventType === "OWN_GOAL") {
+        const { data: allGoals } = await supabase
+          .from("match_events_v2")
+          .select("event_type, team_id")
+          .eq("knockout_match_id", detail.match.id)
+          .is("deleted_at", null)
+          .in("event_type", ["GOAL", "OWN_GOAL"]);
+
+        const homeCT = detail.homeTeam.championshipTeamId;
+        const awayCT = detail.awayTeam.championshipTeamId;
+        const newHome = (allGoals ?? []).filter(
+          (e) => (e.event_type === "GOAL" && e.team_id === homeCT) || (e.event_type === "OWN_GOAL" && e.team_id === awayCT)
+        ).length;
+        const newAway = (allGoals ?? []).filter(
+          (e) => (e.event_type === "GOAL" && e.team_id === awayCT) || (e.event_type === "OWN_GOAL" && e.team_id === homeCT)
+        ).length;
+
+        await supabase
+          .from("knockout_matches")
+          .update({ home_score: newHome, away_score: newAway })
+          .eq("id", detail.match.id);
+      }
+
+      toast.success("Evento removido");
+    } catch {
+      toast.error("Erro ao remover evento");
+    }
   }
 
   if (detail.events.length === 0) {
@@ -636,7 +678,7 @@ function EventList({ detail, readonly }: { detail: MatchDetail; readonly: boolea
               </div>
             </div>
             {!readonly && (
-              <button onClick={() => void deleteEvent(ev.id)}
+              <button onClick={() => void deleteEvent(ev)}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-600 hover:bg-red-500/10 hover:text-red-500 transition-colors self-center">
                 <Trash2 className="h-4 w-4" />
               </button>
