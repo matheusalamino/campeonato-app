@@ -64,7 +64,11 @@ export function LineupControl({ detail, onSaved }: LineupControlProps) {
     const currentPlayers = activeTab === "home" ? detail.homePlayers : detail.awayPlayers;
     const currentLineup = detail.lineups.filter((l) => l.championshipTeamId === currentTeam.championshipTeamId);
 
-    const nextStarters = new Set(currentLineup.filter(l => l.isStarter).map(l => l.playerId));
+    const nextStarters = new Set(
+      currentLineup
+        .filter(l => l.isStarter && !detail.suspendedRegistrationIds.has(l.playerId))
+        .map(l => l.playerId)
+    );
     if (nextStarters.size === 0) {
       const gk = currentPlayers.find(p => p.position === "Goleiro");
       if (gk) nextStarters.add(gk.registrationId);
