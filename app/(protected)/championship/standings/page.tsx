@@ -383,7 +383,7 @@ export default function StandingsPage() {
               {/* Section C: Histórico de Cartões */}
               <div className="space-y-3">
                 <h2 className="text-xs font-black uppercase tracking-widest text-zinc-500">
-                  📋 Histórico de Cartões
+                  📋 Histórico de Cartões ({cardHistory.length})
                 </h2>
                 {cardHistory.length === 0 ? (
                   <div className="flex h-24 items-center justify-center rounded-2xl border border-dashed border-zinc-800 text-zinc-600 text-sm">
