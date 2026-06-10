@@ -593,13 +593,43 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
 function EventList({ detail, readonly }: { detail: MatchDetail; readonly: boolean }) {
   async function deleteEvent(ev: MatchEventItem) {
     if (!confirm("Remover este evento?")) return;
-    await removeMatchEvent({
-      eventId: ev.id,
-      knockoutMatchId: detail.match.id,
-      registrationId: ev.playerId,
-      eventType: ev.eventType,
-    });
-    toast.success("Evento removido");
+    try {
+      await removeMatchEvent({
+        eventId: ev.id,
+        knockoutMatchId: detail.match.id,
+        registrationId: ev.playerId,
+        eventType: ev.eventType,
+      });
+
+      // If a goal was removed, resync the persisted score columns so other
+      // screens that read knockout_matches directly stay accurate.
+      if (ev.eventType === "GOAL" || ev.eventType === "OWN_GOAL") {
+        const { data: allGoals } = await supabase
+          .from("match_events_v2")
+          .select("event_type, team_id")
+          .eq("knockout_match_id", detail.match.id)
+          .is("deleted_at", null)
+          .in("event_type", ["GOAL", "OWN_GOAL"]);
+
+        const homeCT = detail.homeTeam.championshipTeamId;
+        const awayCT = detail.awayTeam.championshipTeamId;
+        const newHome = (allGoals ?? []).filter(
+          (e) => (e.event_type === "GOAL" && e.team_id === homeCT) || (e.event_type === "OWN_GOAL" && e.team_id === awayCT)
+        ).length;
+        const newAway = (allGoals ?? []).filter(
+          (e) => (e.event_type === "GOAL" && e.team_id === awayCT) || (e.event_type === "OWN_GOAL" && e.team_id === homeCT)
+        ).length;
+
+        await supabase
+          .from("knockout_matches")
+          .update({ home_score: newHome, away_score: newAway })
+          .eq("id", detail.match.id);
+      }
+
+      toast.success("Evento removido");
+    } catch {
+      toast.error("Erro ao remover evento");
+    }
   }
 
   if (detail.events.length === 0) {
