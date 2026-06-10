@@ -156,21 +156,21 @@ export function useMatchStatus({
           return { success: false, error: "DB_ERROR", message: error.message };
         }
 
-        // Yellow card reset: fires once on the first match of the phase
-        const { data: matchRow } = await supabase
+        // Yellow card reset: fires once on the first match of the phase (best-effort, non-blocking)
+        const { data: matchRow, error: matchRowError } = await supabase
           .from("knockout_matches")
           .select("phase_id")
           .eq("id", matchId)
           .single();
 
-        if (matchRow?.phase_id) {
-          const { data: phase } = await supabase
+        if (!matchRowError && matchRow?.phase_id) {
+          const { data: phase, error: phaseError } = await supabase
             .from("phases")
             .select("reset_yellow_cards, yellow_cards_reset_done")
             .eq("id", matchRow.phase_id)
             .single();
 
-          if (phase?.reset_yellow_cards && !phase.yellow_cards_reset_done) {
+          if (!phaseError && phase?.reset_yellow_cards && !phase.yellow_cards_reset_done) {
             const { data: regs } = await supabase
               .from("championship_registrations")
               .select("id")
@@ -178,17 +178,21 @@ export function useMatchStatus({
 
             const regIds = (regs ?? []).map((r: { id: string }) => r.id);
 
+            let cardUpdateOk = true;
             if (regIds.length > 0) {
-              await supabase
+              const { error: cardError } = await supabase
                 .from("player_card_stats")
                 .update({ active_yellow_cards: 0 })
                 .in("registration_id", regIds);
+              if (cardError) cardUpdateOk = false;
             }
 
-            await supabase
-              .from("phases")
-              .update({ yellow_cards_reset_done: true })
-              .eq("id", matchRow.phase_id);
+            if (cardUpdateOk) {
+              await supabase
+                .from("phases")
+                .update({ yellow_cards_reset_done: true })
+                .eq("id", matchRow.phase_id);
+            }
           }
         }
 
