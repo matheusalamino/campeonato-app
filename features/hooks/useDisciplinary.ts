@@ -292,8 +292,11 @@ export function useDisciplinary(
     }
   }, [championshipId]);
 
-  // Re-fetch when championship changes
-  useEffect(() => { void load().then(() => derive()); }, [load, derive]);
+  const deriveRef = useRef(derive);
+  deriveRef.current = derive;
+
+  // Re-fetch when championship changes; run latest derive after load completes
+  useEffect(() => { void load().then(() => deriveRef.current()); }, [load]);
 
   // Re-derive when filters change (no re-fetch)
   useEffect(() => { derive(); }, [derive]);
