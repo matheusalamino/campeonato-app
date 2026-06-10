@@ -170,7 +170,6 @@ export function useDisciplinary(
 
     const history: CardHistoryEntry[] = [];
     for (const [regId, counts] of cardMap.entries()) {
-      if (counts.yellow + counts.red === 0) continue;
       const info = regInfoMap.get(regId);
       if (!info) continue;
       if (teamId && info.teamId !== teamId) continue;
