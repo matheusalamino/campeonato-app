@@ -122,7 +122,23 @@ async function handleYellowCard(
     .eq("event_type", "YELLOW_CARD")
     .is("deleted_at", null);
 
-  if ((existingYellows?.length ?? 0) >= 2) return;
+  if ((existingYellows?.length ?? 0) >= 2) {
+    // 2nd yellow in the same match → expulsion. Treat as suspension + reset counter.
+    const suspendedMatchId = await findNextMatch(knockoutMatchId, championshipTeamId, championshipId);
+    const { error: suspError } = await supabase.from("suspensions").insert({
+      registration_id: registrationId,
+      origin_match_id: knockoutMatchId,
+      suspended_match_id: suspendedMatchId,
+      reason: "two_yellows",
+      served: false,
+    });
+    if (suspError) throw new Error(`Failed to create two_yellows suspension: ${suspError.message}`);
+    await supabase
+      .from("player_card_stats")
+      .update({ active_yellow_cards: 0, updated_at: new Date().toISOString() })
+      .eq("registration_id", registrationId);
+    return;
+  }
 
   // Ensure player_card_stats row exists (create with 0 if first yellow ever).
   await supabase
@@ -256,23 +272,25 @@ async function findNextMatch(
   if (currentRound !== null) {
     const { data: laterSamePhase } = await supabase
       .from("knockout_matches")
-      .select("id")
+      .select("id, home_team_id, away_team_id")
       .eq("phase_id", currentPhaseId)
       .gt("round_number", currentRound)
       .order("round_number", { ascending: true });
 
-    if (laterSamePhase && laterSamePhase.length > 0) {
-      // matchIds is already ordered by round_number asc; check each in order
-      for (const match of laterSamePhase) {
-        const { data: slot } = await supabase
-          .from("match_slots")
-          .select("match_id")
-          .eq("championship_team_id", championshipTeamId)
-          .eq("match_id", match.id)
-          .maybeSingle();
-
-        if (slot) return slot.match_id;
+    for (const match of laterSamePhase ?? []) {
+      // Direct assignment: group-stage matches have the team on home_team_id / away_team_id.
+      if (match.home_team_id === championshipTeamId || match.away_team_id === championshipTeamId) {
+        return match.id;
       }
+      // Bracket slot: knockout matches where the team slot isn't resolved yet.
+      const { data: slot } = await supabase
+        .from("match_slots")
+        .select("match_id")
+        .eq("championship_team_id", championshipTeamId)
+        .eq("match_id", match.id)
+        .maybeSingle();
+
+      if (slot) return slot.match_id;
     }
   }
 
@@ -300,14 +318,16 @@ async function findNextMatch(
   // 3. Find the team's slot in the earliest match of the next phase.
   const { data: nextPhaseMatches } = await supabase
     .from("knockout_matches")
-    .select("id")
+    .select("id, home_team_id, away_team_id")
     .eq("phase_id", nextPhaseId)
     .order("round_number", { ascending: true });
 
   if (!nextPhaseMatches || nextPhaseMatches.length === 0) return null;
 
-  // nextPhaseMatches is ordered by round_number asc; check each in order
   for (const match of nextPhaseMatches) {
+    if (match.home_team_id === championshipTeamId || match.away_team_id === championshipTeamId) {
+      return match.id;
+    }
     const { data: nextSlot } = await supabase
       .from("match_slots")
       .select("match_id")
