@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { KnockoutMatch, MatchStatus, MatchPeriod } from "@/types/championship";
+import { buildResolutionContext, resolveCtId } from "@/features/utils/resolveSlotTeam";
 
 const supabase = createClient();
 
@@ -144,6 +145,8 @@ export type MatchDetail = {
   lineups: MatchLineupPlayer[];
   suspendedRegistrationIds: Set<string>;
   bookedRegistrationIds: Set<string>;
+  hasPenalties: boolean;
+  hasExtraTime: boolean;
 };
 
 /** Acumulado de períodos anteriores em segundos */
@@ -214,6 +217,67 @@ export function useMatchDetail(matchId: string) {
       if (!resolvedAwayCTId) resolvedAwayCTId = gSlots?.find((g) => g.label === parts[1])?.championship_team_id ?? null;
     }
 
+    // Third fallback: knockout_match_sources resolution (Repescagem, Semifinal, etc.)
+    // Triggered when match_slots and group-label parsing both fail to resolve a team.
+    // championship_id may be null on the match row (not backfilled for all phases);
+    // derive it from the phase when missing.
+    let derivedChampId: string | null = match.championship_id ?? null;
+    if (!derivedChampId && match.phase_id) {
+      const { data: phaseRow } = await supabase
+        .from("phases")
+        .select("championship_id")
+        .eq("id", match.phase_id)
+        .single();
+      derivedChampId = phaseRow?.championship_id ?? null;
+    }
+
+    if ((!resolvedHomeCTId || !resolvedAwayCTId) && derivedChampId) {
+      const champId = derivedChampId;
+      const { data: allPhases } = await supabase.from("phases").select("id").eq("championship_id", champId);
+      const allPhaseIds = (allPhases ?? []).map(p => p.id);
+
+      if (allPhaseIds.length > 0) {
+        const [
+          { data: allMatches },
+          { data: allSlotsForCtx },
+          { data: allGroupSlotsForCtx },
+          { data: allSources },
+          { data: champSettings },
+          { data: tieBreakerRules },
+        ] = await Promise.all([
+          supabase.from("knockout_matches")
+            .select("id, phase_id, name, code, status, home_score, away_score, penalty_home_score, penalty_away_score, penalty_winner_team_id")
+            .in("phase_id", allPhaseIds),
+          supabase.from("match_slots").select("match_id, slot_order, championship_team_id"),
+          supabase.from("group_slots").select("phase_id, label, championship_team_id, group_letter").in("phase_id", allPhaseIds),
+          supabase.from("knockout_match_sources").select("knockout_match_id, slot_order, source_type, source_group, source_position, source_match_code, source_phase_id"),
+          supabase.from("championships").select("points_win, points_draw, points_loss").eq("id", champId).single(),
+          supabase.from("tie_breaker_rules").select("phase_id, rule, priority").in("phase_id", allPhaseIds).order("priority"),
+        ]);
+
+        const allMatchIds = (allMatches ?? []).map(m => m.id);
+        const { data: goalEvents } = await supabase
+          .from("match_events_v2")
+          .select("knockout_match_id, event_type, team_id")
+          .is("deleted_at", null)
+          .in("event_type", ["GOAL", "OWN_GOAL"])
+          .in("knockout_match_id", allMatchIds.length ? allMatchIds : ["__none__"]);
+
+        const ctx = buildResolutionContext(
+          (allMatches ?? []) as Parameters<typeof buildResolutionContext>[0],
+          (allSlotsForCtx ?? []) as Parameters<typeof buildResolutionContext>[1],
+          (allGroupSlotsForCtx ?? []) as Parameters<typeof buildResolutionContext>[2],
+          (allSources ?? []) as Parameters<typeof buildResolutionContext>[3],
+          (goalEvents ?? []) as Parameters<typeof buildResolutionContext>[4],
+          (tieBreakerRules ?? []) as Parameters<typeof buildResolutionContext>[5],
+          { win: champSettings?.points_win ?? 3, draw: champSettings?.points_draw ?? 1, loss: champSettings?.points_loss ?? 0 },
+        );
+
+        if (!resolvedHomeCTId) resolvedHomeCTId = resolveCtId(matchId, 1, ctx) ?? null;
+        if (!resolvedAwayCTId) resolvedAwayCTId = resolveCtId(matchId, 2, ctx) ?? null;
+      }
+    }
+
     const ctIds = [resolvedHomeCTId, resolvedAwayCTId].filter(Boolean) as string[];
 
     const [{ data: ctRows }, { data: eventRows }, { data: penaltyRows }, { data: lineupRows }] = await Promise.all([
@@ -266,7 +330,26 @@ export function useMatchDetail(matchId: string) {
       ...(awayPlayers ?? []),
     ].map((r) => r.registration_id);
 
-    const [{ data: suspRows }, { data: bookedRows }] = await Promise.all([
+    // Retroactively resolve suspensions whose suspended_match_id is null.
+    // This happens when findNextMatch couldn't determine the next match at card-event
+    // time (e.g., red card in group phase while knockout slots were still unassigned).
+    // Now that we know which players are in this match, bind their pending suspensions
+    // to it so they show as suspended here and get marked served when the match ends.
+    const { data: nullSuspRows } = await supabase
+      .from("suspensions")
+      .select("id, registration_id")
+      .in("registration_id", allRegIds.length ? allRegIds : ["__none__"])
+      .is("suspended_match_id", null)
+      .eq("served", false);
+
+    if (nullSuspRows && nullSuspRows.length > 0) {
+      await supabase
+        .from("suspensions")
+        .update({ suspended_match_id: matchId })
+        .in("id", nullSuspRows.map((r: { id: string }) => r.id));
+    }
+
+    const [{ data: suspRows }, { data: bookedRows }, { data: phaseRow }, { data: knockoutSettings }] = await Promise.all([
       supabase
         .from("v_suspended_players")
         .select("registration_id")
@@ -275,13 +358,35 @@ export function useMatchDetail(matchId: string) {
         .from("v_booked_players")
         .select("registration_id")
         .in("registration_id", allRegIds.length ? allRegIds : ["__none__"]),
+      supabase
+        .from("phases")
+        .select("reset_yellow_cards, yellow_cards_reset_done")
+        .eq("id", match.phase_id)
+        .single(),
+      supabase
+        .from("phase_knockout_settings")
+        .select("has_penalties, has_extra_time")
+        .eq("phase_id", match.phase_id)
+        .maybeSingle(),
     ]);
 
-    const suspendedRegistrationIds = new Set(
-      (suspRows ?? []).map((r: { registration_id: string }) => r.registration_id)
-    );
+    // Combine explicitly-suspended players with the retroactively resolved ones.
+    // The nullSuspRows are included directly in case the v_suspended_players query
+    // ran before the UPDATE propagated.
+    const suspendedRegistrationIds = new Set([
+      ...(suspRows ?? []).map((r: { registration_id: string }) => r.registration_id),
+      ...(nullSuspRows ?? []).map((r: { id: string; registration_id: string }) => r.registration_id),
+    ]);
+
+    // If this phase is configured to reset yellow cards but hasn't done so yet,
+    // treat all players as unbooked — the reset fires when the first period starts.
+    const phaseResetsYellows =
+      phaseRow?.reset_yellow_cards === true && phaseRow?.yellow_cards_reset_done === false;
+
     const bookedRegistrationIds = new Set(
-      (bookedRows ?? []).map((r: { registration_id: string }) => r.registration_id)
+      phaseResetsYellows
+        ? []
+        : (bookedRows ?? []).map((r: { registration_id: string }) => r.registration_id)
     );
 
     function mapPlayers(rows: PlayerRegistrationRow[] | null, ctId: string, lps: MatchLineupPlayer[]): MatchPlayer[] {
@@ -368,6 +473,8 @@ export function useMatchDetail(matchId: string) {
       lineups,
       suspendedRegistrationIds,
       bookedRegistrationIds,
+      hasPenalties: !!knockoutSettings?.has_penalties,
+      hasExtraTime: !!knockoutSettings?.has_extra_time,
     });
 
     setElapsed(getTotalElapsed(match));

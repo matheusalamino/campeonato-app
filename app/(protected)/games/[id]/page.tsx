@@ -183,7 +183,11 @@ const PERIOD_LABELS: Record<MatchPeriod, string> = {
 function PeriodControls({ detail, elapsed, reload }: { detail: MatchDetail; elapsed: number; reload: () => void }) {
   const { match } = detail;
   const [loading, setLoading] = useState(false);
-  const { startMatch, endCurrentPeriod, startNextPeriod } = useMatchStatus({ championshipId: match.championship_id ?? "" });
+  const { startMatch, endCurrentPeriod, startNextPeriod } = useMatchStatus({
+    championshipId: match.championship_id ?? "",
+    hasPenalties: detail.hasPenalties,
+    hasExtraTime: detail.hasExtraTime,
+  });
 
   const homeLineupCount = detail.lineups.filter(l => l.championshipTeamId === detail.homeTeam.championshipTeamId && l.isStarter).length;
   const awayLineupCount = detail.lineups.filter(l => l.championshipTeamId === detail.awayTeam.championshipTeamId && l.isStarter).length;
@@ -199,7 +203,8 @@ function PeriodControls({ detail, elapsed, reload }: { detail: MatchDetail; elap
 
   const p = match.current_period as MatchPeriod;
   const isRest = p === "halftime" || p === "extra_halftime";
-  const isActive = p === "period_1" || p === "period_2" || p === "extra_1" || p === "extra_2" || p === "penalties";
+  // Exclude "penalties" — PenaltyShootoutControl handles auto-finishing the penalty period
+  const isActive = p === "period_1" || p === "period_2" || p === "extra_1" || p === "extra_2";
 
   if (match.status === "COMPLETED") return null;
 
@@ -831,22 +836,25 @@ export default function MatchPage() {
 
       {/* Controls (only when not completed) */}
       {!isCompleted && (
-        <>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-            <PeriodControls detail={detail} elapsed={elapsed} reload={reload} />
-            {isInProgress && detail.match.current_period !== "penalties" && (
-              <button onClick={() => setShowAddEvent(true)}
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow hover:bg-blue-500 transition-all">
-                <Plus className="h-4 w-4" /> Evento
-              </button>
-            )}
-          </div>
-
-          {/* Penalty Control Overlay */}
-          {detail.match.current_period === "penalties" && (
-            <PenaltyShootoutControl detail={detail} reload={reload} />
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+          <PeriodControls detail={detail} elapsed={elapsed} reload={reload} />
+          {isInProgress && detail.match.current_period !== "penalties" && (
+            <button onClick={() => setShowAddEvent(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow hover:bg-blue-500 transition-all">
+              <Plus className="h-4 w-4" /> Evento
+            </button>
           )}
-        </>
+        </div>
+      )}
+
+      {/* Penalty dispute — shown during active penalty period OR for completed draws
+          where penalties haven't been resolved yet (e.g., match ended without them) */}
+      {((!isCompleted && detail.match.current_period === "penalties") ||
+        (isCompleted &&
+          detail.match.home_score === detail.match.away_score &&
+          detail.hasPenalties &&
+          !detail.match.penalty_winner_team_id)) && (
+        <PenaltyShootoutControl detail={detail} reload={reload} />
       )}
 
       {/* Events (Hide when in penalties to focus) */}

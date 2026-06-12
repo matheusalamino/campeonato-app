@@ -7,6 +7,7 @@ import type {
   KnockoutMatchSource,
   Phase,
 } from "@/types/championship";
+import { buildResolutionContext, resolveCtId, type ResolutionContext } from "@/features/utils/resolveSlotTeam";
 
 const supabase = createClient();
 
@@ -50,6 +51,7 @@ export type ChampionshipMatchPhaseGroup = {
 type GroupSlotRow = {
   phase_id: string;
   label: string;
+  group_letter: string | null;
   championship_team_id: string | null;
 };
 
@@ -65,6 +67,9 @@ type ChampionshipMatchRow = {
   status: string | null;
   home_score: number | null;
   away_score: number | null;
+  penalty_home_score: number | null;
+  penalty_away_score: number | null;
+  penalty_winner_team_id: string | null;
 };
 
 function teamFromChampionshipTeamId(
@@ -166,10 +171,12 @@ async function fetchChampionshipMatchGroups(
     { data: matchRows },
     { data: championshipTeams },
     { data: groupSlots },
+    { data: champSettings },
+    { data: tieBreakerRules },
   ] = await Promise.all([
     supabase
       .from("knockout_matches")
-      .select("id, phase_id, name, round_number, code, group_label, scheduled_at, is_final, status, home_score, away_score")
+      .select("id, phase_id, name, round_number, code, group_label, scheduled_at, is_final, status, home_score, away_score, penalty_home_score, penalty_away_score, penalty_winner_team_id")
       .in("phase_id", phaseIds),
     supabase
       .from("championship_teams")
@@ -177,8 +184,18 @@ async function fetchChampionshipMatchGroups(
       .eq("championship_id", championshipId),
     supabase
       .from("group_slots")
-      .select("phase_id, label, championship_team_id")
-      .in("phase_id", groupPhaseIds.length ? groupPhaseIds : ["__none__"]),
+      .select("phase_id, label, championship_team_id, group_letter")
+      .in("phase_id", phaseIds.length ? phaseIds : ["__none__"]),
+    supabase
+      .from("championships")
+      .select("points_win, points_draw, points_loss")
+      .eq("id", championshipId)
+      .single(),
+    supabase
+      .from("tie_breaker_rules")
+      .select("phase_id, rule, priority")
+      .in("phase_id", phaseIds)
+      .order("priority"),
   ]);
 
   const matches = (matchRows ?? []) as ChampionshipMatchRow[];
@@ -214,6 +231,24 @@ async function fetchChampionshipMatchGroups(
         .in("knockout_match_id", matchIds.length ? matchIds : ["__none__"])
         .order("slot_order"),
     ]);
+
+  // Goal events for live standings (needed for group_position source resolution)
+  const { data: goalEvents } = await supabase
+    .from("match_events_v2")
+    .select("knockout_match_id, event_type, team_id")
+    .is("deleted_at", null)
+    .in("event_type", ["GOAL", "OWN_GOAL"])
+    .in("knockout_match_id", matchIds.length ? matchIds : ["__none__"]);
+
+  const resolutionCtx = buildResolutionContext(
+    (matches as Parameters<typeof buildResolutionContext>[0]),
+    ((matchSlots ?? []) as Parameters<typeof buildResolutionContext>[1]),
+    ((groupSlots ?? []) as Parameters<typeof buildResolutionContext>[2]),
+    ((sourceRows ?? []) as Parameters<typeof buildResolutionContext>[3]),
+    ((goalEvents ?? []) as Parameters<typeof buildResolutionContext>[4]),
+    ((tieBreakerRules ?? []) as Parameters<typeof buildResolutionContext>[5]),
+    { win: champSettings?.points_win ?? 3, draw: champSettings?.points_draw ?? 1, loss: champSettings?.points_loss ?? 0 },
+  );
 
   const teamMap = Object.fromEntries(
     ((teamRows ?? []) as TeamInfo[]).map((team) => [team.id, team]),
@@ -261,24 +296,17 @@ async function fetchChampionshipMatchGroups(
     match: ChampionshipMatchRow,
     phase: Phase,
     slotOrder: 1 | 2,
+    ctx: ResolutionContext,
   ): MatchSide {
-    const slot = (slotsByMatch[match.id] ?? []).find(
-      (item) => item.slot_order === slotOrder,
-    );
-
-    const slottedTeam = teamFromChampionshipTeamId(
-      slot?.championship_team_id,
-      teamsByChampionshipTeamId,
-    );
-
-    if (slottedTeam) {
-      return {
-        type: "team",
-        label: slottedTeam.name,
-        logoUrl: slottedTeam.logo_url,
-      };
+    // Try live resolution: direct match_slots assignment OR knockout_match_sources
+    // (group standings computed from current results, match_winner/loser chains)
+    const ctId = resolveCtId(match.id, slotOrder, ctx);
+    if (ctId) {
+      const team = teamsByChampionshipTeamId[ctId];
+      if (team) return { type: "team", label: team.name, logoUrl: team.logo_url };
     }
 
+    // Unresolvable source → show rule text as fallback
     const source = (sourcesByMatch[match.id] ?? []).find(
       (item) => item.slot_order === slotOrder,
     );
@@ -314,6 +342,7 @@ async function fetchChampionshipMatchGroups(
       }
     }
 
+    const slot = (slotsByMatch[match.id] ?? []).find(s => s.slot_order === slotOrder);
     if (slot?.label && slot.label !== "home" && slot.label !== "away") {
       const assignedTeam = groupAssignmentMap[`${phase.id}:${slot.label}`];
 
@@ -356,8 +385,8 @@ async function fetchChampionshipMatchGroups(
         status: match.status ?? "NOT_STARTED",
         homeScore: match.home_score,
         awayScore: match.away_score,
-        home: resolveSide(match, phaseMap[match.phase_id], 1),
-        away: resolveSide(match, phaseMap[match.phase_id], 2),
+        home: resolveSide(match, phaseMap[match.phase_id], 1, resolutionCtx),
+        away: resolveSide(match, phaseMap[match.phase_id], 2, resolutionCtx),
       }))
       .sort(sortMatches);
 

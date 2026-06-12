@@ -122,7 +122,23 @@ async function handleYellowCard(
     .eq("event_type", "YELLOW_CARD")
     .is("deleted_at", null);
 
-  if ((existingYellows?.length ?? 0) >= 2) return;
+  if ((existingYellows?.length ?? 0) >= 2) {
+    // 2nd yellow in the same match → expulsion. Treat as suspension + reset counter.
+    const suspendedMatchId = await findNextMatch(knockoutMatchId, championshipTeamId, championshipId);
+    const { error: suspError } = await supabase.from("suspensions").insert({
+      registration_id: registrationId,
+      origin_match_id: knockoutMatchId,
+      suspended_match_id: suspendedMatchId,
+      reason: "two_yellows",
+      served: false,
+    });
+    if (suspError) throw new Error(`Failed to create two_yellows suspension: ${suspError.message}`);
+    await supabase
+      .from("player_card_stats")
+      .update({ active_yellow_cards: 0, updated_at: new Date().toISOString() })
+      .eq("registration_id", registrationId);
+    return;
+  }
 
   // Ensure player_card_stats row exists (create with 0 if first yellow ever).
   await supabase
@@ -256,22 +272,38 @@ async function findNextMatch(
   if (currentRound !== null) {
     const { data: laterSamePhase } = await supabase
       .from("knockout_matches")
-      .select("id")
+      .select("id, name")
       .eq("phase_id", currentPhaseId)
       .gt("round_number", currentRound)
       .order("round_number", { ascending: true });
 
-    if (laterSamePhase && laterSamePhase.length > 0) {
-      // matchIds is already ordered by round_number asc; check each in order
-      for (const match of laterSamePhase) {
-        const { data: slot } = await supabase
-          .from("match_slots")
-          .select("match_id")
-          .eq("championship_team_id", championshipTeamId)
-          .eq("match_id", match.id)
-          .maybeSingle();
+    // 1a. Knockout phase: match_slots with non-null championship_team_id.
+    for (const match of laterSamePhase ?? []) {
+      const { data: slot } = await supabase
+        .from("match_slots")
+        .select("match_id")
+        .eq("championship_team_id", championshipTeamId)
+        .eq("match_id", match.id)
+        .maybeSingle();
 
-        if (slot) return slot.match_id;
+      if (slot) return slot.match_id;
+    }
+
+    // 1b. Group phase: match_slots have championship_team_id = null.
+    // Teams are identified by their group label (e.g. "A1") parsed from the match name.
+    const { data: groupSlot } = await supabase
+      .from("group_slots")
+      .select("label")
+      .eq("championship_team_id", championshipTeamId)
+      .eq("phase_id", currentPhaseId)
+      .maybeSingle();
+
+    if (groupSlot?.label) {
+      const label = groupSlot.label;
+      for (const match of laterSamePhase ?? []) {
+        if (!match.name) continue;
+        const parts = (match.name as string).split(/\s+x\s+/i).map((p: string) => p.trim());
+        if (parts[0] === label || parts[1] === label) return match.id;
       }
     }
   }
@@ -300,13 +332,13 @@ async function findNextMatch(
   // 3. Find the team's slot in the earliest match of the next phase.
   const { data: nextPhaseMatches } = await supabase
     .from("knockout_matches")
-    .select("id")
+    .select("id, name")
     .eq("phase_id", nextPhaseId)
     .order("round_number", { ascending: true });
 
   if (!nextPhaseMatches || nextPhaseMatches.length === 0) return null;
 
-  // nextPhaseMatches is ordered by round_number asc; check each in order
+  // 3a. Knockout phase: match_slots with non-null championship_team_id.
   for (const match of nextPhaseMatches) {
     const { data: nextSlot } = await supabase
       .from("match_slots")
@@ -316,6 +348,23 @@ async function findNextMatch(
       .maybeSingle();
 
     if (nextSlot) return nextSlot.match_id;
+  }
+
+  // 3b. Group phase next: resolve via group_slots label.
+  const { data: nextGroupSlot } = await supabase
+    .from("group_slots")
+    .select("label")
+    .eq("championship_team_id", championshipTeamId)
+    .eq("phase_id", nextPhaseId)
+    .maybeSingle();
+
+  if (nextGroupSlot?.label) {
+    const label = nextGroupSlot.label;
+    for (const match of nextPhaseMatches) {
+      if (!match.name) continue;
+      const parts = (match.name as string).split(/\s+x\s+/i).map((p: string) => p.trim());
+      if (parts[0] === label || parts[1] === label) return match.id;
+    }
   }
 
   // 4. Team not yet slotted in the next phase (group standings unresolved).

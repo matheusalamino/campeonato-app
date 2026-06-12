@@ -54,7 +54,7 @@ export function LineupControl({ detail, onSaved }: LineupControlProps) {
     const gkCount = selected.filter(p => p.position === "Goleiro").length;
     const fieldCount = selected.length - gkCount;
 
-    return gkCount === 1 && fieldCount === 5 && !!color;
+    return ((gkCount === 1 && fieldCount === 5) || (gkCount === 0 && fieldCount === 6)) && !!color;
   };
 
   const homeConfigured = checkTeamConfigured(detail.homeTeam.championshipTeamId);
@@ -72,10 +72,6 @@ export function LineupControl({ detail, onSaved }: LineupControlProps) {
         .filter(l => l.isStarter && !detail.suspendedRegistrationIds.has(l.playerId))
         .map(l => l.playerId)
     );
-    if (nextStarters.size === 0) {
-      const gk = currentPlayers.find(p => p.position === "Goleiro");
-      if (gk) nextStarters.add(gk.registrationId);
-    }
 
     setLocalStarters(nextStarters);
     setLocalCaptain(currentLineup.find(l => l.isCaptain)?.playerId ?? null);
@@ -118,8 +114,8 @@ export function LineupControl({ detail, onSaved }: LineupControlProps) {
     const gkCount = selectedPlayers.filter(p => p.position === "Goleiro").length;
     const fieldCount = selectedPlayers.length - gkCount;
 
-    if (gkCount !== 1 || fieldCount !== 5) {
-      toast.error(`Escalação inválida: deve ter exatamente 1 goleiro e 5 jogadores de linha (Total: ${selectedPlayers.length}/6).`);
+    if (!((gkCount === 1 && fieldCount === 5) || (gkCount === 0 && fieldCount === 6))) {
+      toast.error(`Escalação inválida: selecione 1 goleiro + 5 linha, ou 6 jogadores de linha se o goleiro estiver suspenso (Total: ${selectedPlayers.length}/6).`);
       return;
     }
 
@@ -249,7 +245,7 @@ export function LineupControl({ detail, onSaved }: LineupControlProps) {
         <div className="flex-1 overflow-y-auto p-5 bg-zinc-900/10 space-y-5">
           <div>
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs text-zinc-500 font-medium">Selecione 1 Goleiro + 5 Linha e defina o Capitão.</p>
+              <p className="text-xs text-zinc-500 font-medium">Selecione 1 Goleiro + 5 Linha (ou 6 Linha se o goleiro estiver suspenso) e defina o Capitão.</p>
               <span className="text-xs font-bold text-zinc-400 bg-zinc-800 px-2.5 py-1 rounded-full shrink-0">
                 {localStarters.size} / 6
               </span>
