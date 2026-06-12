@@ -132,7 +132,7 @@ export function BestPlayerVoteModal({
   const [refereePick, setRefereePick] = useState<MatchPlayer | null>(
     findExisting(existingVotes, "referee", allPlayers)
   );
-  const [managerPick, setManagerPick] = useState<string | null>(existingManagerVote ?? null);
+  const [managerPick, setManagerPick] = useState<string | null>(existingManagerVote);
   const [saving, setSaving] = useState(false);
 
   async function handleSubmitPlayers() {
@@ -313,7 +313,7 @@ export function BestPlayerVoteModal({
                 </button>
                 <button
                   onClick={handleSubmitPlayers}
-                  disabled={saving || (!homeManagerPick && !awayManagerPick && !refereePick)}
+                  disabled={saving}
                   className="flex-[2] rounded-xl bg-yellow-600 py-3 text-sm font-black text-white hover:bg-yellow-500 transition-all disabled:opacity-50 uppercase tracking-wider shadow-lg shadow-yellow-900/20"
                 >
                   {saving ? "Salvando..." : "Próximo →"}
