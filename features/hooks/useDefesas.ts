@@ -66,7 +66,7 @@ export function useDefesas(championshipId: string | null) {
 
     const result: DefesaScore[] = [];
     for (const [registrationId, { info, totalSaves, penaltySaves, byMatchMap }] of scoreMap.entries()) {
-      const byMatch = [];
+      const byMatch: DefesaScore["byMatch"] = [];
       for (const [matchId, { count, penaltyCount }] of byMatchMap.entries()) {
         const matchInfo = matchMap.get(matchId);
         byMatch.push({
