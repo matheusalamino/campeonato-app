@@ -183,7 +183,11 @@ const PERIOD_LABELS: Record<MatchPeriod, string> = {
 function PeriodControls({ detail, elapsed, reload }: { detail: MatchDetail; elapsed: number; reload: () => void }) {
   const { match } = detail;
   const [loading, setLoading] = useState(false);
-  const { startMatch, endCurrentPeriod, startNextPeriod } = useMatchStatus({ championshipId: match.championship_id ?? "" });
+  const { startMatch, endCurrentPeriod, startNextPeriod } = useMatchStatus({
+    championshipId: match.championship_id ?? "",
+    hasPenalties: detail.hasPenalties,
+    hasExtraTime: detail.hasExtraTime,
+  });
 
   const homeLineupCount = detail.lineups.filter(l => l.championshipTeamId === detail.homeTeam.championshipTeamId && l.isStarter).length;
   const awayLineupCount = detail.lineups.filter(l => l.championshipTeamId === detail.awayTeam.championshipTeamId && l.isStarter).length;
@@ -199,7 +203,8 @@ function PeriodControls({ detail, elapsed, reload }: { detail: MatchDetail; elap
 
   const p = match.current_period as MatchPeriod;
   const isRest = p === "halftime" || p === "extra_halftime";
-  const isActive = p === "period_1" || p === "period_2" || p === "extra_1" || p === "extra_2" || p === "penalties";
+  // Exclude "penalties" — PenaltyShootoutControl handles auto-finishing the penalty period
+  const isActive = p === "period_1" || p === "period_2" || p === "extra_1" || p === "extra_2";
 
   if (match.status === "COMPLETED") return null;
 

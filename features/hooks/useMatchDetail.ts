@@ -145,6 +145,8 @@ export type MatchDetail = {
   lineups: MatchLineupPlayer[];
   suspendedRegistrationIds: Set<string>;
   bookedRegistrationIds: Set<string>;
+  hasPenalties: boolean;
+  hasExtraTime: boolean;
 };
 
 /** Acumulado de períodos anteriores em segundos */
@@ -347,7 +349,7 @@ export function useMatchDetail(matchId: string) {
         .in("id", nullSuspRows.map((r: { id: string }) => r.id));
     }
 
-    const [{ data: suspRows }, { data: bookedRows }, { data: phaseRow }] = await Promise.all([
+    const [{ data: suspRows }, { data: bookedRows }, { data: phaseRow }, { data: knockoutSettings }] = await Promise.all([
       supabase
         .from("v_suspended_players")
         .select("registration_id")
@@ -361,6 +363,11 @@ export function useMatchDetail(matchId: string) {
         .select("reset_yellow_cards, yellow_cards_reset_done")
         .eq("id", match.phase_id)
         .single(),
+      supabase
+        .from("phase_knockout_settings")
+        .select("has_penalties, has_extra_time")
+        .eq("phase_id", match.phase_id)
+        .maybeSingle(),
     ]);
 
     // Combine explicitly-suspended players with the retroactively resolved ones.
@@ -466,6 +473,8 @@ export function useMatchDetail(matchId: string) {
       lineups,
       suspendedRegistrationIds,
       bookedRegistrationIds,
+      hasPenalties: !!knockoutSettings?.has_penalties,
+      hasExtraTime: !!knockoutSettings?.has_extra_time,
     });
 
     setElapsed(getTotalElapsed(match));
