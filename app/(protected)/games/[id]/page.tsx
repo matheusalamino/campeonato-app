@@ -944,6 +944,55 @@ export default function MatchPage() {
     if (detail?.match.status === "COMPLETED") void fetchExistingVotes();
   }, [detail?.match.status, fetchExistingVotes]);
 
+  const [savesByPlayer, setSavesByPlayer] = useState<Map<string, number>>(new Map());
+
+  const loadSaves = useCallback(async () => {
+    if (!detail?.match.id) return;
+    const { data } = await supabase
+      .from("player_saves")
+      .select("registration_id")
+      .eq("match_id", detail.match.id);
+
+    const counts = new Map<string, number>();
+    for (const row of data ?? []) {
+      counts.set(row.registration_id, (counts.get(row.registration_id) ?? 0) + 1);
+    }
+    setSavesByPlayer(counts);
+  }, [detail?.match.id]);
+
+  useEffect(() => { void loadSaves(); }, [loadSaves]);
+
+  async function handleSaveAdd(registrationId: string) {
+    if (!detail?.match.id || !detail.match.championship_id) return;
+    setSavesByPlayer(prev => new Map(prev).set(registrationId, (prev.get(registrationId) ?? 0) + 1));
+    await supabase.from("player_saves").insert({
+      match_id: detail.match.id,
+      championship_id: detail.match.championship_id,
+      registration_id: registrationId,
+      is_penalty: false,
+    });
+  }
+
+  async function handleSaveRemove(registrationId: string) {
+    if (!detail?.match.id) return;
+    const { data } = await supabase
+      .from("player_saves")
+      .select("id")
+      .eq("match_id", detail.match.id)
+      .eq("registration_id", registrationId)
+      .eq("is_penalty", false)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data) return;
+    await supabase.from("player_saves").delete().eq("id", data.id);
+    setSavesByPlayer(prev => {
+      const next = new Map(prev);
+      next.set(registrationId, Math.max(0, (prev.get(registrationId) ?? 0) - 1));
+      return next;
+    });
+  }
+
   const prevStatusRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (prevStatusRef.current !== undefined && prevStatusRef.current !== "COMPLETED" && detail?.match.status === "COMPLETED") {
@@ -1005,7 +1054,12 @@ export default function MatchPage() {
       <Scoreboard detail={detail} elapsed={elapsed} />
 
       {/* Visual field showing current on-field players */}
-      <MatchFieldView detail={detail} />
+      <MatchFieldView
+        detail={detail}
+        saveCountsByPlayer={savesByPlayer}
+        onSaveAdd={handleSaveAdd}
+        onSaveRemove={handleSaveRemove}
+      />
 
       {/* Escalação (Only when not started) */}
       {!isInProgress && !isCompleted && detail.match.current_period === "not_started" && (
@@ -1094,7 +1148,7 @@ export default function MatchPage() {
 
       {/* Add event sheet */}
       {showAddEvent && (
-        <AddEventSheet detail={detail} elapsed={elapsed} onClose={() => setShowAddEvent(false)} onSaved={reload} />
+        <AddEventSheet detail={detail} elapsed={elapsed} onClose={() => setShowAddEvent(false)} onSaved={() => { reload(); void loadSaves(); }} />
       )}
       {showVoteModal && detail && (
         <BestPlayerVoteModal
@@ -1108,7 +1162,7 @@ export default function MatchPage() {
           existingVotes={existingVotes}
           existingManagerVote={existingManagerVote}
           onClose={() => setShowVoteModal(false)}
-          onSaved={() => { void fetchExistingVotes(); }}
+          onSaved={() => { void fetchExistingVotes(); void loadSaves(); }}
         />
       )}
     </div>
