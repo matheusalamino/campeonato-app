@@ -328,7 +328,7 @@ export function useMatchDetail(matchId: string) {
       ...(awayPlayers ?? []),
     ].map((r) => r.registration_id);
 
-    const [{ data: suspRows }, { data: bookedRows }] = await Promise.all([
+    const [{ data: suspRows }, { data: bookedRows }, { data: phaseRow }] = await Promise.all([
       supabase
         .from("v_suspended_players")
         .select("registration_id")
@@ -337,13 +337,26 @@ export function useMatchDetail(matchId: string) {
         .from("v_booked_players")
         .select("registration_id")
         .in("registration_id", allRegIds.length ? allRegIds : ["__none__"]),
+      supabase
+        .from("phases")
+        .select("reset_yellow_cards, yellow_cards_reset_done")
+        .eq("id", match.phase_id)
+        .single(),
     ]);
 
     const suspendedRegistrationIds = new Set(
       (suspRows ?? []).map((r: { registration_id: string }) => r.registration_id)
     );
+
+    // If this phase is configured to reset yellow cards but hasn't done so yet,
+    // treat all players as unbooked — the reset fires when the first period starts.
+    const phaseResetsYellows =
+      phaseRow?.reset_yellow_cards === true && phaseRow?.yellow_cards_reset_done === false;
+
     const bookedRegistrationIds = new Set(
-      (bookedRows ?? []).map((r: { registration_id: string }) => r.registration_id)
+      phaseResetsYellows
+        ? []
+        : (bookedRows ?? []).map((r: { registration_id: string }) => r.registration_id)
     );
 
     function mapPlayers(rows: PlayerRegistrationRow[] | null, ctId: string, lps: MatchLineupPlayer[]): MatchPlayer[] {
