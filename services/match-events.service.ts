@@ -23,6 +23,17 @@ export type RemoveMatchEventParams = {
   eventType: string;
 };
 
+export type AddPenaltyEventParams = {
+  knockoutMatchId: string;
+  championshipId: string;
+  teamId: string;
+  registrationId: string;
+  eventTimeS: number;
+  period: string;
+  outcome: "PENALTY_GOAL" | "PENALTY_OUT" | "PENALTY_SAVED";
+  goalkeeperRegistrationId?: string | null;
+};
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function addMatchEvent(params: AddMatchEventParams): Promise<void> {
@@ -76,6 +87,41 @@ export async function removeMatchEvent(params: RemoveMatchEventParams): Promise<
     await reverseRedCard(registrationId, knockoutMatchId);
   } else if (eventType === "YELLOW_CARD") {
     await reverseYellowCard(registrationId, knockoutMatchId);
+  }
+}
+
+export async function addPenaltyEvent(params: AddPenaltyEventParams): Promise<void> {
+  const {
+    knockoutMatchId,
+    championshipId,
+    teamId,
+    registrationId,
+    eventTimeS,
+    period,
+    outcome,
+    goalkeeperRegistrationId,
+  } = params;
+
+  const { error } = await supabase.from("match_events_v2").insert({
+    knockout_match_id: knockoutMatchId,
+    team_id: teamId,
+    player_id: registrationId,
+    player_in_id: outcome === "PENALTY_SAVED" ? (goalkeeperRegistrationId ?? null) : null,
+    event_type: outcome,
+    event_time_s: eventTimeS,
+    period,
+  });
+
+  if (error) throw new Error(`Failed to insert penalty event: ${error.message}`);
+
+  if (outcome === "PENALTY_SAVED" && goalkeeperRegistrationId) {
+    const { error: saveError } = await supabase.from("player_saves").insert({
+      match_id: knockoutMatchId,
+      championship_id: championshipId,
+      registration_id: goalkeeperRegistrationId,
+      is_penalty: true,
+    });
+    if (saveError) throw new Error(`Failed to insert penalty save: ${saveError.message}`);
   }
 }
 
