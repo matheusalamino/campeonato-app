@@ -965,12 +965,19 @@ export default function MatchPage() {
   async function handleSaveAdd(registrationId: string) {
     if (!detail?.match.id || !detail.match.championship_id) return;
     setSavesByPlayer(prev => new Map(prev).set(registrationId, (prev.get(registrationId) ?? 0) + 1));
-    await supabase.from("player_saves").insert({
+    const { error } = await supabase.from("player_saves").insert({
       match_id: detail.match.id,
       championship_id: detail.match.championship_id,
       registration_id: registrationId,
       is_penalty: false,
     });
+    if (error) {
+      setSavesByPlayer(prev => {
+        const next = new Map(prev);
+        next.set(registrationId, Math.max(0, (prev.get(registrationId) ?? 0) - 1));
+        return next;
+      });
+    }
   }
 
   async function handleSaveRemove(registrationId: string) {
