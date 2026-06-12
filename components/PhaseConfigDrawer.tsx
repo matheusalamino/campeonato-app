@@ -42,6 +42,9 @@ export function PhaseConfigDrawer({ phase, onClose }: Props) {
   // Yellow card reset state
   const [resetYellows, setResetYellows] = useState(phase.reset_yellow_cards);
 
+  // Vote weight state (Craque do Campeonato)
+  const [voteWeight, setVoteWeight] = useState<number>(phase.vote_weight ?? 1);
+
   useEffect(() => {
     async function load() {
       setLoading(true);
@@ -104,7 +107,7 @@ export function PhaseConfigDrawer({ phase, onClose }: Props) {
 
       const { error: phaseError } = await supabase
         .from("phases")
-        .update({ reset_yellow_cards: resetYellows })
+        .update({ reset_yellow_cards: resetYellows, vote_weight: voteWeight })
         .eq("id", phase.id);
       if (phaseError) throw phaseError;
 
@@ -250,6 +253,41 @@ export function PhaseConfigDrawer({ phase, onClose }: Props) {
           )}
 
           {!loading && (
+            <>
+            {/* ── Vote Weight (Craque do Campeonato) ────────────────────────── */}
+            <div className="space-y-3 pt-4 border-t border-zinc-800">
+              <div className="space-y-1">
+                <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                  <Trophy className="h-3.5 w-3.5 text-yellow-500" /> Craque do Campeonato
+                </h3>
+                <p className="text-[11px] text-zinc-500 leading-relaxed">
+                  Peso dos votos desta fase para o Craque do Campeonato.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                {[
+                  { value: 1, label: "1 pt", description: "Grupos / Repescagem" },
+                  { value: 2, label: "2 pts", description: "Semifinal" },
+                  { value: 3, label: "3 pts", description: "Final" },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setVoteWeight(opt.value)}
+                    className={cn(
+                      "flex-1 flex flex-col items-center gap-1 rounded-xl border p-3 text-xs font-bold transition-all",
+                      voteWeight === opt.value
+                        ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-400"
+                        : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+                    )}
+                  >
+                    <span className="text-lg font-black">{opt.label}</span>
+                    <span className="text-[10px] font-medium opacity-70">{opt.description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-4 pt-4 border-t border-zinc-800">
               <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
                 <RotateCcw className="h-3.5 w-3.5" /> Amarelos
@@ -276,6 +314,7 @@ export function PhaseConfigDrawer({ phase, onClose }: Props) {
                 </div>
               </label>
             </div>
+            </>
           )}
         </div>
 
