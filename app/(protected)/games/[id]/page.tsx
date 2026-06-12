@@ -836,22 +836,25 @@ export default function MatchPage() {
 
       {/* Controls (only when not completed) */}
       {!isCompleted && (
-        <>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-            <PeriodControls detail={detail} elapsed={elapsed} reload={reload} />
-            {isInProgress && detail.match.current_period !== "penalties" && (
-              <button onClick={() => setShowAddEvent(true)}
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow hover:bg-blue-500 transition-all">
-                <Plus className="h-4 w-4" /> Evento
-              </button>
-            )}
-          </div>
-
-          {/* Penalty Control Overlay */}
-          {detail.match.current_period === "penalties" && (
-            <PenaltyShootoutControl detail={detail} reload={reload} />
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+          <PeriodControls detail={detail} elapsed={elapsed} reload={reload} />
+          {isInProgress && detail.match.current_period !== "penalties" && (
+            <button onClick={() => setShowAddEvent(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow hover:bg-blue-500 transition-all">
+              <Plus className="h-4 w-4" /> Evento
+            </button>
           )}
-        </>
+        </div>
+      )}
+
+      {/* Penalty dispute — shown during active penalty period OR for completed draws
+          where penalties haven't been resolved yet (e.g., match ended without them) */}
+      {((!isCompleted && detail.match.current_period === "penalties") ||
+        (isCompleted &&
+          detail.match.home_score === detail.match.away_score &&
+          detail.hasPenalties &&
+          !detail.match.penalty_winner_team_id)) && (
+        <PenaltyShootoutControl detail={detail} reload={reload} />
       )}
 
       {/* Events (Hide when in penalties to focus) */}
