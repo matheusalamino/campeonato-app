@@ -29,6 +29,7 @@ export function useBestPlayer(championshipId: string | null) {
   const rawVotesRef = useRef<RawVote[]>([]);
   const matchMapRef = useRef<Map<string, { name: string; phaseId: string }>>(new Map());
   const phaseMapRef = useRef<Map<string, string>>(new Map()); // phaseId → phaseName
+  const loadSeqRef = useRef(0);
 
   const derive = useCallback(() => {
     const regInfoMap = regInfoMapRef.current;
@@ -78,12 +79,15 @@ export function useBestPlayer(championshipId: string | null) {
   }, []);
 
   const load = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
+
     if (!championshipId) {
       regInfoMapRef.current = new Map();
       rawVotesRef.current = [];
       matchMapRef.current = new Map();
       phaseMapRef.current = new Map();
       setLeaderboard([]);
+      setLoading(false);
       return;
     }
 
@@ -150,12 +154,15 @@ export function useBestPlayer(championshipId: string | null) {
         });
       }
 
+      // Discard if a newer load has started since this one was launched
+      if (seq !== loadSeqRef.current) return;
+
       regInfoMapRef.current = newRegInfoMap;
       rawVotesRef.current = (votesRes.data ?? []) as RawVote[];
       matchMapRef.current = newMatchMap;
       phaseMapRef.current = newPhaseMap;
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }, [championshipId]);
 

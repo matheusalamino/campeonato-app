@@ -90,6 +90,7 @@ export function useDisciplinary(
   const rawEventsRef = useRef<RawEvent[]>([]);
   const rawSuspensionsRef = useRef<RawSuspension[]>([]);
   const matchMapRef = useRef<Map<string, MatchInfo>>(new Map());
+  const loadSeqRef = useRef(0);
 
   // ── derive: re-apply filters to raw refs ─────────────────────────────────
   const derive = useCallback(() => {
@@ -131,7 +132,7 @@ export function useDisciplinary(
 
       const suspendedMatchPhaseId = suspMatch?.phaseId ?? null;
 
-      if (phaseId && suspendedMatchPhaseId !== phaseId) continue;
+      if (phaseId && suspendedMatchPhaseId !== null && suspendedMatchPhaseId !== phaseId) continue;
       if (teamId && info.teamId !== teamId) continue;
 
       susp.push({
@@ -164,7 +165,7 @@ export function useDisciplinary(
     for (const s of rawSuspensions) {
       if (!s.served) continue;
       const suspMatch = s.suspendedMatchId ? matchMap.get(s.suspendedMatchId) : null;
-      if (phaseId && suspMatch?.phaseId !== phaseId) continue;
+      if (phaseId && suspMatch != null && suspMatch.phaseId !== phaseId) continue;
       servedMap.set(s.registrationId, (servedMap.get(s.registrationId) ?? 0) + 1);
     }
 
@@ -187,6 +188,8 @@ export function useDisciplinary(
 
   // ── load: fetch all raw data for championship ─────────────────────────────
   const load = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
+
     if (!championshipId) {
       regInfoMapRef.current = new Map();
       rawBookedRef.current = [];
@@ -196,6 +199,7 @@ export function useDisciplinary(
       setBookedPlayers([]);
       setSuspensions([]);
       setCardHistory([]);
+      setLoading(false);
       return;
     }
 
@@ -261,6 +265,9 @@ export function useDisciplinary(
           .eq("championship_id", championshipId),
       ]);
 
+      // Discard if a newer load has started since this one was launched
+      if (seq !== loadSeqRef.current) return;
+
       // Build refs
       rawBookedRef.current = (bookedRes.data ?? []).map(r => ({ registrationId: r.registration_id }));
 
@@ -287,7 +294,7 @@ export function useDisciplinary(
       matchMapRef.current = newMatchMap;
 
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }, [championshipId]);
 

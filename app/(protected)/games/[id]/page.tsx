@@ -810,7 +810,7 @@ export default function MatchPage() {
 
   const prevStatusRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (prevStatusRef.current !== "COMPLETED" && detail?.match.status === "COMPLETED") {
+    if (prevStatusRef.current !== undefined && prevStatusRef.current !== "COMPLETED" && detail?.match.status === "COMPLETED") {
       setShowVoteModal(true);
     }
     prevStatusRef.current = detail?.match.status;
