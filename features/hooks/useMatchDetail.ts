@@ -147,6 +147,7 @@ export type MatchDetail = {
   bookedRegistrationIds: Set<string>;
   hasPenalties: boolean;
   hasExtraTime: boolean;
+  voteWeight: number; // from phases.vote_weight
 };
 
 /** Acumulado de períodos anteriores em segundos */
@@ -360,7 +361,7 @@ export function useMatchDetail(matchId: string) {
         .in("registration_id", allRegIds.length ? allRegIds : ["__none__"]),
       supabase
         .from("phases")
-        .select("reset_yellow_cards, yellow_cards_reset_done")
+        .select("reset_yellow_cards, yellow_cards_reset_done, vote_weight")
         .eq("id", match.phase_id)
         .single(),
       supabase
@@ -475,6 +476,7 @@ export function useMatchDetail(matchId: string) {
       bookedRegistrationIds,
       hasPenalties: !!knockoutSettings?.has_penalties,
       hasExtraTime: !!knockoutSettings?.has_extra_time,
+      voteWeight: phaseRow?.vote_weight ?? 1,
     });
 
     setElapsed(getTotalElapsed(match));
