@@ -449,7 +449,7 @@ export function useMatchDetail(matchId: string) {
     const homeCTId = resolvedHomeCTId ?? "";
     const awayCTId = resolvedAwayCTId ?? "";
 
-    const liveMatch = { ...match };
+    const liveMatch = { ...match, championship_id: derivedChampId ?? match.championship_id ?? "" };
     if (match.status === "IN_PROGRESS") {
       liveMatch.home_score = events.filter(
         (e) =>
