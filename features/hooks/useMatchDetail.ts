@@ -361,7 +361,7 @@ export function useMatchDetail(matchId: string) {
         .in("registration_id", allRegIds.length ? allRegIds : ["__none__"]),
       supabase
         .from("phases")
-        .select("reset_yellow_cards, yellow_cards_reset_done, vote_weight")
+        .select("reset_yellow_cards, yellow_cards_reset_done, vote_weight, championship_id")
         .eq("id", match.phase_id)
         .single(),
       supabase
@@ -449,7 +449,7 @@ export function useMatchDetail(matchId: string) {
     const homeCTId = resolvedHomeCTId ?? "";
     const awayCTId = resolvedAwayCTId ?? "";
 
-    const liveMatch = { ...match, championship_id: derivedChampId ?? match.championship_id ?? "" };
+    const liveMatch = { ...match, championship_id: match.championship_id ?? phaseRow?.championship_id ?? derivedChampId ?? "" };
     if (match.status === "IN_PROGRESS") {
       liveMatch.home_score = events.filter(
         (e) =>
