@@ -112,6 +112,7 @@ describe("groupRankingByPosition", () => {
     const grouped = groupRankingByPosition(totals, players, 1);
     expect(Object.keys(grouped).sort()).toEqual(["ATA", "MEI"]);
     expect(grouped.ATA[0].registrationId).toBe("c");
+    expect(grouped.ATA[0].value).toBe(8);
     expect(grouped.ATA).toHaveLength(1);
   });
 });

@@ -1,7 +1,7 @@
 // Funções puras de ranking — alimentadas pelos hooks públicos
 import type { PublicPlayer, PublicPlayerStats, RankingEntry } from "./types";
 
-type VoteRow = { registration_id: string; points: number };
+export type VoteRow = { registration_id: string; points: number };
 
 // Soma pontos de best_player_votes por inscrição
 export function sumVotePoints(votes: VoteRow[]): Map<string, number> {

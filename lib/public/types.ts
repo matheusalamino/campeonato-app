@@ -39,6 +39,8 @@ export type RankingEntry = {
 export const POSITION_LABELS: Record<string, string> = {
   GOL: "Goleiro",
   ZAG: "Zagueiro",
+  LAT: "Lateral",
+  VOL: "Volante",
   MEI: "Meia",
   ATA: "Atacante",
 };
