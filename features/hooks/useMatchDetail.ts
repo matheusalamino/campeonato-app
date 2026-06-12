@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { KnockoutMatch, MatchStatus, MatchPeriod } from "@/types/championship";
+import { buildResolutionContext, resolveCtId } from "@/features/utils/resolveSlotTeam";
 
 const supabase = createClient();
 
@@ -212,6 +213,55 @@ export function useMatchDetail(matchId: string) {
 
       if (!resolvedHomeCTId) resolvedHomeCTId = gSlots?.find((g) => g.label === parts[0])?.championship_team_id ?? null;
       if (!resolvedAwayCTId) resolvedAwayCTId = gSlots?.find((g) => g.label === parts[1])?.championship_team_id ?? null;
+    }
+
+    // Third fallback: knockout_match_sources resolution (Repescagem, Semifinal, etc.)
+    // Triggered when match_slots and group-label parsing both fail to resolve a team.
+    if ((!resolvedHomeCTId || !resolvedAwayCTId) && match.championship_id) {
+      const champId = match.championship_id;
+      const { data: allPhases } = await supabase.from("phases").select("id").eq("championship_id", champId);
+      const allPhaseIds = (allPhases ?? []).map(p => p.id);
+
+      if (allPhaseIds.length > 0) {
+        const [
+          { data: allMatches },
+          { data: allSlotsForCtx },
+          { data: allGroupSlotsForCtx },
+          { data: allSources },
+          { data: champSettings },
+          { data: tieBreakerRules },
+        ] = await Promise.all([
+          supabase.from("knockout_matches")
+            .select("id, phase_id, name, code, status, home_score, away_score, penalty_home_score, penalty_away_score, penalty_winner_team_id")
+            .in("phase_id", allPhaseIds),
+          supabase.from("match_slots").select("match_id, slot_order, championship_team_id"),
+          supabase.from("group_slots").select("phase_id, label, championship_team_id, group_letter").in("phase_id", allPhaseIds),
+          supabase.from("knockout_match_sources").select("knockout_match_id, slot_order, source_type, source_group, source_position, source_match_code, source_phase_id"),
+          supabase.from("championships").select("points_win, points_draw, points_loss").eq("id", champId).single(),
+          supabase.from("tie_breaker_rules").select("phase_id, rule, priority").in("phase_id", allPhaseIds).order("priority"),
+        ]);
+
+        const allMatchIds = (allMatches ?? []).map(m => m.id);
+        const { data: goalEvents } = await supabase
+          .from("match_events_v2")
+          .select("knockout_match_id, event_type, team_id")
+          .is("deleted_at", null)
+          .in("event_type", ["GOAL", "OWN_GOAL"])
+          .in("knockout_match_id", allMatchIds.length ? allMatchIds : ["__none__"]);
+
+        const ctx = buildResolutionContext(
+          (allMatches ?? []) as Parameters<typeof buildResolutionContext>[0],
+          (allSlotsForCtx ?? []) as Parameters<typeof buildResolutionContext>[1],
+          (allGroupSlotsForCtx ?? []) as Parameters<typeof buildResolutionContext>[2],
+          (allSources ?? []) as Parameters<typeof buildResolutionContext>[3],
+          (goalEvents ?? []) as Parameters<typeof buildResolutionContext>[4],
+          (tieBreakerRules ?? []) as Parameters<typeof buildResolutionContext>[5],
+          { win: champSettings?.points_win ?? 3, draw: champSettings?.points_draw ?? 1, loss: champSettings?.points_loss ?? 0 },
+        );
+
+        if (!resolvedHomeCTId) resolvedHomeCTId = resolveCtId(matchId, 1, ctx) ?? null;
+        if (!resolvedAwayCTId) resolvedAwayCTId = resolveCtId(matchId, 2, ctx) ?? null;
+      }
     }
 
     const ctIds = [resolvedHomeCTId, resolvedAwayCTId].filter(Boolean) as string[];
