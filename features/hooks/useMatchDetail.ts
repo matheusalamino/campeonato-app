@@ -217,8 +217,20 @@ export function useMatchDetail(matchId: string) {
 
     // Third fallback: knockout_match_sources resolution (Repescagem, Semifinal, etc.)
     // Triggered when match_slots and group-label parsing both fail to resolve a team.
-    if ((!resolvedHomeCTId || !resolvedAwayCTId) && match.championship_id) {
-      const champId = match.championship_id;
+    // championship_id may be null on the match row (not backfilled for all phases);
+    // derive it from the phase when missing.
+    let derivedChampId: string | null = match.championship_id ?? null;
+    if (!derivedChampId && match.phase_id) {
+      const { data: phaseRow } = await supabase
+        .from("phases")
+        .select("championship_id")
+        .eq("id", match.phase_id)
+        .single();
+      derivedChampId = phaseRow?.championship_id ?? null;
+    }
+
+    if ((!resolvedHomeCTId || !resolvedAwayCTId) && derivedChampId) {
+      const champId = derivedChampId;
       const { data: allPhases } = await supabase.from("phases").select("id").eq("championship_id", champId);
       const allPhaseIds = (allPhases ?? []).map(p => p.id);
 
