@@ -7,8 +7,10 @@ import { usePhases } from "@/features/hooks/usePhases";
 import { useGroupStandings } from "@/features/hooks/useGroupStandings";
 import { useDisciplinary } from "@/features/hooks/useDisciplinary";
 import { useBestPlayer } from "@/features/hooks/useBestPlayer";
+import { useBestManager } from "@/features/hooks/useBestManager";
 import type { PlayerScore } from "@/types/best-player";
-import { Shield, Trophy, Info, RefreshCw, ShieldAlert, User, Star, ChevronDown, ChevronUp } from "lucide-react";
+import type { ManagerScore } from "@/types/best-player";
+import { Shield, Trophy, Info, RefreshCw, ShieldAlert, User, Star, ChevronDown, ChevronUp, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const supabase = createClient();
@@ -36,7 +38,11 @@ export default function StandingsPage() {
   const { leaderboard, loading: loadingBestPlayer } = useBestPlayer(
     activeTab === "best_player" ? championship?.id || null : null
   );
+  const { leaderboard: managerLeaderboard, loading: managerLoading } = useBestManager(
+    activeTab === "best_player" ? championship?.id || null : null
+  );
   const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
+  const [expandedManager, setExpandedManager] = useState<string | null>(null);
 
   // ── Disciplinary tab state ───────────────────────────────────────────────
   const [discPhaseId, setDiscPhaseId] = useState<string | null>(null);
@@ -553,6 +559,86 @@ export default function StandingsPage() {
               </div>
             </div>
           )}
+
+          {/* ── Melhor Cartola ────────────────────────────────────────── */}
+          <div className="mt-8">
+          <div className="mb-3 flex items-center gap-2">
+            <Briefcase className="h-4 w-4 text-yellow-500" />
+            <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-400">Melhor Cartola</h2>
+          </div>
+
+          {managerLoading ? (
+            <div className="flex items-center justify-center py-12 text-zinc-600">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-700 border-t-yellow-500" />
+            </div>
+          ) : managerLeaderboard.length === 0 ? (
+            <p className="py-8 text-center text-sm text-zinc-600">Nenhum voto de cartola registrado ainda.</p>
+          ) : (
+            <div className="space-y-2">
+              {managerLeaderboard.map((mgr: ManagerScore, index: number) => (
+                <div key={mgr.championshipTeamId} className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900">
+                  {/* Main row */}
+                  <button
+                    onClick={() => setExpandedManager(expandedManager === mgr.championshipTeamId ? null : mgr.championshipTeamId)}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-all hover:bg-zinc-800/50"
+                  >
+                    {/* Rank */}
+                    <span className={cn(
+                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black",
+                      index === 0 ? "bg-yellow-500/20 text-yellow-400" :
+                      index === 1 ? "bg-zinc-400/10 text-zinc-300" :
+                      index === 2 ? "bg-orange-400/10 text-orange-400" :
+                      "bg-zinc-800 text-zinc-500"
+                    )}>
+                      {index + 1}
+                    </span>
+
+                    {/* Photo or initials */}
+                    {mgr.managerPhoto ? (
+                      <img src={mgr.managerPhoto} alt={mgr.managerName ?? mgr.teamName} className="h-10 w-10 shrink-0 rounded-full object-cover" />
+                    ) : (
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
+                        <Briefcase className="h-5 w-5" />
+                      </div>
+                    )}
+
+                    {/* Name + team */}
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate text-sm font-bold text-white">
+                        {mgr.managerName ?? "Cartola"}
+                      </p>
+                      <p className="text-[11px] text-zinc-500">{mgr.teamName}</p>
+                    </div>
+
+                    {/* Points */}
+                    <span className="text-sm font-black text-yellow-400 shrink-0">{mgr.totalPoints}pt{mgr.totalPoints !== 1 ? "s" : ""}</span>
+
+                    {/* Chevron */}
+                    {expandedManager === mgr.championshipTeamId
+                      ? <ChevronUp className="h-4 w-4 shrink-0 text-zinc-500" />
+                      : <ChevronDown className="h-4 w-4 shrink-0 text-zinc-500" />
+                    }
+                  </button>
+
+                  {/* Expanded vote history */}
+                  {expandedManager === mgr.championshipTeamId && (
+                    <div className="border-t border-zinc-800 px-4 py-3 space-y-2">
+                      {mgr.votes.map(vote => (
+                        <div key={vote.matchId} className="flex items-center justify-between text-xs">
+                          <div>
+                            <p className="text-zinc-300">{vote.matchName}</p>
+                            <p className="text-zinc-600">{vote.phaseName}</p>
+                          </div>
+                          <span className="font-bold text-yellow-500">+{vote.points}pt{vote.points !== 1 ? "s" : ""}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         </div>
       )}
     </div>
