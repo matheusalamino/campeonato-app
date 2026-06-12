@@ -792,16 +792,25 @@ export default function MatchPage() {
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showVoteModal, setShowVoteModal] = useState(false);
   const [existingVotes, setExistingVotes] = useState<ExistingVote[]>([]);
+  const [existingManagerVote, setExistingManagerVote] = useState<string | null>(null);
 
   const fetchExistingVotes = useCallback(async () => {
     if (!detail?.match.id) return;
-    const { data } = await supabase
-      .from("best_player_votes")
-      .select("voter_role, registration_id")
-      .eq("match_id", detail.match.id);
+    const [{ data: playerData }, { data: managerData }] = await Promise.all([
+      supabase
+        .from("best_player_votes")
+        .select("voter_role, registration_id")
+        .eq("match_id", detail.match.id),
+      supabase
+        .from("best_manager_votes")
+        .select("championship_team_id")
+        .eq("match_id", detail.match.id)
+        .maybeSingle(),
+    ]);
     setExistingVotes(
-      (data ?? []).map(v => ({ voterRole: v.voter_role as ExistingVote["voterRole"], registrationId: v.registration_id }))
+      (playerData ?? []).map(v => ({ voterRole: v.voter_role as ExistingVote["voterRole"], registrationId: v.registration_id }))
     );
+    setExistingManagerVote(managerData?.championship_team_id ?? null);
   }, [detail?.match.id]);
 
   useEffect(() => {
@@ -970,6 +979,7 @@ export default function MatchPage() {
           awayPlayers={detail.awayPlayers}
           voteWeight={detail.voteWeight}
           existingVotes={existingVotes}
+          existingManagerVote={existingManagerVote}
           onClose={() => setShowVoteModal(false)}
           onSaved={() => { void fetchExistingVotes(); }}
         />
