@@ -328,6 +328,25 @@ export function useMatchDetail(matchId: string) {
       ...(awayPlayers ?? []),
     ].map((r) => r.registration_id);
 
+    // Retroactively resolve suspensions whose suspended_match_id is null.
+    // This happens when findNextMatch couldn't determine the next match at card-event
+    // time (e.g., red card in group phase while knockout slots were still unassigned).
+    // Now that we know which players are in this match, bind their pending suspensions
+    // to it so they show as suspended here and get marked served when the match ends.
+    const { data: nullSuspRows } = await supabase
+      .from("suspensions")
+      .select("id, registration_id")
+      .in("registration_id", allRegIds.length ? allRegIds : ["__none__"])
+      .is("suspended_match_id", null)
+      .eq("served", false);
+
+    if (nullSuspRows && nullSuspRows.length > 0) {
+      await supabase
+        .from("suspensions")
+        .update({ suspended_match_id: matchId })
+        .in("id", nullSuspRows.map((r: { id: string }) => r.id));
+    }
+
     const [{ data: suspRows }, { data: bookedRows }, { data: phaseRow }] = await Promise.all([
       supabase
         .from("v_suspended_players")
@@ -344,9 +363,13 @@ export function useMatchDetail(matchId: string) {
         .single(),
     ]);
 
-    const suspendedRegistrationIds = new Set(
-      (suspRows ?? []).map((r: { registration_id: string }) => r.registration_id)
-    );
+    // Combine explicitly-suspended players with the retroactively resolved ones.
+    // The nullSuspRows are included directly in case the v_suspended_players query
+    // ran before the UPDATE propagated.
+    const suspendedRegistrationIds = new Set([
+      ...(suspRows ?? []).map((r: { registration_id: string }) => r.registration_id),
+      ...(nullSuspRows ?? []).map((r: { id: string; registration_id: string }) => r.registration_id),
+    ]);
 
     // If this phase is configured to reset yellow cards but hasn't done so yet,
     // treat all players as unbooked — the reset fires when the first period starts.
