@@ -62,6 +62,7 @@ played AS (
          COUNT(DISTINCT ml.knockout_match_id) AS matches_played
   FROM public.match_lineups ml
   JOIN public.knockout_matches km ON km.id = ml.knockout_match_id
+  -- Inclui IN_PROGRESS para exibição ao vivo; o IOG usa só COMPLETED (ver public_goalkeeper_iog)
   WHERE km.status IN ('IN_PROGRESS', 'COMPLETED')
   GROUP BY km.championship_id, ml.player_id
 )
@@ -189,6 +190,8 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
     ROUND((s.goals + s.assists)::numeric / NULLIF(s.matches_played, 0), 2)
       AS participations_per_match,
     cr.final_overall
+  -- NOTA: public_player_stats roda como owner (security_invoker = false).
+  -- Se a view for recriada com security_invoker = true, re-teste esta função.
   FROM public.public_player_stats s
   JOIN championship_registrations cr ON cr.id = s.registration_id
   WHERE s.championship_id = p_championship_id
@@ -202,6 +205,9 @@ GRANT EXECUTE ON FUNCTION public.public_revelation_candidates(uuid, numeric) TO 
 
 -- 6. Leitura anônima nas tabelas NÃO sensíveis que as páginas públicas usam
 --    (match_events_v2, group_slots, penalty_shootouts, match_lineups já são públicas)
+-- championship_team_players e organizer_evaluations ficam intencionalmente SEM
+-- policy anon direta: são acessadas apenas via views executadas como owner
+-- (security_invoker = false), que não passam pela RLS dessas tabelas.
 CREATE POLICY "anon read championships"     ON public.championships      FOR SELECT TO anon USING (true);
 CREATE POLICY "anon read phases"            ON public.phases             FOR SELECT TO anon USING (true);
 CREATE POLICY "anon read groups"            ON public.groups             FOR SELECT TO anon USING (true);
