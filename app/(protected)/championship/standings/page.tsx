@@ -8,7 +8,9 @@ import { useGroupStandings } from "@/features/hooks/useGroupStandings";
 import { useDisciplinary } from "@/features/hooks/useDisciplinary";
 import { useBestPlayer } from "@/features/hooks/useBestPlayer";
 import { useBestManager } from "@/features/hooks/useBestManager";
+import { useDefesas } from "@/features/hooks/useDefesas";
 import type { PlayerScore, ManagerScore } from "@/types/best-player";
+import type { DefesaScore } from "@/types/defesas";
 import { Shield, Trophy, Info, RefreshCw, ShieldAlert, User, Star, ChevronDown, ChevronUp, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +33,7 @@ export default function StandingsPage() {
   }, [reload]);
 
   // ── Tab state ────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<"standings" | "disciplinary" | "best_player">("standings");
+  const [activeTab, setActiveTab] = useState<"standings" | "disciplinary" | "best_player" | "defesas">("standings");
 
   // ── Best Player tab state ────────────────────────────────────────────────────
   const { leaderboard, loading: loadingBestPlayer } = useBestPlayer(
@@ -40,8 +42,12 @@ export default function StandingsPage() {
   const { leaderboard: managerLeaderboard, loading: managerLoading } = useBestManager(
     activeTab === "best_player" ? championship?.id || null : null
   );
+  const { leaderboard: defesasLeaderboard, loading: defesasLoading } = useDefesas(
+    activeTab === "defesas" ? championship?.id ?? null : null
+  );
   const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
   const [expandedManager, setExpandedManager] = useState<string | null>(null);
+  const [expandedDefesa, setExpandedDefesa] = useState<string | null>(null);
 
   // ── Disciplinary tab state ───────────────────────────────────────────────
   const [discPhaseId, setDiscPhaseId] = useState<string | null>(null);
@@ -182,6 +188,17 @@ export default function StandingsPage() {
         >
           <Star className="h-3 w-3" /> Craque
         </button>
+          <button
+            onClick={() => setActiveTab("defesas")}
+            className={cn(
+              "rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all",
+              activeTab === "defesas"
+                ? "bg-violet-600 text-white shadow-lg shadow-violet-900/30"
+                : "text-zinc-500 hover:text-zinc-300",
+            )}
+          >
+            Defesas
+          </button>
       </div>
 
       {/* ── Standings tab content ──────────────────────────────────────────── */}
@@ -640,6 +657,101 @@ export default function StandingsPage() {
         </div>
         </div>
       )}
+
+      {/* ── Defesas tab content ───────────────────────────────────────── */}
+          {activeTab === "defesas" && (
+            <div>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-black uppercase tracking-wider text-white">Defesas</h2>
+                  <p className="text-xs text-zinc-500 mt-0.5">Ranking por defesas no campeonato</p>
+                </div>
+              </div>
+
+              {defesasLoading ? (
+                <div className="flex items-center justify-center py-16 text-zinc-600">
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-700 border-t-violet-500" />
+                </div>
+              ) : defesasLeaderboard.length === 0 ? (
+                <div className="flex h-48 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-zinc-800 text-zinc-600">
+                  <span className="text-3xl">🧤</span>
+                  <p className="text-sm">Nenhuma defesa registrada ainda.</p>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-xl">
+                  <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">Jogador</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">DEF.</span>
+                  </div>
+
+                  <div className="divide-y divide-zinc-800/60">
+                    {defesasLeaderboard.map((entry: DefesaScore, index: number) => (
+                      <div key={entry.registrationId}>
+                        <button
+                          onClick={() => setExpandedDefesa(expandedDefesa === entry.registrationId ? null : entry.registrationId)}
+                          className="flex w-full items-center gap-3 px-4 py-3 text-left transition-all hover:bg-zinc-900"
+                        >
+                          <span className={cn(
+                            "flex h-6 w-6 shrink-0 items-center justify-center rounded text-[11px] font-black",
+                            index === 0 ? "bg-yellow-500/20 text-yellow-400" :
+                            index === 1 ? "bg-zinc-400/10 text-zinc-300" :
+                            index === 2 ? "bg-orange-400/10 text-orange-400" :
+                            "text-zinc-600"
+                          )}>
+                            {index + 1}
+                          </span>
+
+                          {entry.playerPhoto ? (
+                            <img src={entry.playerPhoto} alt={entry.playerName} className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-zinc-700/50" />
+                          ) : (
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-800 ring-1 ring-zinc-700/50">
+                              <User className="h-4 w-4 text-zinc-500" />
+                            </div>
+                          )}
+
+                          <div className="flex-1 min-w-0">
+                            <p className="truncate text-sm font-bold text-white">{entry.playerName}</p>
+                            <p className="text-[11px] text-zinc-500">{entry.teamName}</p>
+                          </div>
+
+                          <div className="flex shrink-0 flex-col items-end">
+                            <span className="text-sm font-black text-violet-400">{entry.totalSaves}</span>
+                            {entry.penaltySaves > 0 && (
+                              <span className="text-[10px] text-zinc-500">({entry.penaltySaves} pên.)</span>
+                            )}
+                          </div>
+
+                          {expandedDefesa === entry.registrationId
+                            ? <ChevronUp className="h-4 w-4 shrink-0 text-zinc-600" />
+                            : <ChevronDown className="h-4 w-4 shrink-0 text-zinc-600" />
+                          }
+                        </button>
+
+                        {expandedDefesa === entry.registrationId && (
+                          <div className="border-t border-zinc-800/50 bg-zinc-950/50 px-4 py-3 space-y-2">
+                            {entry.byMatch.map(m => (
+                              <div key={m.matchId} className="flex items-center justify-between text-xs">
+                                <div>
+                                  <p className="text-zinc-300">{m.matchName}</p>
+                                  <p className="text-zinc-600">{m.phaseName}</p>
+                                </div>
+                                <div className="text-right">
+                                  <span className="font-bold text-violet-400">{m.count} def.</span>
+                                  {m.penaltyCount > 0 && (
+                                    <span className="block text-[10px] text-zinc-500">({m.penaltyCount} pên.)</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
     </div>
   );
 }
