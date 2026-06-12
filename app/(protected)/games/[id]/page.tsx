@@ -340,8 +340,6 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
   if (eventType === "SUBSTITUTION") {
     if (step === 3) playersToPick = onField; // Who is going out
     else if (step === 3.6) playersToPick = bench; // Who is coming in
-  } else if (eventType === "PENALTY" && step === 3.6) {
-    playersToPick = opposingOnField;
   } else {
     // Goals, cards, saves, fouls, etc - usually by players on the field
     playersToPick = onField;
@@ -359,7 +357,7 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
     setSaving(true);
     try {
       if (eventType === "PENALTY") {
-        if (!penaltyOutcome || !player) return;
+        if (!penaltyOutcome || !player) { setSaving(false); return; }
         await addPenaltyEvent({
           knockoutMatchId: detail.match.id,
           championshipId: detail.match.championship_id ?? "",
