@@ -1,11 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, ReactNode } from "react";
-
-type Championship = {
-  id: string;
-  name: string;
-};
+import type { Championship } from "@/types/championship";
 
 type ChampionshipContextType = {
   championship: Championship | null;

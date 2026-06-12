@@ -4,6 +4,21 @@ export interface Championship {
   season?: string;
   status?: string;
   overall?: number;
+  champion_team_id?: string | null;
+
+  // ── Configurações globais de pontuação (Módulo 1) ──────────────────────────
+  /** Pontos por vitória. Default: 3 */
+  points_win?: number;
+  /** Pontos por empate. Default: 1 */
+  points_draw?: number;
+  /** Pontos por derrota. Default: 0 */
+  points_loss?: number;
+  /** Número de tempos por jogo. Default: 2 */
+  periods_count?: number;
+  /** Duração de cada tempo em minutos (referência para cronômetro). Default: 7 */
+  period_duration?: number;
+
+  // ── Draft state ────────────────────────────────────────────────────────────
   /** When true, managers may submit one qualification bid for the active pot */
   draft_qualification_window_open?: boolean;
   draft_qualification_pot_number?: number | null;
@@ -27,6 +42,9 @@ export type Phase = {
   order_number: number;
   is_home_away: boolean;
   created_at: string;
+  reset_yellow_cards: boolean;
+  yellow_cards_reset_done: boolean;
+  vote_weight: number; // 1 | 2 | 3 — points per vote for best player award
 };
 
 export type CreatePhaseDTO = {
@@ -36,6 +54,7 @@ export type CreatePhaseDTO = {
   championship_id: string;
   abbreviation: string;
   is_home_away: boolean;
+  vote_weight?: number; // defaults to 1 in DB if omitted
 };
 
 export type UpdatePhaseGroupSettings = {
@@ -58,6 +77,7 @@ export type UpdatePhaseDTO = {
   order_number?: number;
   abbreviation?: string;
   is_home_away?: boolean;
+  vote_weight?: number;
   /** Optional: update related group settings (does NOT recreate matches/slots) */
   groupSettings?: UpdatePhaseGroupSettings;
   /** Optional: update related knockout settings */
@@ -83,6 +103,10 @@ export type KnockoutSettings = {
   is_home_away: boolean;
   auto_fill: boolean;
   source_phase_id: string | null;
+  /** Se a fase tem prorrogação em caso de empate */
+  has_extra_time?: boolean;
+  /** Se a fase tem disputa de pênaltis em caso de empate */
+  has_penalties?: boolean;
 };
 
 export type KnockoutSource = {
@@ -148,4 +172,74 @@ export type SlotConfig = {
   source_position?: number;
 
   source_match_code?: string;
+};
+
+// ── Status e cronômetro ──────────────────────────────────────────────────────
+
+export type MatchStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
+
+export type MatchPeriod =
+  | 'not_started'
+  | 'period_1'
+  | 'halftime'
+  | 'period_2'
+  | 'extra_1'
+  | 'extra_halftime'
+  | 'extra_2'
+  | 'penalties'
+  | 'finished';
+
+export type KnockoutMatch = {
+  id: string;
+  phase_id: string;
+  championship_id: string | null;
+  name: string | null;
+  round_number: number | null;
+  home_source?: string | null;
+  away_source?: string | null;
+  winner_to?: string | null;
+  loser_to?: string | null;
+  code: string | null;
+  group_label: string | null;
+  scheduled_at: string | null;
+
+  // ── Game state (após migration 20260430000002) ───────────────────────────
+  status: MatchStatus;
+  home_score: number;
+  away_score: number;
+  started_at: string | null;
+  completed_at: string | null;
+
+  // ── Cronômetro ────────────────────────────────────────────────────────────
+  current_period: MatchPeriod;
+  period_started_at: string | null;
+  period_1_duration_s: number | null;
+  period_2_duration_s: number | null;
+  extra_1_duration_s: number | null;
+  extra_2_duration_s: number | null;
+
+  // ── Pênaltis ──────────────────────────────────────────────────────────────
+  penalty_winner_team_id: string | null;
+  penalty_home_score: number;
+  penalty_away_score: number;
+};
+
+// ── Desempate ────────────────────────────────────────────────────────────────
+
+export type TieBreakerCriterion =
+  | 'points'
+  | 'head_to_head'
+  | 'goal_diff'
+  | 'goals_for'
+  | 'goals_against'
+  | 'wins'
+  | 'yellow_cards'
+  | 'red_cards'
+  | 'fair_play_score';
+
+export type TieBreakerRule = {
+  id: string;
+  phase_id: string;
+  rule: TieBreakerCriterion;
+  priority: number;
 };
