@@ -8,8 +8,7 @@ import { useGroupStandings } from "@/features/hooks/useGroupStandings";
 import { useDisciplinary } from "@/features/hooks/useDisciplinary";
 import { useBestPlayer } from "@/features/hooks/useBestPlayer";
 import { useBestManager } from "@/features/hooks/useBestManager";
-import type { PlayerScore } from "@/types/best-player";
-import type { ManagerScore } from "@/types/best-player";
+import type { PlayerScore, ManagerScore } from "@/types/best-player";
 import { Shield, Trophy, Info, RefreshCw, ShieldAlert, User, Star, ChevronDown, ChevronUp, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 
