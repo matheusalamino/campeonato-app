@@ -6,7 +6,9 @@ import { useChampionship } from "@/components/ChampionshipContext";
 import { usePhases } from "@/features/hooks/usePhases";
 import { useGroupStandings } from "@/features/hooks/useGroupStandings";
 import { useDisciplinary } from "@/features/hooks/useDisciplinary";
-import { Shield, Trophy, Info, RefreshCw, ShieldAlert, User } from "lucide-react";
+import { useBestPlayer } from "@/features/hooks/useBestPlayer";
+import type { PlayerScore } from "@/types/best-player";
+import { Shield, Trophy, Info, RefreshCw, ShieldAlert, User, Star, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const supabase = createClient();
@@ -28,7 +30,13 @@ export default function StandingsPage() {
   }, [reload]);
 
   // ── Tab state ────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<"standings" | "disciplinary">("standings");
+  const [activeTab, setActiveTab] = useState<"standings" | "disciplinary" | "best_player">("standings");
+
+  // ── Best Player tab state ────────────────────────────────────────────────────
+  const { leaderboard, loading: loadingBestPlayer } = useBestPlayer(
+    activeTab === "best_player" ? championship?.id || null : null
+  );
+  const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
 
   // ── Disciplinary tab state ───────────────────────────────────────────────
   const [discPhaseId, setDiscPhaseId] = useState<string | null>(null);
@@ -94,8 +102,10 @@ export default function StandingsPage() {
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             {activeTab === "standings" ? (
               <><Trophy className="h-6 w-6 text-yellow-500" /> Classificação</>
-            ) : (
+            ) : activeTab === "disciplinary" ? (
               <><ShieldAlert className="h-6 w-6 text-red-500" /> Disciplina</>
+            ) : (
+              <><Star className="h-6 w-6 text-yellow-500" /> Craque do Campeonato</>
             )}
           </h1>
           {activeTab === "standings" && lastUpdated && (
@@ -157,6 +167,15 @@ export default function StandingsPage() {
           )}
         >
           Disciplina
+        </button>
+        <button
+          onClick={() => setActiveTab("best_player")}
+          className={cn(
+            "rounded-lg px-4 py-2 text-xs font-bold transition-all flex items-center gap-1.5",
+            activeTab === "best_player" ? "bg-yellow-600 text-white" : "text-zinc-400 hover:text-white"
+          )}
+        >
+          <Star className="h-3 w-3" /> Craque
         </button>
       </div>
 
@@ -442,6 +461,97 @@ export default function StandingsPage() {
                 )}
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {/* ── Best Player tab content ───────────────────────────────────────── */}
+      {activeTab === "best_player" && (
+        <div className="space-y-4">
+          {loadingBestPlayer ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-16 animate-pulse rounded-2xl bg-zinc-900/50 border border-zinc-800" />
+              ))}
+            </div>
+          ) : leaderboard.length === 0 ? (
+            <div className="flex h-48 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-zinc-800 text-zinc-500">
+              <Star className="h-8 w-8 opacity-30" />
+              <p className="text-sm">Nenhum voto registrado ainda.</p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-xl">
+              <div className="bg-zinc-900/50 px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+                <h3 className="font-bold text-sm uppercase tracking-widest text-zinc-300 flex items-center gap-2">
+                  <Star className="h-4 w-4 text-yellow-500" /> Ranking
+                </h3>
+                <span className="text-[10px] text-zinc-500 font-medium">PONTOS</span>
+              </div>
+              <div className="divide-y divide-zinc-800/30">
+                {leaderboard.map((player: PlayerScore, idx: number) => {
+                  const isExpanded = expandedPlayer === player.registrationId;
+                  const rankBadge =
+                    idx === 0 ? "bg-yellow-500/20 text-yellow-500" :
+                    idx === 1 ? "bg-zinc-400/20 text-zinc-400" :
+                    idx === 2 ? "bg-orange-500/20 text-orange-500" :
+                    "text-zinc-600";
+                  const rankEmoji = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : null;
+
+                  return (
+                    <div key={player.registrationId}>
+                      <button
+                        onClick={() => setExpandedPlayer(isExpanded ? null : player.registrationId)}
+                        className="flex w-full items-center gap-3 px-4 py-3 hover:bg-zinc-900/40 transition-colors text-left"
+                      >
+                        <span className={cn(
+                          "inline-flex h-6 w-6 items-center justify-center rounded text-[10px] font-black shrink-0",
+                          rankBadge
+                        )}>
+                          {rankEmoji ?? idx + 1}
+                        </span>
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-800 overflow-hidden ring-1 ring-zinc-700/50">
+                          {player.playerPhoto ? (
+                            <img src={player.playerPhoto} alt={player.playerName} className="h-full w-full object-cover" />
+                          ) : (
+                            <User className="h-4 w-4 text-zinc-600" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-sm text-zinc-200 truncate">{player.playerName}</p>
+                          <p className="text-[10px] text-zinc-500 truncate">{player.teamName}</p>
+                        </div>
+                        <span className="font-black text-white tabular-nums shrink-0">
+                          {player.totalPoints} <span className="text-xs font-normal text-zinc-500">pts</span>
+                        </span>
+                        {isExpanded
+                          ? <ChevronUp className="h-4 w-4 text-zinc-500 shrink-0" />
+                          : <ChevronDown className="h-4 w-4 text-zinc-500 shrink-0" />
+                        }
+                      </button>
+                      {isExpanded && (
+                        <div className="bg-zinc-950/50 px-4 pb-3 pt-1 space-y-2 border-t border-zinc-800/30">
+                          {player.votes.map((vote, vIdx: number) => (
+                            <div key={vIdx} className="flex items-center justify-between text-xs">
+                              <div>
+                                <p className="text-zinc-300 font-medium">{vote.matchName}</p>
+                                <p className="text-zinc-600 text-[10px]">
+                                  {vote.phaseName} · {
+                                    vote.voterRole === "home_manager" ? "Cartola da Casa" :
+                                    vote.voterRole === "away_manager" ? "Cartola Visitante" :
+                                    "Árbitro"
+                                  }
+                                </p>
+                              </div>
+                              <span className="font-black text-yellow-500">+{vote.points}pt{vote.points > 1 ? "s" : ""}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
       )}

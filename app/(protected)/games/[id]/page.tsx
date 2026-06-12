@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, ArrowUpDown, Hand, Shield, ShieldCheck, Clock, CheckCircle2, ChevronRight,
-  Plus, Trash2, Target, AlertCircle, Square,
+  Plus, Trash2, Target, AlertCircle, Square, Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -16,6 +16,8 @@ import { LineupControl } from "@/components/LineupControl";
 import { MatchFieldView } from "@/components/MatchFieldView";
 import { cn } from "@/lib/utils";
 import type { MatchPeriod } from "@/types/championship";
+import { BestPlayerVoteModal } from "@/components/BestPlayerVoteModal";
+import type { ExistingVote } from "@/types/best-player";
 
 const supabase = createClient();
 
@@ -788,6 +790,31 @@ export default function MatchPage() {
   const router = useRouter();
   const { detail, loading, elapsed, reload } = useMatchDetail(id);
   const [showAddEvent, setShowAddEvent] = useState(false);
+  const [showVoteModal, setShowVoteModal] = useState(false);
+  const [existingVotes, setExistingVotes] = useState<ExistingVote[]>([]);
+
+  const fetchExistingVotes = useCallback(async () => {
+    if (!detail?.match.id) return;
+    const { data } = await supabase
+      .from("best_player_votes")
+      .select("voter_role, registration_id")
+      .eq("match_id", detail.match.id);
+    setExistingVotes(
+      (data ?? []).map(v => ({ voterRole: v.voter_role as ExistingVote["voterRole"], registrationId: v.registration_id }))
+    );
+  }, [detail?.match.id]);
+
+  useEffect(() => {
+    if (detail?.match.status === "COMPLETED") void fetchExistingVotes();
+  }, [detail?.match.status, fetchExistingVotes]);
+
+  const prevStatusRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (prevStatusRef.current !== "COMPLETED" && detail?.match.status === "COMPLETED") {
+      setShowVoteModal(true);
+    }
+    prevStatusRef.current = detail?.match.status;
+  }, [detail?.match.status]);
 
   if (loading) {
     return (
@@ -817,9 +844,24 @@ export default function MatchPage() {
           <ArrowLeft className="h-4 w-4" /> Voltar
         </button>
         {isCompleted && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-400">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Súmula Oficial
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-400">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Súmula Oficial
+            </span>
+            <button
+              onClick={() => setShowVoteModal(true)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold transition-all",
+                existingVotes.length >= 3
+                  ? "bg-yellow-500/10 text-yellow-500 border border-yellow-500/20"
+                  : "bg-zinc-800 text-zinc-400 hover:text-yellow-400 hover:bg-yellow-500/10 border border-zinc-700"
+              )}
+            >
+              <Star className="h-3.5 w-3.5" />
+              {existingVotes.length >= 3 ? "Craque Votado" : "Votar Craque"}
+              <span className="text-[10px] opacity-70">({existingVotes.length}/3)</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -917,6 +959,20 @@ export default function MatchPage() {
       {/* Add event sheet */}
       {showAddEvent && (
         <AddEventSheet detail={detail} elapsed={elapsed} onClose={() => setShowAddEvent(false)} onSaved={reload} />
+      )}
+      {showVoteModal && detail && (
+        <BestPlayerVoteModal
+          matchId={detail.match.id}
+          championshipId={detail.match.championship_id ?? ""}
+          homeTeam={detail.homeTeam}
+          awayTeam={detail.awayTeam}
+          homePlayers={detail.homePlayers}
+          awayPlayers={detail.awayPlayers}
+          voteWeight={detail.voteWeight}
+          existingVotes={existingVotes}
+          onClose={() => setShowVoteModal(false)}
+          onSaved={() => { void fetchExistingVotes(); }}
+        />
       )}
     </div>
   );

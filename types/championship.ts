@@ -44,6 +44,7 @@ export type Phase = {
   created_at: string;
   reset_yellow_cards: boolean;
   yellow_cards_reset_done: boolean;
+  vote_weight: number; // 1 | 2 | 3 — points per vote for best player award
 };
 
 export type CreatePhaseDTO = {
@@ -53,6 +54,7 @@ export type CreatePhaseDTO = {
   championship_id: string;
   abbreviation: string;
   is_home_away: boolean;
+  vote_weight?: number; // defaults to 1 in DB if omitted
 };
 
 export type UpdatePhaseGroupSettings = {
@@ -75,6 +77,7 @@ export type UpdatePhaseDTO = {
   order_number?: number;
   abbreviation?: string;
   is_home_away?: boolean;
+  vote_weight?: number;
   /** Optional: update related group settings (does NOT recreate matches/slots) */
   groupSettings?: UpdatePhaseGroupSettings;
   /** Optional: update related knockout settings */
