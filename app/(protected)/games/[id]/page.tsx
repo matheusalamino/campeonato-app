@@ -39,7 +39,8 @@ const EVENT_META: Record<string, { icon: EventIconKind; label: string; color: st
   YELLOW_CARD:      { icon: "yellow-card",  label: "Amarelo",      color: "text-yellow-400" },
   RED_CARD:         { icon: "red-card",     label: "Vermelho",     color: "text-red-400" },
   FOUL:             { icon: "foul",         label: "Falta",        color: "text-orange-400" },
-  SAVE:             { icon: "save",         label: "Defesa",       color: "text-purple-400" },
+  SAVE:             { icon: "save",         label: "Defesa Decisiva",   color: "text-purple-400" },
+  PENALTY_SAVE:     { icon: "save",         label: "Pênalti Defendido", color: "text-purple-300" },
   SUBSTITUTION_OUT: { icon: "substitution", label: "Substituição", color: "text-zinc-400" },
   SUBSTITUTION_IN:  { icon: "substitution", label: "Entra",        color: "text-zinc-400" },
   SUBSTITUTION:     { icon: "substitution", label: "Substituição", color: "text-zinc-400" },
@@ -244,7 +245,8 @@ const EVENT_TYPES = [
   { type: "YELLOW_CARD", label: "Amarelo" },
   { type: "RED_CARD", label: "Vermelho" },
   { type: "FOUL", label: "Falta" },
-  { type: "SAVE", label: "Defesa" },
+  { type: "SAVE", label: "Defesa Decisiva" },
+  { type: "PENALTY_SAVE", label: "Pênalti Defendido" },
   { type: "SUBSTITUTION", label: "Substituição" },
 ];
 
