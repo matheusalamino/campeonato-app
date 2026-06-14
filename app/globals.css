@@ -213,3 +213,119 @@
     0 0 20px rgba(255, 180, 0, 0.3),
     0 0 40px rgba(255, 150, 0, 0.2);
 }
+
+/* ───────────────── Páginas públicas — tema "Noite de Gala" ───────────────── */
+/* Paleta e animações dos mockups aprovados (docs/superpowers/specs/assets/) */
+
+:root {
+  --gala-bg-0: #050507;
+  --gala-bg-1: #0c0a10;
+  --gala-panel: #151019;
+  --gala-panel-2: #0b090f;
+  --gala-line: #2a2438;
+  --gala-gold-1: #fff6cc;
+  --gala-gold-2: #f0d060;
+  --gala-gold-3: #d4a017;
+  --gala-gold-glow: rgba(212, 160, 23, 0.45);
+  --gala-ink: #f4f1ea;
+  --gala-ink-dim: #9b94a8;
+}
+
+.gala-bg {
+  background:
+    radial-gradient(110% 80% at 50% -10%, #181222 0%, transparent 55%),
+    radial-gradient(80% 60% at 50% 115%, #14101c 0%, transparent 60%),
+    linear-gradient(180deg, var(--gala-bg-1) 0%, var(--gala-bg-0) 100%);
+}
+
+.gala-gold-text {
+  background: linear-gradient(180deg, var(--gala-gold-1) 10%, var(--gala-gold-2) 45%, var(--gala-gold-3) 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.gala-panel {
+  background: linear-gradient(180deg, var(--gala-panel), var(--gala-panel-2));
+  border: 1px solid var(--gala-line);
+}
+
+/* feixes de luz que derivam lentamente */
+@keyframes gala-drift {
+  from { transform: translateX(-6%); }
+  to   { transform: translateX(6%); }
+}
+.gala-beams::before,
+.gala-beams::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 42%, rgba(240, 208, 96, 0.07) 50%, transparent 58%);
+  animation: gala-drift 9s ease-in-out infinite alternate;
+}
+.gala-beams::after {
+  background: linear-gradient(65deg, transparent 44%, rgba(212, 160, 23, 0.05) 52%, transparent 60%);
+  animation: gala-drift 13s ease-in-out infinite alternate-reverse;
+}
+
+/* partículas douradas subindo */
+@keyframes gala-float-up {
+  from { transform: translateY(0); opacity: 0.35; }
+  to   { transform: translateY(-110vh); opacity: 0; }
+}
+.gala-dust {
+  position: absolute;
+  bottom: -6px;
+  border-radius: 50%;
+  background: var(--gala-gold-2);
+  box-shadow: 0 0 8px var(--gala-gold-glow);
+  opacity: 0.35;
+  pointer-events: none;
+  animation: gala-float-up linear infinite;
+}
+
+/* brilho que percorre chips/divisores */
+@keyframes gala-shine {
+  0% { left: -60%; }
+  60%, 100% { left: 120%; }
+}
+
+/* pulso do AO VIVO */
+@keyframes gala-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.8); }
+}
+
+/* celebração de gol: flash + zoom */
+@keyframes goal-flash {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes goal-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  18% { transform: scale(1.08); opacity: 1; }
+  28% { transform: scale(1); }
+  85% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.02); opacity: 0; }
+}
+
+/* transição entre cards do carrossel */
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(24px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-card-in { animation: card-in 0.6s ease forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Fundo animado de tela cheia */
+  .gala-beams::before, .gala-beams::after, .gala-dust { animation: none; }
+  /* Entrada dos cards e celebração de gol ficam estáticas */
+  .animate-card-in { animation: none; }
+  /* Loops decorativos aplicados via utilitários inline do Tailwind
+     (animate-[gala-pulse...] no dot AO VIVO; after:animate-[gala-shine...] no chip) */
+  [class*="gala-pulse"] { animation: none !important; }
+  [class*="gala-shine"]::after { animation: none !important; }
+  [class*="goal-flash"], [class*="goal-pop"] { animation: none !important; }
+}

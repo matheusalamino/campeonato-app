@@ -5,6 +5,7 @@ import { useChampionship } from "@/components/ChampionshipContext";
 import { usePhases } from "@/features/hooks/usePhases";
 import { CreatePhaseForm } from "@/components/CreatePhaseForm";
 import { PhaseConfigDrawer } from "@/components/PhaseConfigDrawer";
+import CarouselConfigSection from "@/components/CarouselConfigSection";
 import type { Phase } from "@/types/championship";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
@@ -264,6 +265,9 @@ export default function SettingsPage() {
           ))}
         </div>
       </div>
+
+      {/* CARROSSEL DO TELÃO */}
+      <CarouselConfigSection championshipId={championship.id} />
 
       {/* MODAL */}
       {isOpen && (
