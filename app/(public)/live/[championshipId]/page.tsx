@@ -11,7 +11,7 @@ import LiveMatchCard from "@/components/public/LiveMatchCard";
 import RankingPodiumCard from "@/components/public/RankingPodiumCard";
 import StandingsCard from "@/components/public/StandingsCard";
 import { POSITION_LABELS } from "@/lib/public/types";
-import { resolveCarouselConfig, type CarouselCardConfig } from "@/lib/public/carousel";
+import { resolveCarouselConfig, type CarouselCardConfig, type SavedCarouselCard } from "@/lib/public/carousel";
 
 const supabase = createClient();
 
@@ -57,7 +57,8 @@ export default function LiveScreenPage() {
   const [championshipName, setChampionshipName] = useState("Campeonato");
   const [groupPhaseId, setGroupPhaseId] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [carouselCards, setCarouselCards] = useState<CarouselCardConfig[]>([]);
+  // Inicia no padrão para o telão já girar (sem flash de tela vazia) enquanto carrega
+  const [carouselCards, setCarouselCards] = useState<CarouselCardConfig[]>(() => resolveCarouselConfig(null));
   const carouselRef = useRef<LiveCarouselHandle | null>(null);
 
   const cursorHidden = useHiddenCursor();
@@ -70,7 +71,8 @@ export default function LiveScreenPage() {
         .from("championships").select("id, name, carousel_config").eq("id", championshipId).maybeSingle();
       if (!champ) { setNotFound(true); return; }
       setChampionshipName(champ.name);
-      setCarouselCards(resolveCarouselConfig((champ as { carousel_config?: unknown }).carousel_config as never));
+      const rawCarousel = (champ as { carousel_config?: unknown }).carousel_config;
+      setCarouselCards(resolveCarouselConfig(rawCarousel as SavedCarouselCard[] | null));
       const { data: phases } = await supabase
         .from("phases").select("id, type, order_number")
         .eq("championship_id", championshipId).order("order_number");
