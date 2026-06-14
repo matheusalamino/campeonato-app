@@ -95,39 +95,31 @@ export function useGoalStats(championshipId: string | null) {
 
     setLoading(true);
     try {
-      // Round 1: match IDs + registrations in parallel
-      const [matchesRes, regsRes] = await Promise.all([
+      // Query events directly by championship_id — same pattern as useGroupStandings,
+      // which is the reliable filter (match_events_v2.championship_id is always set
+      // on current events; knockout_matches.championship_id is not reliable).
+      const [eventsRes, regsRes] = await Promise.all([
         supabase
-          .from("knockout_matches")
-          .select("id")
-          .eq("championship_id", championshipId),
+          .from("match_events_v2")
+          .select("event_type, player_id, assist_player_id")
+          .eq("championship_id", championshipId)
+          .is("deleted_at", null)
+          .in("event_type", ["GOAL", "PENALTY_GOAL"]),
         supabase
           .from("championship_registrations")
           .select("id, profile_photo_link, players(id, name)")
           .eq("championship_id", championshipId),
       ]);
 
-      const matchIds = (matchesRes.data ?? []).map(m => m.id);
       const allRegIds = (regsRes.data ?? []).map(r => r.id);
 
-      // Round 2: events by match_id (avoids NULL championship_id on old events) + team info
-      const [eventsRes, ctpRes] = await Promise.all([
-        matchIds.length
-          ? supabase
-              .from("match_events_v2")
-              .select("event_type, player_id, assist_player_id")
-              .in("knockout_match_id", matchIds)
-              .is("deleted_at", null)
-              .in("event_type", ["GOAL", "PENALTY_GOAL"])
-          : Promise.resolve({ data: [] as { event_type: string; player_id: string | null; assist_player_id: string | null }[] }),
-        supabase
-          .from("championship_team_players")
-          .select("registration_id, championship_team_id, championship_teams(id, teams(name))")
-          .in("registration_id", allRegIds.length ? allRegIds : ["__none__"]),
-      ]);
+      const { data: ctpRows } = await supabase
+        .from("championship_team_players")
+        .select("registration_id, championship_team_id, championship_teams(id, teams(name))")
+        .in("registration_id", allRegIds.length ? allRegIds : ["__none__"]);
 
       const ctpMap = new Map<string, { teamId: string; teamName: string }>();
-      for (const ctp of ctpRes.data ?? []) {
+      for (const ctp of ctpRows ?? []) {
         if (ctpMap.has(ctp.registration_id)) continue;
         const ct = ctp.championship_teams as unknown as { id: string; teams: { name: string } | { name: string }[] | null } | null;
         const teamsRel = ct?.teams;
@@ -138,14 +130,13 @@ export function useGoalStats(championshipId: string | null) {
       const newRegInfoMap = new Map<string, RegInfo>();
       for (const reg of regsRes.data ?? []) {
         const teamInfo = ctpMap.get(reg.id);
-        if (!teamInfo) continue;
         const playersRel = reg.players as { id: string; name: string } | { id: string; name: string }[] | null;
         const playerName = (Array.isArray(playersRel) ? playersRel[0]?.name : playersRel?.name) ?? "—";
         newRegInfoMap.set(reg.id, {
           playerName,
           playerPhoto: reg.profile_photo_link ?? null,
-          teamId: teamInfo.teamId,
-          teamName: teamInfo.teamName,
+          teamId: teamInfo?.teamId ?? "",
+          teamName: teamInfo?.teamName ?? "—",
         });
       }
 
