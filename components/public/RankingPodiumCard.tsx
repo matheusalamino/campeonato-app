@@ -91,8 +91,11 @@ export default function RankingPodiumCard({ championshipName, title, subtitle, u
                       className="size-[1vw] max-h-5 max-w-5 shrink-0 rounded-sm object-cover"
                     />
                   ) : null}
-                  <span>{entry.teamName ?? "—"}{entry.detail ? ` · ${entry.detail}` : ""}</span>
+                  <span>{entry.teamName ?? "—"}</span>
                 </span>
+                {entry.detail ? (
+                  <span className="text-[0.75vw] uppercase tracking-wider text-[var(--gala-ink-dim)]/70">{entry.detail}</span>
+                ) : null}
                 <span className={`font-serif text-[2.9vw] font-extrabold leading-none ${first ? "gala-gold-text" : "text-slate-200"}`}>
                   {formatValue(entry.value)}
                   <small className="ml-1 align-middle font-sans text-[0.8vw] tracking-[2px] text-[var(--gala-ink-dim)]">{unit}</small>
