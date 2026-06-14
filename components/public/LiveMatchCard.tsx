@@ -28,16 +28,24 @@ const EVENT_ICONS: Record<string, string> = {
 };
 
 function useElapsed(periodStartedAt: string | null) {
-  const [, tick] = useState(0);
+  // Inicia em "00:00" para coincidir servidor/cliente; recalcula só no efeito (evita hydration mismatch)
+  const [elapsed, setElapsed] = useState("00:00");
   useEffect(() => {
-    const t = setInterval(() => tick((n) => n + 1), 1000);
+    const calc = () => {
+      if (!periodStartedAt) {
+        setElapsed("00:00");
+        return;
+      }
+      const s = Math.max(0, Math.floor((Date.now() - new Date(periodStartedAt).getTime()) / 1000));
+      const mm = String(Math.floor(s / 60)).padStart(2, "0");
+      const ss = String(s % 60).padStart(2, "0");
+      setElapsed(`${mm}:${ss}`);
+    };
+    calc();
+    const t = setInterval(calc, 1000);
     return () => clearInterval(t);
-  }, []);
-  if (!periodStartedAt) return "00:00";
-  const s = Math.max(0, Math.floor((Date.now() - new Date(periodStartedAt).getTime()) / 1000));
-  const mm = String(Math.floor(s / 60)).padStart(2, "0");
-  const ss = String(s % 60).padStart(2, "0");
-  return `${mm}:${ss}`;
+  }, [periodStartedAt]);
+  return elapsed;
 }
 
 function Crest({ team }: { team: LiveTeam }) {
