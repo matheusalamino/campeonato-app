@@ -15,6 +15,11 @@ const STOP_AFTER_MS = 10_000;
 let currentAudio: HTMLAudioElement | null = null;
 let stopTimer: ReturnType<typeof setTimeout> | null = null;
 
+export function stopTeamSoundtrack(): void {
+  if (stopTimer !== null) { clearTimeout(stopTimer); stopTimer = null; }
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+}
+
 export function playTeamSoundtrack(teamName: string): void {
   if (typeof window === "undefined") return;
 
