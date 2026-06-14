@@ -81,16 +81,9 @@ export default function LiveScreenPage() {
   const { rankings } = usePublicRankings(championshipId);
   const { standings, groupLabels } = useGroupStandings(championshipId, groupPhaseId);
 
-  if (notFound) {
-    return (
-      <main className="flex h-screen items-center justify-center">
-        <p className="gala-gold-text font-serif text-4xl">Campeonato não encontrado</p>
-      </main>
-    );
-  }
-
   // Cards sem dados saem da rotação. useMemo com deps primitivas: emptyCardIds
   // precisa de referência estável, senão o carrossel reinicia o timer a cada poll.
+  // Fica ANTES de qualquer return condicional (Rules of Hooks).
   const hasCraqueByPosition = Object.values(rankings.craqueByPosition).some((e) => e.length > 0);
   const emptyCardIds = useMemo(() => {
     const ids: string[] = [];
@@ -109,6 +102,14 @@ export default function LiveScreenPage() {
     rankings.revelations.length,
     standings,
   ]);
+
+  if (notFound) {
+    return (
+      <main className="flex h-screen items-center justify-center">
+        <p className="gala-gold-text font-serif text-4xl">Campeonato não encontrado</p>
+      </main>
+    );
+  }
 
   const renderCard = (cardId: string) => {
     switch (cardId) {

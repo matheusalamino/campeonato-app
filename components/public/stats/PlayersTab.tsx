@@ -30,7 +30,7 @@ export default function PlayersTab({ championshipId, rankings }: {
   const [team, setTeam] = useState("all");
   const [position, setPosition] = useState("all");
   const [selected, setSelected] = useState<PublicPlayer | null>(null);
-  const [skills, setSkills] = useState<SkillRow[]>([]);
+  const [skillsData, setSkillsData] = useState<{ regId: string; rows: SkillRow[] } | null>(null);
   const [votePoints, setVotePoints] = useState<Map<string, number>>(new Map());
 
   // Pontos de craque por jogador (exibidos no perfil)
@@ -45,8 +45,6 @@ export default function PlayersTab({ championshipId, rankings }: {
 
   // Radar do jogador selecionado
   useEffect(() => {
-    // Limpa o radar anterior ao trocar/fechar (não mostrar dados do jogador errado)
-    setSkills([]);
     if (!selected) return;
     let cancelled = false;
     void (async () => {
@@ -54,10 +52,13 @@ export default function PlayersTab({ championshipId, rankings }: {
         .from("public_player_skills").select("registration_id, skill, rating")
         .eq("registration_id", selected.registrationId);
       // Ignora respostas fora de ordem (clique rápido em outro jogador)
-      if (!cancelled) setSkills((data ?? []) as SkillRow[]);
+      if (!cancelled) setSkillsData({ regId: selected.registrationId, rows: (data ?? []) as SkillRow[] });
     })();
     return () => { cancelled = true; };
   }, [selected]);
+
+  // Só exibe habilidades do jogador atualmente selecionado (evita radar de outro jogador)
+  const skills = selected && skillsData?.regId === selected.registrationId ? skillsData.rows : [];
 
   const statsById = useMemo(
     () => new Map(rankings.stats.map((s) => [s.registrationId, s])),

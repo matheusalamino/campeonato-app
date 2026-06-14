@@ -9,22 +9,24 @@ const HEADERS = ["P", "J", "V", "E", "D", "GP", "GC", "SG"];
 
 export default function StandingsTab({ championshipId }: { championshipId: string }) {
   const [groupPhaseId, setGroupPhaseId] = useState<string | null>(null);
-  // Enquanto a fase de grupos não resolve, mostramos skeleton (não "indisponível")
-  const [phaseResolved, setPhaseResolved] = useState(false);
+  // Guarda para qual campeonato a fase já resolveu; derivado no render evita
+  // setState síncrono no efeito. Enquanto não resolve, mostramos skeleton.
+  const [resolvedFor, setResolvedFor] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setPhaseResolved(false);
     void (async () => {
       const { data } = await supabase
         .from("phases").select("id, type, order_number")
         .eq("championship_id", championshipId).order("order_number");
       if (cancelled) return;
       setGroupPhaseId(data?.find((p) => p.type === "group")?.id ?? null);
-      setPhaseResolved(true);
+      setResolvedFor(championshipId);
     })();
     return () => { cancelled = true; };
   }, [championshipId]);
+
+  const phaseResolved = resolvedFor === championshipId;
 
   const { standings, groupLabels, loading } = useGroupStandings(championshipId, groupPhaseId);
   const groups = Object.keys(standings).sort();
