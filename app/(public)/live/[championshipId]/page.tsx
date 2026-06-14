@@ -11,6 +11,7 @@ import LiveMatchCard from "@/components/public/LiveMatchCard";
 import RankingPodiumCard from "@/components/public/RankingPodiumCard";
 import StandingsCard from "@/components/public/StandingsCard";
 import { POSITION_LABELS } from "@/lib/public/types";
+import { resolveCarouselConfig, type CarouselCardConfig } from "@/lib/public/carousel";
 
 const supabase = createClient();
 
@@ -56,6 +57,7 @@ export default function LiveScreenPage() {
   const [championshipName, setChampionshipName] = useState("Campeonato");
   const [groupPhaseId, setGroupPhaseId] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [carouselCards, setCarouselCards] = useState<CarouselCardConfig[]>([]);
   const carouselRef = useRef<LiveCarouselHandle | null>(null);
 
   const cursorHidden = useHiddenCursor();
@@ -65,9 +67,10 @@ export default function LiveScreenPage() {
   useEffect(() => {
     void (async () => {
       const { data: champ } = await supabase
-        .from("championships").select("id, name").eq("id", championshipId).maybeSingle();
+        .from("championships").select("id, name, carousel_config").eq("id", championshipId).maybeSingle();
       if (!champ) { setNotFound(true); return; }
       setChampionshipName(champ.name);
+      setCarouselCards(resolveCarouselConfig((champ as { carousel_config?: unknown }).carousel_config as never));
       const { data: phases } = await supabase
         .from("phases").select("id, type, order_number")
         .eq("championship_id", championshipId).order("order_number");
@@ -194,7 +197,7 @@ export default function LiveScreenPage() {
 
   return (
     <main className={cursorHidden ? "cursor-none" : ""}>
-      <LiveCarousel renderCard={renderCard} emptyCardIds={emptyCardIds} handleRef={carouselRef} />
+      <LiveCarousel renderCard={renderCard} emptyCardIds={emptyCardIds} cards={carouselCards} handleRef={carouselRef} />
     </main>
   );
 }
