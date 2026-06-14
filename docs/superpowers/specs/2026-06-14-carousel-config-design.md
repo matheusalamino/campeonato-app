@@ -96,6 +96,17 @@ Regras internas:
 
 `components/public/LiveCarousel.tsx`: hoje importa `DEFAULT_CAROUSEL_CARDS` direto. Passa a receber `cards: CarouselCardConfig[]` por prop (com fallback a `DEFAULT_CAROUSEL_CARDS` se a prop não vier), e usa essa lista no `useMemo`/`cardsKey` que já existe. O auto-skip de cards sem dados (`emptyCardIds`) e a interrupção/celebração de gol permanecem inalterados.
 
+### 3.1. Navegação manual por teclado (← →)
+
+No telão, permitir avançar/voltar cards manualmente com as setas do teclado (útil quando há um operador, mantendo o telão "sem interação" como modo padrão).
+
+- `lib/public/carousel.ts`: adicionar função pura `prevIndex(active, current)` — espelho de `nextIndex`, com wrap-around (de 0 vai para o último). Testável.
+- `components/public/LiveCarousel.tsx`: adicionar listener de `keydown` (em `window`, dentro de `useEffect` com cleanup):
+  - `ArrowRight` → `setIndex(nextIndex(cards, cur))`.
+  - `ArrowLeft` → `setIndex(prevIndex(cards, cur))`.
+  - Ignora as setas enquanto a celebração de gol está ativa (`celebration != null`).
+- Como o efeito de agendamento já depende de `index`, a navegação manual **reinicia o timer** do card de destino (não pula logo em seguida); a rotação automática continua a partir dele. Nenhuma mudança na lógica de gol/`emptyCardIds`.
+
 ### 4. UI de configuração — área protegida
 
 Seção **"Carrossel do Telão"** dentro de `app/(protected)/championship/settings/page.tsx`, extraída como componente `CarouselConfigSection` (card embutido na página, não um drawer), reutilizando o padrão visual de settings e o padrão de reordenação por ↑/↓ do `PhaseConfigDrawer`.
@@ -128,7 +139,8 @@ Comportamento:
   - id salvo fora do catálogo descartado.
   - duração inválida/fora da faixa → clamp/default.
   - `enabled` inválido → default.
-- **Verificação manual**: configurar no app protegido, salvar, abrir `/live/[id]` e confirmar ordem/duração/visibilidade; "Restaurar padrão" volta ao default.
+- **Unitários (vitest)** de `prevIndex`: decremento e wrap-around (de 0 → último); array vazio → 0.
+- **Verificação manual**: configurar no app protegido, salvar, abrir `/live/[id]` e confirmar ordem/duração/visibilidade; "Restaurar padrão" volta ao default; setas ← → avançam/voltam o card e reiniciam o timer.
 
 ## Arquivos afetados
 
