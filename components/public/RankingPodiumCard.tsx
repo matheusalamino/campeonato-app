@@ -3,6 +3,11 @@
 import Image from "next/image";
 import type { RankingEntry } from "@/lib/public/types";
 
+// Inteiros (gols, assist., pts) sem casas; decimais (IOG, part./jogo) com 2 casas
+function formatValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
 type Props = {
   championshipName: string;
   title: string;          // "Artilheiros"
@@ -78,7 +83,7 @@ export default function RankingPodiumCard({ championshipName, title, subtitle, u
                   {entry.teamName ?? "—"}{entry.detail ? ` · ${entry.detail}` : ""}
                 </span>
                 <span className={`font-serif text-[2.9vw] font-extrabold leading-none ${first ? "gala-gold-text" : "text-slate-200"}`}>
-                  {entry.value}
+                  {formatValue(entry.value)}
                   <small className="ml-1 align-middle font-sans text-[0.8vw] tracking-[2px] text-[var(--gala-ink-dim)]">{unit}</small>
                 </span>
               </div>

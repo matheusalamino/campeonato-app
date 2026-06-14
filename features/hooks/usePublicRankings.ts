@@ -76,7 +76,9 @@ function mapStats(r: any): PublicPlayerStats {
 // Rankings públicos do campeonato — Realtime (eventos) + polling 15s
 export function usePublicRankings(championshipId: string | null, topN = 3) {
   const [rankings, setRankings] = useState<PublicRankings>(EMPTY);
-  const [loading, setLoading] = useState(false);
+  // Inicia true para a /stats mostrar skeleton já no primeiro render (o consumidor
+  // guarda com players.length===0, então polls subsequentes não re-exibem skeleton)
+  const [loading, setLoading] = useState(true);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
