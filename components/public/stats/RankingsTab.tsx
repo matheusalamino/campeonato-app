@@ -4,6 +4,11 @@ import Image from "next/image";
 import type { RankingEntry } from "@/lib/public/types";
 import type { PublicRankings } from "@/features/hooks/usePublicRankings";
 
+// Inteiros (gols, assist., pts) sem casas; decimais (IOG, part./jogo) com 2 casas
+function formatValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
 function Row({ entry, rank }: { entry: RankingEntry; rank: number }) {
   const first = rank === 1;
   return (
@@ -24,7 +29,7 @@ function Row({ entry, rank }: { entry: RankingEntry; rank: number }) {
           {entry.teamName ?? "—"}{entry.detail ? ` · ${entry.detail}` : ""}
         </small>
       </span>
-      <span className="font-extrabold tabular-nums text-[var(--gala-gold-2)]">{entry.value}</span>
+      <span className="font-extrabold tabular-nums text-[var(--gala-gold-2)]">{formatValue(entry.value)}</span>
     </div>
   );
 }

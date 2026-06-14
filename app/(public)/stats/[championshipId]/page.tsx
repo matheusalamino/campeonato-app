@@ -27,8 +27,9 @@ export default function PublicStatsPage() {
 
   useEffect(() => {
     void (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("championships").select("name, season").eq("id", championshipId).maybeSingle();
+      if (error) return; // falha de rede: não marca como inexistente
       if (!data) setNotFound(true);
       else setChampionship(data);
     })();
@@ -75,8 +76,10 @@ export default function PublicStatsPage() {
         </nav>
       </header>
 
-      <section className="gala-panel rounded-b-xl rounded-tr-xl p-4 sm:p-5">
-        {loading && rankings.players.length === 0 ? (
+      <section
+        className={`gala-panel rounded-b-xl rounded-tr-xl p-4 sm:p-5 ${tab !== "rankings" ? "rounded-tl-xl" : ""}`}
+      >
+        {loading && rankings.players.length === 0 && tab === "rankings" ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="h-44 animate-pulse rounded-xl bg-[#171320]" />
