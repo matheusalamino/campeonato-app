@@ -453,12 +453,12 @@ export function useMatchDetail(matchId: string) {
     if (match.status === "IN_PROGRESS") {
       liveMatch.home_score = events.filter(
         (e) =>
-          (e.eventType === "GOAL" && e.teamId === homeCTId) ||
+          ((e.eventType === "GOAL" || e.eventType === "PENALTY_GOAL") && e.teamId === homeCTId) ||
           (e.eventType === "OWN_GOAL" && e.teamId === awayCTId),
       ).length;
       liveMatch.away_score = events.filter(
         (e) =>
-          (e.eventType === "GOAL" && e.teamId === awayCTId) ||
+          ((e.eventType === "GOAL" || e.eventType === "PENALTY_GOAL") && e.teamId === awayCTId) ||
           (e.eventType === "OWN_GOAL" && e.teamId === homeCTId),
       ).length;
     }
