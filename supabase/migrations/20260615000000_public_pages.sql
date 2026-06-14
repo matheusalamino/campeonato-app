@@ -1,10 +1,11 @@
 BEGIN;
 
 -- ── Páginas públicas: views seguras, funções de ranking e leitura anônima ──
--- IMPORTANTE: `players` e `championship_registrations` NÃO recebem policy anon.
--- Dados sensíveis (cpf, email, whatsapp, birth_date, instagram) ficam fora das
--- views. As views rodam como owner (security_invoker=false, default), de
--- propósito: expõem só as colunas listadas.
+-- IMPORTANTE: `players`, `championship_registrations` e `managers` NÃO recebem
+-- policy anon. Dados sensíveis (cpf, email, whatsapp, birth_date, instagram)
+-- ficam fora das views. As views rodam como owner (security_invoker=false,
+-- default), de propósito: expõem só as colunas listadas.
+-- Roda depois de best_player(612), best_manager(613) e player_saves(614).
 
 -- 1. View de jogadores públicos (uma linha por inscrição)
 CREATE OR REPLACE VIEW public.public_players AS
@@ -28,7 +29,9 @@ ORDER BY cr.id, ctp.created_at ASC;
 
 GRANT SELECT ON public.public_players TO anon, authenticated;
 
--- 2. View de estatísticas por jogador (eventos + partidas jogadas)
+-- 2. View de estatísticas por jogador (eventos + defesas + partidas jogadas)
+--    Defesas vêm da tabela player_saves (is_penalty distingue pênalti defendido
+--    de defesa decisiva) — NÃO de match_events_v2.
 CREATE OR REPLACE VIEW public.public_player_stats AS
 WITH ev AS (
   SELECT e.*, km.championship_id
@@ -47,14 +50,21 @@ event_stats AS (
   SELECT
     championship_id,
     registration_id,
-    COUNT(*) FILTER (WHERE event_type = 'GOAL')         AS goals,
-    COUNT(*) FILTER (WHERE event_type = 'ASSIST')       AS assists,
-    COUNT(*) FILTER (WHERE event_type = 'YELLOW_CARD')  AS yellow_cards,
-    COUNT(*) FILTER (WHERE event_type = 'RED_CARD')     AS red_cards,
-    COUNT(*) FILTER (WHERE event_type = 'SAVE')         AS decisive_saves,
-    COUNT(*) FILTER (WHERE event_type = 'PENALTY_SAVE') AS penalty_saves,
-    COUNT(*) FILTER (WHERE event_type = 'FOUL')         AS fouls
+    COUNT(*) FILTER (WHERE event_type = 'GOAL')        AS goals,
+    COUNT(*) FILTER (WHERE event_type = 'ASSIST')      AS assists,
+    COUNT(*) FILTER (WHERE event_type = 'YELLOW_CARD') AS yellow_cards,
+    COUNT(*) FILTER (WHERE event_type = 'RED_CARD')    AS red_cards,
+    COUNT(*) FILTER (WHERE event_type = 'FOUL')        AS fouls
   FROM attributed
+  GROUP BY championship_id, registration_id
+),
+save_stats AS (
+  SELECT
+    championship_id,
+    registration_id,
+    COUNT(*) FILTER (WHERE NOT is_penalty) AS decisive_saves,
+    COUNT(*) FILTER (WHERE is_penalty)     AS penalty_saves
+  FROM public.player_saves
   GROUP BY championship_id, registration_id
 ),
 played AS (
@@ -65,21 +75,28 @@ played AS (
   -- Inclui IN_PROGRESS para exibição ao vivo; o IOG usa só COMPLETED (ver public_goalkeeper_iog)
   WHERE km.status IN ('IN_PROGRESS', 'COMPLETED')
   GROUP BY km.championship_id, ml.player_id
+),
+-- Conjunto unificado de chaves (jogador pode ter só defesas, só eventos, etc.)
+keys AS (
+  SELECT championship_id, registration_id FROM event_stats
+  UNION SELECT championship_id, registration_id FROM save_stats
+  UNION SELECT championship_id, registration_id FROM played
 )
 SELECT
-  COALESCE(es.championship_id, pl.championship_id) AS championship_id,
-  COALESCE(es.registration_id, pl.registration_id) AS registration_id,
+  k.championship_id,
+  k.registration_id,
   COALESCE(es.goals, 0)          AS goals,
   COALESCE(es.assists, 0)        AS assists,
   COALESCE(es.yellow_cards, 0)   AS yellow_cards,
   COALESCE(es.red_cards, 0)      AS red_cards,
-  COALESCE(es.decisive_saves, 0) AS decisive_saves,
-  COALESCE(es.penalty_saves, 0)  AS penalty_saves,
+  COALESCE(sv.decisive_saves, 0) AS decisive_saves,
+  COALESCE(sv.penalty_saves, 0)  AS penalty_saves,
   COALESCE(es.fouls, 0)          AS fouls,
   COALESCE(pl.matches_played, 0) AS matches_played
-FROM event_stats es
-FULL OUTER JOIN played pl
-  ON pl.championship_id = es.championship_id AND pl.registration_id = es.registration_id;
+FROM keys k
+LEFT JOIN event_stats es USING (championship_id, registration_id)
+LEFT JOIN save_stats  sv USING (championship_id, registration_id)
+LEFT JOIN played      pl USING (championship_id, registration_id);
 
 GRANT SELECT ON public.public_player_stats TO anon, authenticated;
 
@@ -96,7 +113,29 @@ GROUP BY oe.registration_id, cr.championship_id, oe.skill;
 
 GRANT SELECT ON public.public_player_skills TO anon, authenticated;
 
--- 4. IOG = (5 - MGS) + 2*PD + 2*MDD (FAQ oficial); só goleiros com partidas
+-- 4. View pública de votos de Melhor Cartola (sem cpf/email — owner-executed).
+--    Uma linha por voto; o cliente agrega pontos por championship_team_id.
+CREATE OR REPLACE VIEW public.public_best_manager_votes AS
+SELECT
+  bmv.championship_id,
+  bmv.match_id,
+  bmv.championship_team_id,
+  t.name        AS team_name,
+  t.logo_url    AS team_logo_url,
+  m.name        AS manager_name,
+  m.photo_url   AS manager_photo,
+  bmv.points
+FROM public.best_manager_votes bmv
+JOIN public.championship_teams ct ON ct.id = bmv.championship_team_id
+JOIN public.teams t ON t.id = ct.team_id
+LEFT JOIN public.championship_managers cm
+  ON cm.championship_id = bmv.championship_id AND cm.team_id = ct.team_id
+LEFT JOIN public.managers m ON m.id = cm.manager_id;
+
+GRANT SELECT ON public.public_best_manager_votes TO anon, authenticated;
+
+-- 5. IOG = (5 - MGS) + 2*PD + 2*MDD (FAQ oficial); só goleiros com partidas.
+--    PD (pênaltis defendidos) e MDD (defesas decisivas) vêm de player_saves.
 CREATE OR REPLACE FUNCTION public.public_goalkeeper_iog(p_championship_id uuid)
 RETURNS TABLE (
   registration_id uuid,
@@ -137,15 +176,13 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
     GROUP BY gm.registration_id
   ),
   saves AS (
-    SELECT e.player_id AS registration_id,
-           COUNT(*) FILTER (WHERE e.event_type = 'PENALTY_SAVE') AS penalty_saves,
-           COUNT(*) FILTER (WHERE e.event_type = 'SAVE')         AS decisive_saves
-    FROM match_events_v2 e
-    JOIN knockout_matches km ON km.id = e.knockout_match_id
-    WHERE km.championship_id = p_championship_id
-      AND e.deleted_at IS NULL
-      AND e.player_id IN (SELECT id FROM gk)
-    GROUP BY e.player_id
+    SELECT registration_id,
+           COUNT(*) FILTER (WHERE is_penalty)     AS penalty_saves,
+           COUNT(*) FILTER (WHERE NOT is_penalty) AS decisive_saves
+    FROM player_saves
+    WHERE championship_id = p_championship_id
+      AND registration_id IN (SELECT id FROM gk)
+    GROUP BY registration_id
   )
   SELECT
     c.registration_id,
@@ -167,7 +204,7 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.public_goalkeeper_iog(uuid) TO anon, authenticated;
 
--- 5. Candidatos a Revelação: overall <= limite (default 85), ranqueados por
+-- 6. Candidatos a Revelação: overall <= limite (default 85), ranqueados por
 --    participações em gol por partida; desempate por menor overall
 CREATE OR REPLACE FUNCTION public.public_revelation_candidates(
   p_championship_id uuid,
@@ -203,11 +240,13 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.public_revelation_candidates(uuid, numeric) TO anon, authenticated;
 
--- 6. Leitura anônima nas tabelas NÃO sensíveis que as páginas públicas usam
---    (match_events_v2, group_slots, penalty_shootouts, match_lineups já são públicas)
--- championship_team_players e organizer_evaluations ficam intencionalmente SEM
--- policy anon direta: são acessadas apenas via views executadas como owner
--- (security_invoker = false), que não passam pela RLS dessas tabelas.
+-- 7. Leitura anônima nas tabelas NÃO sensíveis que as páginas públicas usam
+--    (match_events_v2, group_slots, penalty_shootouts, match_lineups, player_saves
+--    já são públicas via suas próprias migrations).
+-- championship_team_players, organizer_evaluations, managers, championship_managers
+-- e best_manager_votes ficam intencionalmente SEM policy anon direta: são acessadas
+-- apenas via views executadas como owner (security_invoker = false), que não passam
+-- pela RLS dessas tabelas (mantém cpf/email do cartola fora do alcance público).
 CREATE POLICY "anon read championships"     ON public.championships      FOR SELECT TO anon USING (true);
 CREATE POLICY "anon read phases"            ON public.phases             FOR SELECT TO anon USING (true);
 CREATE POLICY "anon read groups"            ON public.groups             FOR SELECT TO anon USING (true);

@@ -72,3 +72,35 @@ export function groupRankingByPosition(
   }
   return grouped;
 }
+
+// Uma linha por voto de melhor cartola (vinda da view public_best_manager_votes)
+export type ManagerVoteRow = {
+  championship_team_id: string;
+  team_name: string | null;
+  manager_name: string | null;
+  manager_photo: string | null;
+  points: number;
+};
+
+// Ranking de Melhor Cartola: soma pontos por time e monta o pódio.
+// O cartola não tem registration_id — usamos championship_team_id como chave.
+export function buildManagerRanking(rows: ManagerVoteRow[], topN: number): RankingEntry[] {
+  const byTeam = new Map<string, { row: ManagerVoteRow; total: number }>();
+  for (const r of rows) {
+    const existing = byTeam.get(r.championship_team_id);
+    if (existing) existing.total += r.points;
+    else byTeam.set(r.championship_team_id, { row: r, total: r.points });
+  }
+  return [...byTeam.values()]
+    .filter(({ total }) => total > 0)
+    .map(({ row, total }) => ({
+      registrationId: row.championship_team_id,
+      playerName: row.manager_name ?? "—",
+      teamName: row.team_name,
+      photoUrl: row.manager_photo,
+      position: null,
+      value: total,
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, topN);
+}

@@ -8,6 +8,8 @@ import {
   buildStatRanking,
   buildVoteRanking,
   groupRankingByPosition,
+  buildManagerRanking,
+  type ManagerVoteRow,
 } from "@/lib/public/match-stats";
 
 const supabase = createClient();
@@ -39,11 +41,12 @@ export type PublicRankings = {
   craqueByPosition: Record<string, RankingEntry[]>;
   goalkeepers: RankingEntry[];
   revelations: RankingEntry[];
+  managers: RankingEntry[];
 };
 
 const EMPTY: PublicRankings = {
   players: [], stats: [], topScorers: [], topAssists: [],
-  craque: [], craqueByPosition: {}, goalkeepers: [], revelations: [],
+  craque: [], craqueByPosition: {}, goalkeepers: [], revelations: [], managers: [],
 };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -85,12 +88,16 @@ export function usePublicRankings(championshipId: string | null, topN = 3) {
     if (!championshipId) { setRankings(EMPTY); setLoading(false); return; }
     setLoading(true);
     try {
-      const [playersRes, statsRes, votesRes, iogRes, revRes] = await Promise.all([
+      const [playersRes, statsRes, votesRes, iogRes, revRes, managerVotesRes] = await Promise.all([
         supabase.from("public_players").select("*").eq("championship_id", championshipId),
         supabase.from("public_player_stats").select("*").eq("championship_id", championshipId),
         supabase.from("best_player_votes").select("registration_id, points").eq("championship_id", championshipId),
         supabase.rpc("public_goalkeeper_iog", { p_championship_id: championshipId }),
         supabase.rpc("public_revelation_candidates", { p_championship_id: championshipId }),
+        supabase
+          .from("public_best_manager_votes")
+          .select("championship_team_id, team_name, manager_name, manager_photo, points")
+          .eq("championship_id", championshipId),
       ]);
 
       const players = (playersRes.data ?? []).map(mapPlayer);
@@ -124,13 +131,15 @@ export function usePublicRankings(championshipId: string | null, topN = 3) {
           };
         });
 
+      const managers = buildManagerRanking((managerVotesRes.data ?? []) as ManagerVoteRow[], topN);
+
       setRankings({
         players, stats,
         topScorers: buildStatRanking(stats, players, (s) => s.goals, topN),
         topAssists: buildStatRanking(stats, players, (s) => s.assists, topN),
         craque: buildVoteRanking(voteTotals, players, topN),
         craqueByPosition: groupRankingByPosition(voteTotals, players, topN),
-        goalkeepers, revelations,
+        goalkeepers, revelations, managers,
       });
     } finally {
       setLoading(false);
@@ -141,11 +150,13 @@ export function usePublicRankings(championshipId: string | null, topN = 3) {
     queueMicrotask(() => { void load(); });
     if (!championshipId) return;
 
-    // Realtime nos eventos (gol muda artilharia) + polling de segurança
+    // Realtime nos eventos (gol muda artilharia), votos e defesas + polling de segurança
     const channel = supabase
       .channel(`public-rankings-${championshipId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "match_events_v2" }, () => { void load(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "player_saves", filter: `championship_id=eq.${championshipId}` }, () => { void load(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "best_player_votes", filter: `championship_id=eq.${championshipId}` }, () => { void load(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "best_manager_votes", filter: `championship_id=eq.${championshipId}` }, () => { void load(); })
       .subscribe();
 
     pollingRef.current = setInterval(() => { void load(); }, 15_000);

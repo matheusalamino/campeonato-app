@@ -92,6 +92,7 @@ export default function LiveScreenPage() {
     if (!hasCraqueByPosition) ids.push("best-by-position");
     if (rankings.goalkeepers.length === 0) ids.push("goalkeeper");
     if (rankings.revelations.length === 0) ids.push("revelation");
+    if (rankings.managers.length === 0) ids.push("managers");
     if (Object.keys(standings).length === 0) ids.push("standings");
     return ids;
   }, [
@@ -100,6 +101,7 @@ export default function LiveScreenPage() {
     hasCraqueByPosition,
     rankings.goalkeepers.length,
     rankings.revelations.length,
+    rankings.managers.length,
     standings,
   ]);
 
@@ -168,6 +170,14 @@ export default function LiveScreenPage() {
             championshipName={championshipName}
             title="Revelações" subtitle="candidatos · overall ≤ 85"
             unit="P/J" entries={rankings.revelations}
+          />
+        );
+      case "managers":
+        return (
+          <RankingPodiumCard
+            championshipName={championshipName}
+            title="Cartolas" subtitle="votos por partida, peso por fase"
+            unit="PTS" entries={rankings.managers}
           />
         );
       case "standings":

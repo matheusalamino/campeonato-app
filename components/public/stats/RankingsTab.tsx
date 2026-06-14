@@ -66,7 +66,7 @@ export default function RankingsTab({ rankings }: { rankings: PublicRankings }) 
       <RankCard icon="👑" title="Craque" subtitle="votos por partida" entries={rankings.craque} />
       <RankCard icon="🧤" title="Goleiro Destaque" subtitle="índice oficial do goleiro (IOG)" entries={rankings.goalkeepers} />
       <RankCard icon="💎" title="Revelações" subtitle="candidatos · overall ≤ 85" entries={rankings.revelations} />
-      <RankCard icon="🎩" title="Cartolas" subtitle="em breve — votos por partida" entries={[]} disabled />
+      <RankCard icon="🎩" title="Cartolas" subtitle="votos por partida, peso por fase" entries={rankings.managers} />
     </div>
   );
 }

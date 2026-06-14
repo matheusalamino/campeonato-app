@@ -44,11 +44,11 @@ describe("goalInterrupt", () => {
 });
 
 describe("DEFAULT_CAROUSEL_CARDS", () => {
-  it("tem a sequência do spec com managers desabilitado", () => {
+  it("tem a sequência do spec com managers habilitado", () => {
     expect(DEFAULT_CAROUSEL_CARDS.map((c) => c.id)).toEqual([
-      "live", "scorers", "assists", "best-by-position", "goalkeeper", "revelation", "standings", "managers",
+      "live", "scorers", "assists", "best-by-position", "goalkeeper", "revelation", "managers", "standings",
     ]);
-    expect(DEFAULT_CAROUSEL_CARDS.find((c) => c.id === "managers")!.enabled).toBe(false);
+    expect(DEFAULT_CAROUSEL_CARDS.find((c) => c.id === "managers")!.enabled).toBe(true);
     expect(DEFAULT_CAROUSEL_CARDS.find((c) => c.id === "live")!.durationMs).toBe(30_000);
     expect(DEFAULT_CAROUSEL_CARDS.find((c) => c.id === "standings")!.durationMs).toBe(20_000);
   });

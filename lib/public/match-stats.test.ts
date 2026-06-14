@@ -4,6 +4,7 @@ import {
   buildStatRanking,
   buildVoteRanking,
   groupRankingByPosition,
+  buildManagerRanking,
 } from "./match-stats";
 import type { PublicPlayer, PublicPlayerStats } from "./types";
 
@@ -114,5 +115,26 @@ describe("groupRankingByPosition", () => {
     expect(grouped.ATA[0].registrationId).toBe("c");
     expect(grouped.ATA[0].value).toBe(8);
     expect(grouped.ATA).toHaveLength(1);
+  });
+});
+
+describe("buildManagerRanking", () => {
+  const rows = [
+    { championship_team_id: "t1", team_name: "Leões", manager_name: "João", manager_photo: null, points: 3 },
+    { championship_team_id: "t1", team_name: "Leões", manager_name: "João", manager_photo: null, points: 2 },
+    { championship_team_id: "t2", team_name: "Tubarões", manager_name: "Ana", manager_photo: null, points: 4 },
+  ];
+
+  it("soma pontos por time e ordena desc", () => {
+    const top = buildManagerRanking(rows, 3);
+    expect(top.map((e) => e.registrationId)).toEqual(["t1", "t2"]);
+    expect(top[0].value).toBe(5);
+    expect(top[0].playerName).toBe("João");
+    expect(top[0].teamName).toBe("Leões");
+  });
+
+  it("limita ao topN e exclui zeros", () => {
+    expect(buildManagerRanking(rows, 1)).toHaveLength(1);
+    expect(buildManagerRanking([], 3)).toHaveLength(0);
   });
 });
