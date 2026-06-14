@@ -24,10 +24,13 @@ const STEP_STYLE: Record<number, string> = {
   3: "h-7 text-base text-[#e8b27d]",
 };
 
-function Avatar({ entry, first }: { entry: RankingEntry; first: boolean }) {
-  const cls = first
-    ? "bg-gradient-to-br from-[var(--gala-gold-1)] to-[var(--gala-gold-3)] shadow-[0_0_24px_var(--gala-gold-glow)]"
-    : "bg-gradient-to-br from-[#cdd6ea] to-[#7e8aa8]";
+function Avatar({ entry, rank }: { entry: RankingEntry; rank: 1 | 2 | 3 }) {
+  const cls =
+    rank === 1
+      ? "bg-gradient-to-br from-[var(--gala-gold-1)] to-[var(--gala-gold-3)] shadow-[0_0_24px_var(--gala-gold-glow)]"
+      : rank === 3
+        ? "bg-gradient-to-br from-[#e8b27d] to-[#9c5f2c]"
+        : "bg-gradient-to-br from-[#cdd6ea] to-[#7e8aa8]";
   return entry.photoUrl ? (
     <Image
       src={entry.photoUrl}
@@ -69,7 +72,7 @@ export default function RankingPodiumCard({ championshipName, title, subtitle, u
                 }`}
               >
                 <span className="absolute -top-4 text-2xl drop-shadow-lg">{medal}</span>
-                <Avatar entry={entry} first={first} />
+                <Avatar entry={entry} rank={rank} />
                 <span className="text-[1.3vw] font-extrabold">{entry.playerName}</span>
                 <span className="text-[0.85vw] uppercase tracking-wider text-[var(--gala-ink-dim)]">
                   {entry.teamName ?? "—"}{entry.detail ? ` · ${entry.detail}` : ""}

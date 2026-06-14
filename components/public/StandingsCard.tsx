@@ -42,11 +42,13 @@ export default function StandingsCard({ championshipName, standings, groupLabels
                     key={t.championshipTeamId}
                     className={`border-t border-[var(--gala-line)]/60 ${i < 2 ? "text-[var(--gala-gold-1)]" : "text-[var(--gala-ink)]"}`}
                   >
-                    <td className="flex items-center gap-2 py-[0.45vw] font-semibold">
-                      <span className={`w-5 text-center font-extrabold ${i < 2 ? "text-[var(--gala-gold-2)]" : "text-[var(--gala-ink-dim)]"}`}>
-                        {i + 1}
-                      </span>
-                      {t.name}
+                    <td className="py-[0.45vw] font-semibold">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-5 text-center font-extrabold ${i < 2 ? "text-[var(--gala-gold-2)]" : "text-[var(--gala-ink-dim)]"}`}>
+                          {i + 1}
+                        </span>
+                        {t.name}
+                      </div>
                     </td>
                     <td className="text-center font-extrabold">{t.points}</td>
                     <td className="text-center">{t.played}</td>
