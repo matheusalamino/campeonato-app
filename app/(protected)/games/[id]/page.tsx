@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import type { MatchPeriod } from "@/types/championship";
 import { BestPlayerVoteModal } from "@/components/BestPlayerVoteModal";
 import type { ExistingVote } from "@/types/best-player";
+import { playTeamSoundtrack, stopTeamSoundtrack } from "@/lib/team-soundtracks";
 
 const supabase = createClient();
 
@@ -355,6 +356,23 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
 
   async function save() {
     setSaving(true);
+
+    // Play soundtrack synchronously before any await — browser autoplay policy
+    // requires audio.play() to be called within the user gesture (tap) context,
+    // which is lost after the first await.
+    const isGoalEvent =
+      eventType === "GOAL" ||
+      eventType === "OWN_GOAL" ||
+      (eventType === "PENALTY" && penaltyOutcome === "PENALTY_GOAL");
+    if (isGoalEvent) {
+      const scoringTeamId = eventType === "OWN_GOAL" ? opposingTeamId : teamId;
+      const teamName =
+        scoringTeamId === detail.homeTeam.championshipTeamId
+          ? detail.homeTeam.name
+          : detail.awayTeam.name;
+      playTeamSoundtrack(teamName);
+    }
+
     try {
       if (eventType === "PENALTY") {
         if (!penaltyOutcome || !player) { setSaving(false); return; }
@@ -388,6 +406,7 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
         }
       }
     } catch {
+      if (isGoalEvent) stopTeamSoundtrack();
       setSaving(false);
       toast.error("Erro ao salvar evento");
       return;
@@ -403,6 +422,7 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
           : "Pênalti (fora)"
         : (EVENT_META[eventType]?.label ?? eventType);
     toast.success(`${label} registrado em ${formatTime(elapsed)}`);
+
     onSaved();
     onClose();
   }
