@@ -7,7 +7,8 @@ const SOUNDTRACKS: Record<string, string> = {
   japao:     "/audios/soundtracks/japao.mp4",
   mexico:    "/audios/soundtracks/mexico.mp3",
   portugal:  "/audios/soundtracks/portugal.mp3",
-  usa:       "/audios/soundtracks/usa.mp3",
+  usa:            "/audios/soundtracks/usa.mp3",
+  "estados unidos": "/audios/soundtracks/usa.mp3",
 };
 
 const STOP_AFTER_MS = 10_000;
