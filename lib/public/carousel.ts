@@ -59,7 +59,8 @@ function clampDuration(ms: unknown, fallback: number): number {
 export function resolveCarouselConfig(
   saved: SavedCarouselCard[] | null | undefined,
 ): CarouselCardConfig[] {
-  if (!Array.isArray(saved)) return DEFAULT_CAROUSEL_CARDS;
+  // Cópia (não a referência do default mutável) — o retorno alimenta estado editável
+  if (!Array.isArray(saved)) return DEFAULT_CAROUSEL_CARDS.map((c) => ({ ...c }));
   const catalogById = new Map(CAROUSEL_CARD_CATALOG.map((c) => [c.id, c]));
   const result: CarouselCardConfig[] = [];
   const seen = new Set<string>();
