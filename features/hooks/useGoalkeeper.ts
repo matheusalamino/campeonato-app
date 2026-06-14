@@ -6,6 +6,8 @@ import type { GoalkeeperScore } from "@/types/goalkeeper";
 
 const supabase = createClient();
 
+const GK_POSITIONS = new Set(["GOL", "Goleiro"]);
+
 type RawSave = {
   registration_id: string;
   match_id: string;
@@ -15,6 +17,11 @@ type RawSave = {
 type RawGoalEvent = {
   event_type: string;
   team_id: string;
+  knockout_match_id: string;
+};
+
+type RawLineup = {
+  player_id: string;
   knockout_match_id: string;
 };
 
@@ -31,6 +38,7 @@ export function useGoalkeeper(championshipId: string | null) {
 
   const rawSavesRef = useRef<RawSave[]>([]);
   const rawGoalEventsRef = useRef<RawGoalEvent[]>([]);
+  const rawLineupsRef = useRef<RawLineup[]>([]);
   const regInfoMapRef = useRef<Map<string, RegInfo>>(new Map());
   const loadSeqRef = useRef(0);
 
@@ -38,37 +46,47 @@ export function useGoalkeeper(championshipId: string | null) {
     const regInfoMap = regInfoMapRef.current;
     const rawGoalEvents = rawGoalEventsRef.current;
 
-    const gkMap = new Map<string, {
-      matchIds: Set<string>;
-      decisiveSaves: number;
-      penaltySaves: number;
-    }>();
+    // Build match participation per goalkeeper: union of lineup entries and saves entries.
+    // This covers goalkeepers who played but had zero saves (lineup only).
+    const gkMatchMap = new Map<string, Set<string>>();
 
+    for (const lineup of rawLineupsRef.current) {
+      const set = gkMatchMap.get(lineup.player_id) ?? new Set<string>();
+      set.add(lineup.knockout_match_id);
+      gkMatchMap.set(lineup.player_id, set);
+    }
     for (const save of rawSavesRef.current) {
-      const existing = gkMap.get(save.registration_id);
-      const entry = existing ?? { matchIds: new Set<string>(), decisiveSaves: 0, penaltySaves: 0 };
-      entry.matchIds.add(save.match_id);
+      const set = gkMatchMap.get(save.registration_id) ?? new Set<string>();
+      set.add(save.match_id);
+      gkMatchMap.set(save.registration_id, set);
+    }
+
+    // Saves per goalkeeper
+    const savesMap = new Map<string, { decisiveSaves: number; penaltySaves: number }>();
+    for (const save of rawSavesRef.current) {
+      const entry = savesMap.get(save.registration_id) ?? { decisiveSaves: 0, penaltySaves: 0 };
       if (save.is_penalty) entry.penaltySaves++;
       else entry.decisiveSaves++;
-      if (!existing) gkMap.set(save.registration_id, entry);
+      savesMap.set(save.registration_id, entry);
     }
 
     const result: GoalkeeperScore[] = [];
 
-    for (const [registrationId, stats] of gkMap.entries()) {
+    for (const [registrationId, matchIds] of gkMatchMap.entries()) {
       const info = regInfoMap.get(registrationId);
       if (!info) continue;
 
-      const partidas = stats.matchIds.size;
-      const pd = stats.penaltySaves;
-      const mdd = partidas > 0 ? stats.decisiveSaves / partidas : 0;
+      const partidas = matchIds.size;
+      const { decisiveSaves, penaltySaves } = savesMap.get(registrationId) ?? { decisiveSaves: 0, penaltySaves: 0 };
+      const pd = penaltySaves;
+      const mdd = partidas > 0 ? decisiveSaves / partidas : 0;
 
       // Goals conceded = goals scored by opposing team in the gk's matches.
-      // In match_events_v2, team_id is the championship_team_id of the scoring team.
-      // OWN_GOAL.team_id = the team that scored the own goal (i.e. the defending team).
+      // In match_events_v2, team_id is championship_team_id of the scoring team.
+      // OWN_GOAL.team_id = team that scored own goal (the defending team).
       let goalsConceded = 0;
       for (const event of rawGoalEvents) {
-        if (!stats.matchIds.has(event.knockout_match_id)) continue;
+        if (!matchIds.has(event.knockout_match_id)) continue;
         if (
           (event.event_type === "GOAL" || event.event_type === "PENALTY_GOAL") &&
           event.team_id !== info.teamId
@@ -91,7 +109,7 @@ export function useGoalkeeper(championshipId: string | null) {
         teamName: info.teamName,
         matchesPlayed: partidas,
         goalsConceded,
-        decisiveSaves: stats.decisiveSaves,
+        decisiveSaves,
         penaltySaves: pd,
         mgs,
         mdd,
@@ -110,6 +128,7 @@ export function useGoalkeeper(championshipId: string | null) {
     if (!championshipId) {
       rawSavesRef.current = [];
       rawGoalEventsRef.current = [];
+      rawLineupsRef.current = [];
       regInfoMapRef.current = new Map();
       setLeaderboard([]);
       setLoading(false);
@@ -118,6 +137,7 @@ export function useGoalkeeper(championshipId: string | null) {
 
     setLoading(true);
     try {
+      // Fetch saves, goals, registrations (with position) in parallel
       const [savesRes, eventsRes, regsRes] = await Promise.all([
         supabase
           .from("player_saves")
@@ -131,19 +151,38 @@ export function useGoalkeeper(championshipId: string | null) {
           .in("event_type", ["GOAL", "OWN_GOAL", "PENALTY_GOAL"]),
         supabase
           .from("championship_registrations")
-          .select("id, profile_photo_link, players(id, name)")
+          .select("id, profile_photo_link, players(id, name, position)")
           .eq("championship_id", championshipId),
       ]);
 
-      const gkRegIds = [...new Set((savesRes.data ?? []).map(s => s.registration_id))];
+      // Goalkeeper reg ids: position-based (GOL/Goleiro) + anyone with saves
+      const gkRegIds = new Set<string>();
+      for (const reg of regsRes.data ?? []) {
+        const playersRel = reg.players as { position: string | null } | { position: string | null }[] | null;
+        const pos = (Array.isArray(playersRel) ? playersRel[0]?.position : playersRel?.position) ?? null;
+        if (pos && GK_POSITIONS.has(pos)) gkRegIds.add(reg.id);
+      }
+      for (const save of savesRes.data ?? []) gkRegIds.add(save.registration_id);
 
-      const { data: ctpRows } = await supabase
-        .from("championship_team_players")
-        .select("registration_id, championship_team_id, championship_teams(id, teams(name))")
-        .in("registration_id", gkRegIds.length ? gkRegIds : ["__none__"]);
+      const gkRegIdsArray = [...gkRegIds];
+
+      // Fetch lineups (starters only) and team info for goalkeepers in parallel
+      const [lineupsRes, ctpRes] = await Promise.all([
+        gkRegIdsArray.length
+          ? supabase
+              .from("match_lineups")
+              .select("player_id, knockout_match_id")
+              .in("player_id", gkRegIdsArray)
+              .eq("is_starter", true)
+          : Promise.resolve({ data: [] }),
+        supabase
+          .from("championship_team_players")
+          .select("registration_id, championship_team_id, championship_teams(id, teams(name))")
+          .in("registration_id", gkRegIdsArray.length ? gkRegIdsArray : ["__none__"]),
+      ]);
 
       const ctpMap = new Map<string, { teamId: string; teamName: string }>();
-      for (const ctp of ctpRows ?? []) {
+      for (const ctp of ctpRes.data ?? []) {
         if (ctpMap.has(ctp.registration_id)) continue;
         const ct = ctp.championship_teams as unknown as { id: string; teams: { name: string } | { name: string }[] | null } | null;
         const teamsRel = ct?.teams;
@@ -153,11 +192,11 @@ export function useGoalkeeper(championshipId: string | null) {
 
       const newRegInfoMap = new Map<string, RegInfo>();
       for (const reg of regsRes.data ?? []) {
-        if (!gkRegIds.includes(reg.id)) continue;
-        const playersRel = reg.players as { id: string; name: string } | { id: string; name: string }[] | null;
-        const playerName = (Array.isArray(playersRel) ? playersRel[0]?.name : playersRel?.name) ?? "—";
+        if (!gkRegIds.has(reg.id)) continue;
         const teamInfo = ctpMap.get(reg.id);
         if (!teamInfo) continue;
+        const playersRel = reg.players as { id: string; name: string } | { id: string; name: string }[] | null;
+        const playerName = (Array.isArray(playersRel) ? playersRel[0]?.name : playersRel?.name) ?? "—";
         newRegInfoMap.set(reg.id, {
           playerName,
           playerPhoto: reg.profile_photo_link ?? null,
@@ -170,6 +209,7 @@ export function useGoalkeeper(championshipId: string | null) {
 
       rawSavesRef.current = (savesRes.data ?? []) as RawSave[];
       rawGoalEventsRef.current = (eventsRes.data ?? []) as RawGoalEvent[];
+      rawLineupsRef.current = (lineupsRes.data ?? []) as RawLineup[];
       regInfoMapRef.current = newRegInfoMap;
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
