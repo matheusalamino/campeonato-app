@@ -9,8 +9,10 @@ import { useDisciplinary } from "@/features/hooks/useDisciplinary";
 import { useBestPlayer } from "@/features/hooks/useBestPlayer";
 import { useBestManager } from "@/features/hooks/useBestManager";
 import { useDefesas } from "@/features/hooks/useDefesas";
+import { useGoalkeeper } from "@/features/hooks/useGoalkeeper";
 import type { PlayerScore, ManagerScore } from "@/types/best-player";
 import type { DefesaScore } from "@/types/defesas";
+import type { GoalkeeperScore } from "@/types/goalkeeper";
 import { Shield, Trophy, Info, RefreshCw, ShieldAlert, User, Star, ChevronDown, ChevronUp, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +35,7 @@ export default function StandingsPage() {
   }, [reload]);
 
   // ── Tab state ────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<"standings" | "disciplinary" | "best_player" | "defesas">("standings");
+  const [activeTab, setActiveTab] = useState<"standings" | "disciplinary" | "best_player" | "goalkeeper" | "defesas">("standings");
 
   // ── Best Player tab state ────────────────────────────────────────────────────
   const { leaderboard, loading: loadingBestPlayer } = useBestPlayer(
@@ -45,9 +47,13 @@ export default function StandingsPage() {
   const { leaderboard: defesasLeaderboard, loading: defesasLoading } = useDefesas(
     activeTab === "defesas" ? championship?.id ?? null : null
   );
+  const { leaderboard: goalkeeperLeaderboard, loading: goalkeeperLoading } = useGoalkeeper(
+    activeTab === "goalkeeper" ? championship?.id ?? null : null
+  );
   const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
   const [expandedManager, setExpandedManager] = useState<string | null>(null);
   const [expandedDefesa, setExpandedDefesa] = useState<string | null>(null);
+  const [expandedGoalkeeper, setExpandedGoalkeeper] = useState<string | null>(null);
 
   // ── Disciplinary tab state ───────────────────────────────────────────────
   const [discPhaseId, setDiscPhaseId] = useState<string | null>(null);
@@ -187,6 +193,15 @@ export default function StandingsPage() {
           )}
         >
           <Star className="h-3 w-3" /> Craque
+        </button>
+        <button
+          onClick={() => setActiveTab("goalkeeper")}
+          className={cn(
+            "rounded-lg px-4 py-2 text-xs font-bold transition-all",
+            activeTab === "goalkeeper" ? "bg-emerald-600 text-white" : "text-zinc-400 hover:text-white"
+          )}
+        >
+          Goleiro
         </button>
           <button
             onClick={() => setActiveTab("defesas")}
@@ -655,6 +670,118 @@ export default function StandingsPage() {
             </div>
           )}
         </div>
+        </div>
+      )}
+
+      {/* ── Goleiro tab content ───────────────────────────────────────── */}
+      {activeTab === "goalkeeper" && (
+        <div>
+          <div className="mb-4">
+            <h2 className="text-base font-black uppercase tracking-wider text-white">Melhor Goleiro</h2>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              Índice Oficial do Goleiro (IOG) = (5 − MGS) + (2 × PD) + (2 × MDD)
+            </p>
+          </div>
+
+          {goalkeeperLoading ? (
+            <div className="flex items-center justify-center py-16 text-zinc-600">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-700 border-t-emerald-500" />
+            </div>
+          ) : goalkeeperLeaderboard.length === 0 ? (
+            <div className="flex h-48 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-zinc-800 text-zinc-600">
+              <span className="text-3xl">🧤</span>
+              <p className="text-sm">Nenhuma defesa registrada ainda.</p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-xl">
+              <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">Goleiro</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">IOG</span>
+              </div>
+
+              <div className="divide-y divide-zinc-800/60">
+                {goalkeeperLeaderboard.map((entry: GoalkeeperScore, index: number) => (
+                  <div key={entry.registrationId}>
+                    <button
+                      onClick={() => setExpandedGoalkeeper(expandedGoalkeeper === entry.registrationId ? null : entry.registrationId)}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left transition-all hover:bg-zinc-900"
+                    >
+                      <span className={cn(
+                        "flex h-6 w-6 shrink-0 items-center justify-center rounded text-[11px] font-black",
+                        index === 0 ? "bg-yellow-500/20 text-yellow-400" :
+                        index === 1 ? "bg-zinc-400/10 text-zinc-300" :
+                        index === 2 ? "bg-orange-400/10 text-orange-400" :
+                        "text-zinc-600"
+                      )}>
+                        {index + 1}
+                      </span>
+
+                      {entry.playerPhoto ? (
+                        <img src={entry.playerPhoto} alt={entry.playerName} className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-zinc-700/50" />
+                      ) : (
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-800 ring-1 ring-zinc-700/50">
+                          <User className="h-4 w-4 text-zinc-500" />
+                        </div>
+                      )}
+
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate text-sm font-bold text-white">{entry.playerName}</p>
+                        <p className="text-[11px] text-zinc-500">{entry.teamName}</p>
+                      </div>
+
+                      <span className="shrink-0 text-sm font-black text-emerald-400">
+                        {entry.iog.toFixed(2)}
+                      </span>
+
+                      {expandedGoalkeeper === entry.registrationId
+                        ? <ChevronUp className="h-4 w-4 shrink-0 text-zinc-600" />
+                        : <ChevronDown className="h-4 w-4 shrink-0 text-zinc-600" />
+                      }
+                    </button>
+
+                    {expandedGoalkeeper === entry.registrationId && (
+                      <div className="border-t border-zinc-800/50 bg-zinc-950/50 px-4 py-3 space-y-2">
+                        <div className="grid grid-cols-3 gap-2 text-center mb-2">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-zinc-600">Partidas</p>
+                            <p className="text-sm font-bold text-zinc-300">{entry.matchesPlayed}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-zinc-600">Gols sofridos</p>
+                            <p className="text-sm font-bold text-zinc-300">{entry.goalsConceded}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-zinc-600">MGS</p>
+                            <p className="text-sm font-bold text-red-400">{entry.mgs.toFixed(2)}</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-center border-t border-zinc-800/50 pt-2">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-zinc-600">Def. decisivas</p>
+                            <p className="text-sm font-bold text-zinc-300">{entry.decisiveSaves}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-zinc-600">MDD</p>
+                            <p className="text-sm font-bold text-emerald-400">{entry.mdd.toFixed(2)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-zinc-600">Pên. defendidos</p>
+                            <p className="text-sm font-bold text-emerald-400">{entry.pd}</p>
+                          </div>
+                        </div>
+                        <div className="border-t border-zinc-800/50 pt-2 text-center">
+                          <p className="text-[10px] uppercase tracking-wider text-zinc-600">
+                            IOG = (5 − {entry.mgs.toFixed(2)}) + (2 × {entry.pd}) + (2 × {entry.mdd.toFixed(2)})
+                          </p>
+                          <p className="mt-0.5 text-base font-black text-emerald-400">{entry.iog.toFixed(2)}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
