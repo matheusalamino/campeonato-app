@@ -76,11 +76,12 @@ function mapStats(r: any): PublicPlayerStats {
 // Rankings públicos do campeonato — Realtime (eventos) + polling 15s
 export function usePublicRankings(championshipId: string | null, topN = 3) {
   const [rankings, setRankings] = useState<PublicRankings>(EMPTY);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     if (!championshipId) { setRankings(EMPTY); setLoading(false); return; }
+    setLoading(true);
     try {
       const [playersRes, statsRes, votesRes, iogRes, revRes] = await Promise.all([
         supabase.from("public_players").select("*").eq("championship_id", championshipId),
