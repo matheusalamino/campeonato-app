@@ -82,10 +82,23 @@ export function usePublicLiveMatch(
   const load = useCallback(async () => {
     if (!championshipId) { setData({ current: null, last: null, next: null }); setLoading(false); return; }
     try {
+      // Jogos ligam-se ao campeonato via phase_id (knockout_matches.championship_id
+      // está nulo no schema atual — mesmo padrão do useGroupStandings).
+      const { data: phaseRows } = await supabase
+        .from("phases").select("id, name").eq("championship_id", championshipId);
+      const phaseName = new Map((phaseRows ?? []).map((p) => [p.id, p.name]));
+      const phaseIds = (phaseRows ?? []).map((p) => p.id);
+      if (phaseIds.length === 0) {
+        knownGoalIdsRef.current = new Set();
+        setData({ current: null, last: null, next: null });
+        setLoading(false);
+        return;
+      }
+
       const { data: matches } = await supabase
         .from("knockout_matches")
         .select("id, name, status, phase_id, current_period, period_started_at, scheduled_at, home_score, away_score, penalty_home_score, penalty_away_score, completed_at")
-        .eq("championship_id", championshipId);
+        .in("phase_id", phaseIds);
 
       const all = matches ?? [];
       const current = all.find((m) => m.status === "IN_PROGRESS") ?? null;
@@ -104,7 +117,7 @@ export function usePublicLiveMatch(
         return;
       }
 
-      const [slotsRes, eventsRes, phasesRes, playersRes] = await Promise.all([
+      const [slotsRes, eventsRes, playersRes] = await Promise.all([
         supabase
           .from("match_slots")
           .select("match_id, slot_order, label, championship_team_id, championship_teams(id, uniform_color, teams(name, logo_url))")
@@ -116,11 +129,9 @@ export function usePublicLiveMatch(
           .in("knockout_match_id", ids)
           .is("deleted_at", null)
           .order("event_time_s"),
-        supabase.from("phases").select("id, name").eq("championship_id", championshipId),
         supabase.from("public_players").select("registration_id, player_name").eq("championship_id", championshipId),
       ]);
 
-      const phaseName = new Map((phasesRes.data ?? []).map((p) => [p.id, p.name]));
       const playerName = new Map((playersRes.data ?? []).map((p) => [p.registration_id, p.player_name]));
 
       const build = (m: typeof current): LiveMatchInfo | null => {
@@ -208,9 +219,11 @@ export function usePublicLiveMatch(
     queueMicrotask(() => { void load(); });
     if (!championshipId) return;
 
+    // Sem filtro por championship_id (é nulo no schema); reload em qualquer
+    // mudança de jogo/evento — volume baixo para um telão de 1 campeonato.
     const channel = supabase
       .channel(`public-live-${championshipId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "knockout_matches", filter: `championship_id=eq.${championshipId}` }, () => { void load(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "knockout_matches" }, () => { void load(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "match_events_v2" }, () => { void load(); })
       .subscribe();
 

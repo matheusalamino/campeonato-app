@@ -29,7 +29,10 @@ export default function StandingsTab({ championshipId }: { championshipId: strin
   const phaseResolved = resolvedFor === championshipId;
 
   const { standings, groupLabels, loading } = useGroupStandings(championshipId, groupPhaseId);
-  const groups = Object.keys(standings).sort();
+  // Ordena pelos rótulos (A, B, C…), não pela chave (id do grupo)
+  const groups = Object.keys(standings).sort((a, b) =>
+    (groupLabels[a] ?? a).localeCompare(groupLabels[b] ?? b, "pt-BR"),
+  );
 
   if (!phaseResolved || (loading && groups.length === 0)) {
     return <div className="h-44 animate-pulse rounded-xl bg-[#171320]" />;

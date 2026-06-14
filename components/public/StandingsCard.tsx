@@ -11,7 +11,10 @@ type Props = {
 const HEADERS = ["P", "J", "V", "E", "D", "GP", "GC", "SG"];
 
 export default function StandingsCard({ championshipName, standings, groupLabels }: Props) {
-  const groups = Object.keys(standings).sort();
+  // Ordena pelos rótulos (A, B, C…), não pela chave (id do grupo)
+  const groups = Object.keys(standings).sort((a, b) =>
+    (groupLabels[a] ?? a).localeCompare(groupLabels[b] ?? b, "pt-BR"),
+  );
   return (
     <div className="flex h-full flex-col items-center justify-center gap-[2vh] px-[4vw]">
       <div className="flex items-center gap-4 text-[1.1vw] font-bold uppercase tracking-[6px] text-[var(--gala-gold-2)]">

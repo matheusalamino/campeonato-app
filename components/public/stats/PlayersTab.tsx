@@ -132,8 +132,12 @@ export default function PlayersTab({ championshipId, rankings }: {
               )}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-bold">{p.playerName}</span>
-                <span className="block text-[10px] uppercase tracking-wide text-[var(--gala-ink-dim)]">
-                  {(p.position && (POSITION_LABELS[p.position] ?? p.position)) ?? "—"} · {p.teamName ?? "—"}
+                <span className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-[var(--gala-ink-dim)]">
+                  <span>{(p.position && (POSITION_LABELS[p.position] ?? p.position)) ?? "—"} ·</span>
+                  {p.teamLogoUrl ? (
+                    <Image src={p.teamLogoUrl} alt={p.teamName ?? ""} width={14} height={14} className="size-3.5 shrink-0 rounded-sm object-cover" />
+                  ) : null}
+                  <span className="truncate">{p.teamName ?? "—"}</span>
                 </span>
               </span>
               <span className="text-right text-[10px] text-[var(--gala-ink-dim)]">
@@ -161,8 +165,12 @@ export default function PlayersTab({ championshipId, rankings }: {
                 )}
                 <div className="flex-1">
                   <DialogTitle className="text-lg font-extrabold">{selected.playerName}</DialogTitle>
-                  <p className="text-[10px] uppercase tracking-wide text-[var(--gala-ink-dim)]">
-                    {(selected.position && (POSITION_LABELS[selected.position] ?? selected.position)) ?? "—"} · {selected.teamName ?? "—"}
+                  <p className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-[var(--gala-ink-dim)]">
+                    <span>{(selected.position && (POSITION_LABELS[selected.position] ?? selected.position)) ?? "—"} ·</span>
+                    {selected.teamLogoUrl ? (
+                      <Image src={selected.teamLogoUrl} alt={selected.teamName ?? ""} width={16} height={16} className="size-4 shrink-0 rounded-sm object-cover" />
+                    ) : null}
+                    <span>{selected.teamName ?? "—"}</span>
                   </p>
                 </div>
                 {selected.finalOverall !== null ? (
