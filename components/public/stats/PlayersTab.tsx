@@ -45,13 +45,18 @@ export default function PlayersTab({ championshipId, rankings }: {
 
   // Radar do jogador selecionado
   useEffect(() => {
-    if (!selected) { setSkills([]); return; }
+    // Limpa o radar anterior ao trocar/fechar (não mostrar dados do jogador errado)
+    setSkills([]);
+    if (!selected) return;
+    let cancelled = false;
     void (async () => {
       const { data } = await supabase
         .from("public_player_skills").select("registration_id, skill, rating")
         .eq("registration_id", selected.registrationId);
-      setSkills((data ?? []) as SkillRow[]);
+      // Ignora respostas fora de ordem (clique rápido em outro jogador)
+      if (!cancelled) setSkills((data ?? []) as SkillRow[]);
     })();
+    return () => { cancelled = true; };
   }, [selected]);
 
   const statsById = useMemo(
@@ -68,16 +73,20 @@ export default function PlayersTab({ championshipId, rankings }: {
   );
 
   // Busca por nome, nome oficial ou time — CPF fica fora de propósito (LGPD)
-  const filtered = rankings.players.filter((p) => {
-    if (team !== "all" && p.teamName !== team) return false;
-    if (position !== "all" && p.position !== position) return false;
-    if (search.trim()) {
-      const q = normalize(search);
-      const hay = normalize(`${p.playerName} ${p.officialName ?? ""} ${p.teamName ?? ""}`);
-      if (!hay.includes(q)) return false;
-    }
-    return true;
-  });
+  const filtered = useMemo(
+    () =>
+      rankings.players.filter((p) => {
+        if (team !== "all" && p.teamName !== team) return false;
+        if (position !== "all" && p.position !== position) return false;
+        if (search.trim()) {
+          const q = normalize(search);
+          const hay = normalize(`${p.playerName} ${p.officialName ?? ""} ${p.teamName ?? ""}`);
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      }),
+    [rankings.players, team, position, search],
+  );
 
   const selStats = selected
     ? statsById.get(selected.registrationId) ?? { registrationId: selected.registrationId, ...EMPTY_STATS }

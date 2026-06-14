@@ -9,20 +9,27 @@ const HEADERS = ["P", "J", "V", "E", "D", "GP", "GC", "SG"];
 
 export default function StandingsTab({ championshipId }: { championshipId: string }) {
   const [groupPhaseId, setGroupPhaseId] = useState<string | null>(null);
+  // Enquanto a fase de grupos não resolve, mostramos skeleton (não "indisponível")
+  const [phaseResolved, setPhaseResolved] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+    setPhaseResolved(false);
     void (async () => {
       const { data } = await supabase
         .from("phases").select("id, type, order_number")
         .eq("championship_id", championshipId).order("order_number");
+      if (cancelled) return;
       setGroupPhaseId(data?.find((p) => p.type === "group")?.id ?? null);
+      setPhaseResolved(true);
     })();
+    return () => { cancelled = true; };
   }, [championshipId]);
 
   const { standings, groupLabels, loading } = useGroupStandings(championshipId, groupPhaseId);
   const groups = Object.keys(standings).sort();
 
-  if (loading && groups.length === 0) {
+  if (!phaseResolved || (loading && groups.length === 0)) {
     return <div className="h-44 animate-pulse rounded-xl bg-[#171320]" />;
   }
   if (groups.length === 0) {
