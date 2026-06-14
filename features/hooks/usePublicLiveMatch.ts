@@ -100,6 +100,7 @@ export function usePublicLiveMatch(
       if (ids.length === 0) {
         knownGoalIdsRef.current = new Set();
         setData({ current: null, last: null, next: null });
+        setLoading(false);
         return;
       }
 
