@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import type { MatchPeriod } from "@/types/championship";
 import { BestPlayerVoteModal } from "@/components/BestPlayerVoteModal";
 import type { ExistingVote } from "@/types/best-player";
+import { playTeamSoundtrack } from "@/lib/team-soundtracks";
 
 const supabase = createClient();
 
@@ -403,6 +404,21 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
           : "Pênalti (fora)"
         : (EVENT_META[eventType]?.label ?? eventType);
     toast.success(`${label} registrado em ${formatTime(elapsed)}`);
+
+    const isGoalEvent =
+      eventType === "GOAL" ||
+      eventType === "OWN_GOAL" ||
+      (eventType === "PENALTY" && penaltyOutcome === "PENALTY_GOAL");
+    if (isGoalEvent) {
+      // OWN_GOAL: the celebrating team is the one that didn't commit the own goal
+      const scoringTeamId = eventType === "OWN_GOAL" ? opposingTeamId : teamId;
+      const teamName =
+        scoringTeamId === detail.homeTeam.championshipTeamId
+          ? detail.homeTeam.name
+          : detail.awayTeam.name;
+      playTeamSoundtrack(teamName);
+    }
+
     onSaved();
     onClose();
   }
