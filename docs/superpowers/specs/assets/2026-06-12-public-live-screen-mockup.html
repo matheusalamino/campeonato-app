@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Telão — Noite de Gala v4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#050507; --bg-1:#0c0a10; --panel:#100d16; --line:#2a2438;
+    --gold-1:#fff6cc; --gold-2:#f0d060; --gold-3:#d4a017; --gold-glow:rgba(212,160,23,.45);
+    --ink:#f4f1ea; --ink-dim:#9b94a8;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#030305;color:var(--ink);font-family:Inter,system-ui,sans-serif;padding:48px 24px;display:flex;flex-direction:column;align-items:center;gap:14px}
+  .page-title{font-size:15px;color:var(--ink-dim)}
+  .page-title b{color:var(--gold-2)}
+  .frame-label{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold-3);margin:26px 0 10px}
+
+  /* ── fundo preto + dourado animado (Noite de Gala) ── */
+  .tv{width:min(1180px,96vw);aspect-ratio:16/9;border-radius:14px;overflow:hidden;position:relative;
+      box-shadow:0 30px 80px rgba(0,0,0,.8),0 0 0 1px #241e30;
+      background:
+        radial-gradient(110% 80% at 50% -10%, #181222 0%, transparent 55%),
+        radial-gradient(80% 60% at 50% 115%, #14101c 0%, transparent 60%),
+        linear-gradient(180deg,var(--bg-1) 0%,var(--bg-0) 100%);}
+  .beams{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+  .beams::before,.beams::after{content:"";position:absolute;inset:-20%;
+      background:linear-gradient(115deg, transparent 42%, rgba(240,208,96,.07) 50%, transparent 58%);
+      animation:drift 9s ease-in-out infinite alternate}
+  .beams::after{background:linear-gradient(65deg, transparent 44%, rgba(212,160,23,.05) 52%, transparent 60%);
+      animation:drift 13s ease-in-out infinite alternate-reverse}
+  @keyframes drift{from{transform:translateX(-6%)}to{transform:translateX(6%)}}
+  .dust{position:absolute;border-radius:50%;background:var(--gold-2);opacity:.35;pointer-events:none;
+      box-shadow:0 0 8px var(--gold-glow);animation:floatUp linear infinite}
+  @keyframes floatUp{from{transform:translateY(0)}to{transform:translateY(-130%);opacity:0}}
+  .tv .vignette{position:absolute;inset:0;box-shadow:inset 0 0 150px rgba(0,0,0,.7);pointer-events:none}
+  .inner{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2.2%}
+
+  /* eyebrow em duas linhas */
+  .eyebrow{display:flex;align-items:center;gap:14px;color:var(--gold-2);font-size:clamp(10px,1.2vw,14px);letter-spacing:6px;text-transform:uppercase;font-weight:700}
+  .eyebrow .rule{height:1px;width:84px;background:linear-gradient(90deg,transparent,var(--gold-3))}
+  .eyebrow .rule:last-child{background:linear-gradient(270deg,transparent,var(--gold-3))}
+  .phase{color:var(--ink-dim);font-size:clamp(9px,1vw,12px);letter-spacing:5px;text-transform:uppercase;margin-top:-6px}
+  .phase b{color:var(--gold-1);font-weight:700}
+
+  .live-chip{display:flex;align-items:center;gap:8px;font-size:clamp(8px,.9vw,11px);font-weight:800;letter-spacing:2.5px;color:#ff8a8a;
+      border:1px solid rgba(230,57,70,.45);background:rgba(230,57,70,.1);border-radius:99px;padding:4px 14px}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:#ff4d5e;box-shadow:0 0 10px #ff4d5e;animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.8)}}
+
+  /* placar: painel central + eventos sob cada time */
+  .scoreline{display:flex;align-items:flex-start;gap:3%;width:100%;justify-content:center;margin-top:.4%}
+  .team{display:flex;flex-direction:column;align-items:center;gap:9px;width:26%}
+  .crest{width:clamp(54px,6.8vw,86px);aspect-ratio:1;border-radius:50%;display:flex;align-items:center;justify-content:center;
+      font-weight:900;font-size:clamp(18px,2.2vw,27px);color:var(--ink);position:relative;background:linear-gradient(160deg,#1a1524,#0d0a13)}
+  .crest::before{content:"";position:absolute;inset:-2.5px;border-radius:50%;padding:2.5px;
+      background:conic-gradient(from 210deg,var(--gold-3),var(--gold-1) 25%,var(--gold-3) 55%,#4a3a10 80%,var(--gold-3));
+      -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+  .tname{font-size:clamp(13px,1.6vw,21px);font-weight:800;letter-spacing:2px}
+  .tcolor{height:4px;width:58%;border-radius:2px}
+  .home .tcolor{background:#e63946;box-shadow:0 0 14px rgba(230,57,70,.55)}
+  .away .tcolor{background:#2196f3;box-shadow:0 0 14px rgba(33,150,243,.55)}
+
+  /* eventos do time, embaixo do nome */
+  .tevents{display:flex;flex-direction:column;gap:5px;margin-top:6px;font-size:clamp(9px,1vw,13px);color:var(--ink-dim);text-align:center}
+  .tevents b{color:var(--ink);font-weight:600}
+  .tevents .min{color:var(--gold-2);font-variant-numeric:tabular-nums}
+  .tevents .assist{color:#6f687d;font-size:.88em}
+
+  .score-panel{background:linear-gradient(180deg,#151019,#0b090f);border:1px solid var(--line);border-radius:18px;
+      padding:clamp(8px,1.3vw,16px) clamp(20px,2.6vw,36px);position:relative;align-self:flex-start;margin-top:1.2%;
+      box-shadow:0 14px 44px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,246,204,.06)}
+  .score-panel::before{content:"";position:absolute;left:12%;right:12%;top:-1px;height:2px;
+      background:linear-gradient(90deg,transparent,var(--gold-3),transparent)}
+  .score-panel::after{content:"";position:absolute;left:22%;right:22%;bottom:-1px;height:1px;
+      background:linear-gradient(90deg,transparent,rgba(212,160,23,.5),transparent)}
+  .score{font-family:"Playfair Display",serif;font-weight:800;font-size:clamp(46px,7vw,90px);line-height:1.05;display:flex;align-items:center;gap:clamp(12px,1.6vw,22px)}
+  .score .n{background:linear-gradient(180deg,var(--gold-1) 10%,var(--gold-2) 45%,var(--gold-3) 90%);
+      -webkit-background-clip:text;background-clip:text;color:transparent;
+      filter:drop-shadow(0 4px 20px rgba(212,160,23,.35))}
+  .score .sep{font-family:Inter;font-weight:300;font-size:.34em;color:var(--gold-3);text-shadow:0 0 14px var(--gold-glow);transform:translateY(6%)}
+
+  .period{display:flex;align-items:center;gap:10px;font-size:clamp(10px,1.15vw,14px);font-weight:700;letter-spacing:1.5px;color:var(--gold-1);
+      background:#13101a;border:1px solid var(--line);border-radius:99px;padding:6px 22px;position:relative;overflow:hidden}
+  .period::after{content:"";position:absolute;top:0;left:-60%;height:100%;width:40%;
+      background:linear-gradient(90deg,transparent,rgba(255,246,204,.14),transparent);animation:shine 3.6s infinite}
+  @keyframes shine{0%{left:-60%}60%,100%{left:120%}}
+  .clock{font-variant-numeric:tabular-nums;color:#fff}
+
+  .progress{position:absolute;bottom:4.5%;display:flex;gap:8px;left:50%;transform:translateX(-50%)}
+  .bar{width:34px;height:4px;border-radius:2px;background:#241e30}
+  .bar.active{background:linear-gradient(90deg,var(--gold-2),var(--gold-3));box-shadow:0 0 8px var(--gold-glow)}
+
+  /* ranking */
+  .rank-title{font-family:"Playfair Display",serif;font-weight:800;font-size:clamp(24px,3.2vw,42px);
+      background:linear-gradient(180deg,var(--gold-1),var(--gold-3));-webkit-background-clip:text;background-clip:text;color:transparent;
+      filter:drop-shadow(0 3px 14px rgba(212,160,23,.3))}
+  .rank-sub{color:var(--ink-dim);font-size:clamp(9px,1vw,12px);letter-spacing:4px;text-transform:uppercase;margin-top:-4px}
+  /* pódio com desníveis: colunas alinhadas pela base, degrau numerado sob cada card */
+  .podium{display:flex;align-items:flex-end;gap:2.2%;margin-top:2%}
+  .col{display:flex;flex-direction:column;align-items:center}
+  .col.c2,.col.c3{width:clamp(150px,18.5vw,225px)}
+  .col.c1{width:clamp(180px,22.5vw,275px)}
+  .pod{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:16px 16px 0 0;padding:5% 2.2% 4%;width:100%;
+      background:linear-gradient(180deg,#151019,#0b090f);border:1px solid var(--line);border-bottom:none;position:relative;
+      box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .pod.first{border-color:rgba(212,160,23,.55);
+      background:linear-gradient(180deg,rgba(212,160,23,.13),#0b090f 70%);box-shadow:0 14px 44px rgba(212,160,23,.16)}
+  .step{width:100%;border-radius:0 0 10px 10px;display:flex;align-items:center;justify-content:center;
+      font-family:"Playfair Display",serif;font-weight:800;border:1px solid var(--line);
+      background:linear-gradient(180deg,#1a1424,#0d0a13);position:relative;overflow:hidden}
+  .step::before{content:"";position:absolute;top:0;left:8%;right:8%;height:1px;background:linear-gradient(90deg,transparent,rgba(255,246,204,.25),transparent)}
+  .col.c1 .step{height:clamp(46px,5.8vw,78px);font-size:clamp(22px,2.6vw,34px);border-color:rgba(212,160,23,.5);
+      background:linear-gradient(180deg,rgba(212,160,23,.24),#0d0a13);color:var(--gold-1);text-shadow:0 0 18px var(--gold-glow)}
+  .col.c2 .step{height:clamp(30px,3.8vw,50px);font-size:clamp(16px,1.9vw,25px);color:#cdd6ea}
+  .col.c3 .step{height:clamp(20px,2.6vw,34px);font-size:clamp(14px,1.6vw,21px);color:#e8b27d}
+  .pod.first::before{content:"";position:absolute;left:18%;right:18%;top:-1px;height:2px;
+      background:linear-gradient(90deg,transparent,var(--gold-3),transparent)}
+  .medal{position:absolute;top:-15px;font-size:22px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.7))}
+  .avatar{width:clamp(44px,5.4vw,72px);aspect-ratio:1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;color:#0b0a12;
+      background:linear-gradient(160deg,#cdd6ea,#7e8aa8);font-size:clamp(14px,1.7vw,23px)}
+  .pod.first .avatar{background:linear-gradient(160deg,var(--gold-1),var(--gold-3));box-shadow:0 0 24px var(--gold-glow)}
+  .pod.third .avatar{background:linear-gradient(160deg,#e8b27d,#9c5f2c)}
+  .pname{font-weight:800;font-size:clamp(11px,1.3vw,17px)}
+  .pteam{color:var(--ink-dim);font-size:clamp(8px,.85vw,11px);letter-spacing:1px;text-transform:uppercase}
+  .pval{font-family:"Playfair Display",serif;font-weight:800;font-size:clamp(22px,2.9vw,38px);line-height:1;
+      background:linear-gradient(180deg,#e8edf8,#93a0bf);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .pod.first .pval{background:linear-gradient(180deg,var(--gold-1),var(--gold-3));-webkit-background-clip:text;background-clip:text}
+  .pval small{font-size:.32em;font-family:Inter;letter-spacing:2px;-webkit-text-fill-color:var(--ink-dim)}
+
+  .footnote{font-size:12px;color:#665f73;max-width:760px;text-align:center;line-height:1.6;margin-top:18px}
+</style>
+</head>
+<body>
+  <div class="page-title">v5 — <b>Noite de Gala</b>: pódio com desníveis no card de ranking</div>
+
+  <div class="frame-label">Card 1 · Jogo ao vivo</div>
+  <div class="tv">
+    <div class="beams"></div>
+    <div class="dust" style="left:12%;bottom:-4px;width:3px;height:3px;animation-duration:11s"></div>
+    <div class="dust" style="left:28%;bottom:-4px;width:2px;height:2px;animation-duration:14s;animation-delay:2s"></div>
+    <div class="dust" style="left:55%;bottom:-4px;width:3px;height:3px;animation-duration:9s;animation-delay:4s"></div>
+    <div class="dust" style="left:72%;bottom:-4px;width:2px;height:2px;animation-duration:13s;animation-delay:1s"></div>
+    <div class="dust" style="left:88%;bottom:-4px;width:3px;height:3px;animation-duration:12s;animation-delay:5s"></div>
+    <div class="vignette"></div>
+    <div class="inner">
+      <div class="eyebrow"><span class="rule"></span>Copa do Mundo Sorocaba<span class="rule"></span></div>
+      <div class="phase"><b>Semifinal</b> · Jogo 2</div>
+      <div class="live-chip"><span class="live-dot"></span>AO VIVO</div>
+      <div class="scoreline">
+        <div class="team home">
+          <div class="crest">LE</div>
+          <div class="tname">LEÕES</div>
+          <div class="tcolor"></div>
+          <div class="tevents">
+            <span>⚽ <b>Rafinha</b> <span class="min">12'</span></span>
+            <span>🟨 <b>Carlão</b> <span class="min">23'</span></span>
+          </div>
+        </div>
+        <div class="score-panel"><div class="score"><span class="n">3</span><span class="sep">×</span><span class="n">2</span></div></div>
+        <div class="team away">
+          <div class="crest">TU</div>
+          <div class="tname">TUBARÕES</div>
+          <div class="tcolor"></div>
+          <div class="tevents">
+            <span>⚽ <b>Dudu</b> <span class="min">19'</span> <span class="assist">(assist. Léo)</span></span>
+            <span>⚽ <b>Dudu</b> <span class="min">31'</span></span>
+          </div>
+        </div>
+      </div>
+      <div class="period">2º TEMPO <span class="clock">14:32</span></div>
+      <div class="progress">
+        <div class="bar active"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="frame-label">Card 2 · Ranking (ex.: Artilheiros)</div>
+  <div class="tv">
+    <div class="beams"></div>
+    <div class="dust" style="left:18%;bottom:-4px;width:3px;height:3px;animation-duration:12s"></div>
+    <div class="dust" style="left:48%;bottom:-4px;width:2px;height:2px;animation-duration:10s;animation-delay:3s"></div>
+    <div class="dust" style="left:80%;bottom:-4px;width:3px;height:3px;animation-duration:14s;animation-delay:1s"></div>
+    <div class="vignette"></div>
+    <div class="inner">
+      <div class="eyebrow"><span class="rule"></span>Copa do Mundo Sorocaba<span class="rule"></span></div>
+      <div class="rank-title">Artilheiros</div>
+      <div class="rank-sub">corrida pela chuteira de ouro</div>
+      <div class="podium">
+        <div class="col c2">
+          <div class="pod second">
+            <div class="medal">🥈</div>
+            <div class="avatar">DU</div>
+            <div class="pname">Dudu</div>
+            <div class="pteam">Tubarões</div>
+            <div class="pval">7 <small>GOLS</small></div>
+          </div>
+          <div class="step">2</div>
+        </div>
+        <div class="col c1">
+          <div class="pod first">
+            <div class="medal">👑</div>
+            <div class="avatar">RA</div>
+            <div class="pname">Rafinha</div>
+            <div class="pteam">Leões</div>
+            <div class="pval">9 <small>GOLS</small></div>
+          </div>
+          <div class="step">1</div>
+        </div>
+        <div class="col c3">
+          <div class="pod third">
+            <div class="medal">🥉</div>
+            <div class="avatar">MA</div>
+            <div class="pname">Marquinhos</div>
+            <div class="pteam">Águias</div>
+            <div class="pval">6 <small>GOLS</small></div>
+          </div>
+          <div class="step">3</div>
+        </div>
+      </div>
+      <div class="progress">
+        <div class="bar"></div><div class="bar active"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footnote">No app real: fotos dos jogadores, logos dos times, transições entre cards e animação de GOL em tela cheia (flash dourado + autor do gol). Me diga o que achou.</div>
+</body>
+</html>

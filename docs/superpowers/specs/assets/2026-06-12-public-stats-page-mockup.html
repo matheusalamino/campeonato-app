@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Página de Estatísticas — proposta</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#050507; --bg-1:#0c0a10; --panel:#120f18; --panel-2:#171320; --line:#2a2438;
+    --gold-1:#fff6cc; --gold-2:#f0d060; --gold-3:#d4a017;
+    --ink:#f4f1ea; --ink-dim:#9b94a8;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#030305;color:var(--ink);font-family:Inter,system-ui,sans-serif;padding:40px 20px;display:flex;flex-direction:column;align-items:center;gap:10px}
+  .page-title{font-size:15px;color:var(--ink-dim);text-align:center;max-width:720px;line-height:1.5}
+  .page-title b{color:var(--gold-2)}
+  .frame-label{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold-3);margin:24px 0 10px}
+  .row{display:flex;gap:28px;flex-wrap:wrap;justify-content:center;align-items:flex-start}
+
+  .gold-text{background:linear-gradient(180deg,var(--gold-1),var(--gold-3));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .serif{font-family:"Playfair Display",serif;font-weight:800}
+
+  /* ===== moldura desktop ===== */
+  .desktop{width:min(880px,94vw);border-radius:12px;overflow:hidden;border:1px solid #241e30;box-shadow:0 24px 60px rgba(0,0,0,.7);background:var(--bg-1)}
+  .browser-bar{background:#0a080e;padding:8px 12px;display:flex;gap:6px;align-items:center;border-bottom:1px solid #1a1524}
+  .dot{width:9px;height:9px;border-radius:50%;background:#2a2438}
+  .urlbox{flex:1;background:#120f18;border-radius:6px;color:#665f73;font-size:10px;padding:4px 10px;margin-left:8px}
+
+  .hero{padding:22px 28px 0;background:
+      radial-gradient(90% 120% at 50% -40%, #1d1628 0%, transparent 60%),var(--bg-1);text-align:center}
+  .hero .eyebrow{color:var(--gold-2);font-size:9px;letter-spacing:4px;text-transform:uppercase;font-weight:700}
+  .hero h1{font-size:24px;margin-top:4px}
+  .hero .sub{color:var(--ink-dim);font-size:11px;margin-top:2px}
+
+  .tabs{display:flex;gap:4px;justify-content:center;margin-top:16px}
+  .tab{padding:8px 18px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ink-dim);border-radius:8px 8px 0 0;cursor:default}
+  .tab.on{color:var(--gold-1);background:var(--panel);border:1px solid var(--line);border-bottom-color:var(--panel)}
+
+  .content{background:var(--panel);border-top:1px solid var(--line);padding:18px 22px 24px}
+
+  .toolbar{display:flex;gap:10px;margin-bottom:16px}
+  .search{flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;color:#665f73;font-size:11px;padding:8px 12px}
+  .filter{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;color:var(--ink-dim);font-size:11px;padding:8px 12px;display:flex;align-items:center;gap:6px}
+  .filter b{color:var(--gold-2);font-weight:700}
+
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .rank-card{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:14px;position:relative}
+  .rank-card.gold{border-color:rgba(212,160,23,.4)}
+  .rank-card h3{font-size:13px;display:flex;align-items:center;gap:6px}
+  .rank-card .cat-sub{color:#665f73;font-size:9px;letter-spacing:2px;text-transform:uppercase;margin-top:1px}
+  .rlist{margin-top:10px;display:flex;flex-direction:column;gap:7px}
+  .rrow{display:flex;align-items:center;gap:8px;font-size:11px}
+  .rpos{width:16px;text-align:center;font-weight:800;color:var(--ink-dim)}
+  .rrow:first-child .rpos{color:var(--gold-2)}
+  .rava{width:22px;height:22px;border-radius:50%;background:linear-gradient(160deg,#3a3348,#1d1827);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800}
+  .rrow:first-child .rava{background:linear-gradient(160deg,var(--gold-1),var(--gold-3));color:#0b0a12}
+  .rname{flex:1}
+  .rname small{display:block;color:#665f73;font-size:8.5px;text-transform:uppercase;letter-spacing:1px}
+  .rval{font-weight:800;color:var(--gold-2);font-variant-numeric:tabular-nums}
+  .see-all{margin-top:10px;font-size:9.5px;color:var(--ink-dim);text-align:center;border-top:1px solid #1f1a2b;padding-top:8px;letter-spacing:1px}
+
+  /* ===== moldura celular ===== */
+  .phone{width:270px;border-radius:28px;border:1px solid #241e30;overflow:hidden;background:var(--bg-1);box-shadow:0 24px 60px rgba(0,0,0,.7)}
+  .notch{height:22px;background:#0a080e;display:flex;justify-content:center;align-items:center}
+  .notch i{width:60px;height:5px;border-radius:3px;background:#1d1827}
+  .phone .hero{padding:14px 16px 0}
+  .phone .hero h1{font-size:17px}
+  .phone .tabs{margin-top:12px}
+  .phone .tab{padding:6px 10px;font-size:8.5px}
+  .phone .content{padding:12px 12px 16px}
+  .phone .toolbar{flex-wrap:wrap}
+  .phone .grid{grid-template-columns:1fr;gap:10px}
+
+  /* perfil do jogador (sheet no celular) */
+  .profile-top{display:flex;align-items:center;gap:12px;padding:4px 2px 12px}
+  .pava{width:52px;height:52px;border-radius:50%;background:linear-gradient(160deg,var(--gold-1),var(--gold-3));display:flex;align-items:center;justify-content:center;color:#0b0a12;font-weight:900;font-size:16px;position:relative}
+  .profile-top .nm{font-size:15px;font-weight:800}
+  .profile-top .meta{color:var(--ink-dim);font-size:9.5px;letter-spacing:1px;text-transform:uppercase;margin-top:2px}
+  .ovr{margin-left:auto;text-align:center;background:var(--panel-2);border:1px solid rgba(212,160,23,.4);border-radius:10px;padding:6px 10px}
+  .ovr .v{font-size:18px}
+  .ovr .l{font-size:7.5px;color:var(--ink-dim);letter-spacing:2px}
+  .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px}
+  .stat{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px 6px;text-align:center}
+  .stat .v{font-size:16px;font-weight:800}
+  .stat .l{font-size:7.5px;color:var(--ink-dim);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
+  .radar-box{margin-top:10px;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center}
+  .radar-box svg{opacity:.9}
+  .radar-box .l{font-size:7.5px;color:var(--ink-dim);letter-spacing:2px;text-transform:uppercase}
+
+  .footnote{font-size:12px;color:#665f73;max-width:740px;text-align:center;line-height:1.6;margin-top:22px}
+</style>
+</head>
+<body>
+  <div class="page-title">Proposta da <b>página pública de estatísticas</b> (/stats) — mesma identidade Noite de Gala, em versão funcional.<br>3 abas: <b>Rankings</b> · <b>Classificação</b> · <b>Jogadores</b>. Busca + filtros por time e posição.</div>
+
+  <div class="frame-label">Desktop · aba Rankings</div>
+  <div class="desktop">
+    <div class="browser-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="urlbox">campeonato.app/stats/copa-2026</span></div>
+    <div class="hero">
+      <div class="eyebrow">━ ✦ ━ &nbsp;Estatísticas Oficiais&nbsp; ━ ✦ ━</div>
+      <h1 class="serif gold-text">Copa do Mundo Sorocaba</h1>
+      <div class="sub">Temporada 2026 · atualizado em tempo real</div>
+      <div class="tabs">
+        <div class="tab on">🏆 Rankings</div>
+        <div class="tab">📊 Classificação</div>
+        <div class="tab">👤 Jogadores</div>
+      </div>
+    </div>
+    <div class="content">
+      <div class="toolbar">
+        <div class="search">🔍 Buscar jogador por nome, apelido ou time…</div>
+        <div class="filter">Time: <b>Todos</b> ▾</div>
+        <div class="filter">Posição: <b>Todas</b> ▾</div>
+      </div>
+      <div class="grid">
+        <div class="rank-card gold">
+          <h3>⚽ <span class="gold-text serif">Artilheiros</span></h3>
+          <div class="cat-sub">chuteira de ouro</div>
+          <div class="rlist">
+            <div class="rrow"><span class="rpos">1</span><span class="rava">RA</span><span class="rname">Rafinha<small>Leões</small></span><span class="rval">9</span></div>
+            <div class="rrow"><span class="rpos">2</span><span class="rava">DU</span><span class="rname">Dudu<small>Tubarões</small></span><span class="rval">7</span></div>
+            <div class="rrow"><span class="rpos">3</span><span class="rava">MA</span><span class="rname">Marquinhos<small>Águias</small></span><span class="rval">6</span></div>
+          </div>
+          <div class="see-all">VER TODOS →</div>
+        </div>
+        <div class="rank-card">
+          <h3>🎯 <span class="gold-text serif">Maestros</span></h3>
+          <div class="cat-sub">líderes de assistência</div>
+          <div class="rlist">
+            <div class="rrow"><span class="rpos">1</span><span class="rava">LÉ</span><span class="rname">Léo<small>Tubarões</small></span><span class="rval">8</span></div>
+            <div class="rrow"><span class="rpos">2</span><span class="rava">PE</span><span class="rname">Pedrão<small>Leões</small></span><span class="rval">5</span></div>
+            <div class="rrow"><span class="rpos">3</span><span class="rava">TH</span><span class="rname">Thiaguinho<small>Falcões</small></span><span class="rval">4</span></div>
+          </div>
+          <div class="see-all">VER TODOS →</div>
+        </div>
+        <div class="rank-card">
+          <h3>👑 <span class="gold-text serif">Craque</span></h3>
+          <div class="cat-sub">votos por partida</div>
+          <div class="rlist">
+            <div class="rrow"><span class="rpos">1</span><span class="rava">RA</span><span class="rname">Rafinha<small>Leões · 12 pts</small></span><span class="rval">12</span></div>
+            <div class="rrow"><span class="rpos">2</span><span class="rava">LÉ</span><span class="rname">Léo<small>Tubarões · 9 pts</small></span><span class="rval">9</span></div>
+            <div class="rrow"><span class="rpos">3</span><span class="rava">CA</span><span class="rname">Carlão<small>Águias · 7 pts</small></span><span class="rval">7</span></div>
+          </div>
+          <div class="see-all">VER TODOS →</div>
+        </div>
+        <div class="rank-card">
+          <h3>🧤 <span class="gold-text serif">Goleiro Destaque</span></h3>
+          <div class="cat-sub">índice oficial do goleiro (IOG)</div>
+          <div class="rlist">
+            <div class="rrow"><span class="rpos">1</span><span class="rava">BR</span><span class="rname">Bruninho<small>Falcões</small></span><span class="rval">8.4</span></div>
+            <div class="rrow"><span class="rpos">2</span><span class="rava">GU</span><span class="rname">Gustavo<small>Leões</small></span><span class="rval">7.1</span></div>
+            <div class="rrow"><span class="rpos">3</span><span class="rava">WA</span><span class="rname">Wagner<small>Tubarões</small></span><span class="rval">6.8</span></div>
+          </div>
+          <div class="see-all">VER TODOS →</div>
+        </div>
+        <div class="rank-card">
+          <h3>💎 <span class="gold-text serif">Revelações</span></h3>
+          <div class="cat-sub">candidatos · overall ≤ 85</div>
+          <div class="rlist">
+            <div class="rrow"><span class="rpos">1</span><span class="rava">JO</span><span class="rname">Joãozinho<small>Águias · OVR 78</small></span><span class="rval">5</span></div>
+            <div class="rrow"><span class="rpos">2</span><span class="rava">VI</span><span class="rname">Vitinho<small>Falcões · OVR 81</small></span><span class="rval">4</span></div>
+            <div class="rrow"><span class="rpos">3</span><span class="rava">KA</span><span class="rname">Kaique<small>Leões · OVR 75</small></span><span class="rval">3</span></div>
+          </div>
+          <div class="see-all">VER TODOS →</div>
+        </div>
+        <div class="rank-card" style="opacity:.45">
+          <h3>🎩 <span class="gold-text serif">Cartolas</span></h3>
+          <div class="cat-sub">em breve — votos por partida</div>
+          <div class="rlist" style="filter:blur(2px)">
+            <div class="rrow"><span class="rpos">1</span><span class="rava">?</span><span class="rname">—<small>—</small></span><span class="rval">·</span></div>
+            <div class="rrow"><span class="rpos">2</span><span class="rava">?</span><span class="rname">—<small>—</small></span><span class="rval">·</span></div>
+          </div>
+          <div class="see-all">DISPONÍVEL EM BREVE</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="frame-label">Celular · aba Rankings &nbsp;&nbsp;·&nbsp;&nbsp; Celular · perfil do jogador</div>
+  <div class="row">
+    <div class="phone">
+      <div class="notch"><i></i></div>
+      <div class="hero">
+        <div class="eyebrow">━ ✦ ━</div>
+        <h1 class="serif gold-text">Copa do Mundo Sorocaba</h1>
+        <div class="sub" style="font-size:9px">Estatísticas oficiais · ao vivo</div>
+        <div class="tabs">
+          <div class="tab on">🏆 Rankings</div>
+          <div class="tab">📊 Tabela</div>
+          <div class="tab">👤 Jogadores</div>
+        </div>
+      </div>
+      <div class="content">
+        <div class="toolbar">
+          <div class="search" style="width:100%">🔍 Buscar jogador ou time…</div>
+        </div>
+        <div class="grid">
+          <div class="rank-card gold">
+            <h3>⚽ <span class="gold-text serif">Artilheiros</span></h3>
+            <div class="rlist">
+              <div class="rrow"><span class="rpos">1</span><span class="rava">RA</span><span class="rname">Rafinha<small>Leões</small></span><span class="rval">9</span></div>
+              <div class="rrow"><span class="rpos">2</span><span class="rava">DU</span><span class="rname">Dudu<small>Tubarões</small></span><span class="rval">7</span></div>
+              <div class="rrow"><span class="rpos">3</span><span class="rava">MA</span><span class="rname">Marquinhos<small>Águias</small></span><span class="rval">6</span></div>
+            </div>
+            <div class="see-all">VER TODOS →</div>
+          </div>
+          <div class="rank-card">
+            <h3>🎯 <span class="gold-text serif">Maestros</span></h3>
+            <div class="rlist">
+              <div class="rrow"><span class="rpos">1</span><span class="rava">LÉ</span><span class="rname">Léo<small>Tubarões</small></span><span class="rval">8</span></div>
+              <div class="rrow"><span class="rpos">2</span><span class="rava">PE</span><span class="rname">Pedrão<small>Leões</small></span><span class="rval">5</span></div>
+            </div>
+            <div class="see-all">VER TODOS →</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="phone">
+      <div class="notch"><i></i></div>
+      <div class="content" style="border-top:none;padding-top:16px">
+        <div style="font-size:9px;color:var(--ink-dim);letter-spacing:1px;margin-bottom:10px">← VOLTAR AOS RANKINGS</div>
+        <div class="profile-top">
+          <div class="pava">RA</div>
+          <div>
+            <div class="nm">Rafinha</div>
+            <div class="meta">Atacante · Leões</div>
+          </div>
+          <div class="ovr"><div class="v serif gold-text">87</div><div class="l">OVERALL</div></div>
+        </div>
+        <div class="statgrid">
+          <div class="stat"><div class="v gold-text serif">9</div><div class="l">Gols</div></div>
+          <div class="stat"><div class="v gold-text serif">3</div><div class="l">Assist.</div></div>
+          <div class="stat"><div class="v serif" style="color:#f0d060">12</div><div class="l">Pts Craque</div></div>
+          <div class="stat"><div class="v serif" style="color:#ffd54f">2</div><div class="l">🟨 Amarelos</div></div>
+          <div class="stat"><div class="v serif" style="color:#ff6b6b">0</div><div class="l">🟥 Vermelhos</div></div>
+          <div class="stat"><div class="v serif">5</div><div class="l">Faltas</div></div>
+        </div>
+        <div class="radar-box">
+          <svg width="150" height="110" viewBox="0 0 150 110">
+            <polygon points="75,8 130,38 116,95 34,95 20,38" fill="none" stroke="#2a2438" stroke-width="1"/>
+            <polygon points="75,25 112,44 103,82 47,82 38,44" fill="none" stroke="#2a2438" stroke-width=".6"/>
+            <polygon points="75,14 122,40 100,90 42,88 28,42" fill="rgba(212,160,23,.25)" stroke="#d4a017" stroke-width="1.5"/>
+            <text x="75" y="6" fill="#9b94a8" font-size="7" text-anchor="middle">PAC</text>
+            <text x="138" y="38" fill="#9b94a8" font-size="7" text-anchor="middle">SHO</text>
+            <text x="120" y="104" fill="#9b94a8" font-size="7" text-anchor="middle">PAS</text>
+            <text x="30" y="104" fill="#9b94a8" font-size="7" text-anchor="middle">DRI</text>
+            <text x="12" y="38" fill="#9b94a8" font-size="7" text-anchor="middle">DEF</text>
+          </svg>
+          <div class="l">Radar de habilidades</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footnote">
+    Aba <b style="color:#9b94a8">Classificação</b>: tabela por grupo (P, J, V, E, D, GP, GC, SG) com as 2 primeiras posições destacadas em dourado — mesma lógica do app interno.
+    Filtros aplicam em todas as abas. Card de Cartolas aparece desabilitado ("em breve") até os votos existirem.
+    Tudo atualiza ao vivo (Realtime + polling). Responda no terminal: estrutura de 3 abas ok? Algo a mudar?
+  </div>
+</body>
+</html>
