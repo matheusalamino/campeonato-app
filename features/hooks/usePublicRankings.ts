@@ -150,13 +150,14 @@ export function usePublicRankings(championshipId: string | null, topN = 3) {
     queueMicrotask(() => { void load(); });
     if (!championshipId) return;
 
-    // Realtime nos eventos (gol muda artilharia), votos e defesas + polling de segurança
+    // Realtime nas tabelas com leitura anônima (gol, defesas, votos de craque) +
+    // polling 15s de segurança. best_manager_votes não tem RLS anon (lido via view),
+    // então fica fora do Realtime — o polling cobre os votos de cartola (pós-jogo).
     const channel = supabase
       .channel(`public-rankings-${championshipId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "match_events_v2" }, () => { void load(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "player_saves", filter: `championship_id=eq.${championshipId}` }, () => { void load(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "best_player_votes", filter: `championship_id=eq.${championshipId}` }, () => { void load(); })
-      .on("postgres_changes", { event: "*", schema: "public", table: "best_manager_votes", filter: `championship_id=eq.${championshipId}` }, () => { void load(); })
       .subscribe();
 
     pollingRef.current = setInterval(() => { void load(); }, 15_000);
