@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { usePublicLiveMatch, type GoalSignal } from "@/features/hooks/usePublicLiveMatch";
@@ -89,14 +89,26 @@ export default function LiveScreenPage() {
     );
   }
 
-  // Cards sem dados saem da rotação
-  const emptyCardIds: string[] = [];
-  if (rankings.topScorers.length === 0) emptyCardIds.push("scorers");
-  if (rankings.topAssists.length === 0) emptyCardIds.push("assists");
-  if (Object.keys(rankings.craqueByPosition).length === 0) emptyCardIds.push("best-by-position");
-  if (rankings.goalkeepers.length === 0) emptyCardIds.push("goalkeeper");
-  if (rankings.revelations.length === 0) emptyCardIds.push("revelation");
-  if (Object.keys(standings).length === 0) emptyCardIds.push("standings");
+  // Cards sem dados saem da rotação. useMemo com deps primitivas: emptyCardIds
+  // precisa de referência estável, senão o carrossel reinicia o timer a cada poll.
+  const hasCraqueByPosition = Object.values(rankings.craqueByPosition).some((e) => e.length > 0);
+  const emptyCardIds = useMemo(() => {
+    const ids: string[] = [];
+    if (rankings.topScorers.length === 0) ids.push("scorers");
+    if (rankings.topAssists.length === 0) ids.push("assists");
+    if (!hasCraqueByPosition) ids.push("best-by-position");
+    if (rankings.goalkeepers.length === 0) ids.push("goalkeeper");
+    if (rankings.revelations.length === 0) ids.push("revelation");
+    if (Object.keys(standings).length === 0) ids.push("standings");
+    return ids;
+  }, [
+    rankings.topScorers.length,
+    rankings.topAssists.length,
+    hasCraqueByPosition,
+    rankings.goalkeepers.length,
+    rankings.revelations.length,
+    standings,
+  ]);
 
   const renderCard = (cardId: string) => {
     switch (cardId) {
@@ -126,10 +138,12 @@ export default function LiveScreenPage() {
           />
         );
       case "best-by-position": {
-        // Top 1 de cada posição num pódio único não cabe; mostra a posição com
-        // mais votos no formato pódio e lista as demais no subtítulo do card.
-        const positions = Object.keys(rankings.craqueByPosition);
-        const main = positions[0];
+        // Top 1 de cada posição num pódio único não cabe; mostra a primeira posição
+        // COM votados no formato pódio (a chave pode existir com lista vazia).
+        const main = Object.keys(rankings.craqueByPosition).find(
+          (pos) => rankings.craqueByPosition[pos].length > 0,
+        );
+        if (!main) return null;
         return (
           <RankingPodiumCard
             championshipName={championshipName}

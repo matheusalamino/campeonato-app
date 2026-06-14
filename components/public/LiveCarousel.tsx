@@ -25,42 +25,43 @@ export default function LiveCarousel({
   emptyCardIds = [],
   handleRef,
 }: Props & { handleRef?: React.MutableRefObject<LiveCarouselHandle | null> }) {
+  // Chave estável: o pai pode passar um array novo a cada render sem reiniciar o carrossel
+  const cardsKey = emptyCardIds.join(",");
   const cards = useMemo(
     () => activeCards(DEFAULT_CAROUSEL_CARDS).filter((c) => !emptyCardIds.includes(c.id)),
-    [emptyCardIds],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cardsKey],
   );
   const [index, setIndex] = useState(0);
   const [celebration, setCelebration] = useState<GoalSignal | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const schedule = useCallback(
-    (fromIndex: number, durationMs: number) => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => {
-        setIndex((cur) => nextIndex(cards, cur === fromIndex ? cur : fromIndex));
-      }, durationMs);
-    },
-    [cards],
-  );
-
-  // Agenda o avanço sempre que o card atual muda
+  // Avanço automático: agenda o próximo card pela duração do atual.
+  // Pausa durante a celebração de gol; ao terminar, reagenda a duração cheia do card live.
   useEffect(() => {
-    if (cards.length === 0) return;
+    if (cards.length === 0 || celebration) return;
     const safe = Math.min(index, cards.length - 1);
-    schedule(safe, cards[safe].durationMs);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setIndex((cur) => nextIndex(cards, cur));
+    }, cards[safe].durationMs);
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [index, cards, schedule]);
+  }, [index, cards, celebration]);
 
-  // Gol: celebração em overlay e segura o card live por um ciclo completo
+  // A celebração de gol some sozinha após GOAL_CELEBRATION_MS (timer próprio, sem disputar com o avanço)
+  useEffect(() => {
+    if (!celebration) return;
+    const t = setTimeout(() => setCelebration(null), GOAL_CELEBRATION_MS);
+    return () => clearTimeout(t);
+  }, [celebration]);
+
+  // Gol: foca o card live e dispara a celebração; o avanço fica pausado enquanto ela dura
   const fireGoal = useCallback(
     (signal: GoalSignal) => {
       const st = goalInterrupt(cards);
       if (!st) return;
-      setCelebration(signal);
       setIndex(st.index);
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => setCelebration(null), GOAL_CELEBRATION_MS);
-      // após a celebração, o useEffect acima reagenda a duração cheia do card live
+      setCelebration(signal);
     },
     [cards],
   );
@@ -91,11 +92,11 @@ export default function LiveCarousel({
 
       {/* progresso */}
       <div className="absolute bottom-[4.5vh] left-1/2 flex -translate-x-1/2 gap-2">
-        {cards.map((c, i) => (
+        {cards.map((c) => (
           <span
             key={c.id}
             className={`h-1 w-9 rounded ${
-              i === index
+              c.id === card.id
                 ? "bg-gradient-to-r from-[var(--gala-gold-2)] to-[var(--gala-gold-3)] shadow-[0_0_8px_var(--gala-gold-glow)]"
                 : "bg-[#241e30]"
             }`}
