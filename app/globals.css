@@ -319,5 +319,13 @@
 .animate-card-in { animation: card-in 0.6s ease forwards; }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Fundo animado de tela cheia */
   .gala-beams::before, .gala-beams::after, .gala-dust { animation: none; }
+  /* Entrada dos cards e celebração de gol ficam estáticas */
+  .animate-card-in { animation: none; }
+  /* Loops decorativos aplicados via utilitários inline do Tailwind
+     (animate-[gala-pulse...] no dot AO VIVO; after:animate-[gala-shine...] no chip) */
+  [class*="gala-pulse"] { animation: none !important; }
+  [class*="gala-shine"]::after { animation: none !important; }
+  [class*="goal-flash"], [class*="goal-pop"] { animation: none !important; }
 }

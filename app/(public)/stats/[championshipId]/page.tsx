@@ -35,7 +35,8 @@ export default function PublicStatsPage() {
     })();
   }, [championshipId]);
 
-  const { rankings, loading } = usePublicRankings(championshipId);
+  // topN alto: a aba Rankings mostra top 3 com "Ver todos" expandindo a lista completa
+  const { rankings, loading } = usePublicRankings(championshipId, 50);
 
   if (notFound) {
     return (

@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import type { RankingEntry } from "@/lib/public/types";
 import type { PublicRankings } from "@/features/hooks/usePublicRankings";
+
+const PREVIEW_COUNT = 3; // top 3 visível antes de "Ver todos"
 
 // Inteiros (gols, assist., pts) sem casas; decimais (IOG, part./jogo) com 2 casas
 function formatValue(value: number): string {
@@ -38,6 +41,10 @@ function RankCard({ icon, title, subtitle, entries, highlight = false, disabled 
   icon: string; title: string; subtitle: string;
   entries: RankingEntry[]; highlight?: boolean; disabled?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? entries : entries.slice(0, PREVIEW_COUNT);
+  const hasMore = entries.length > PREVIEW_COUNT;
+
   return (
     <div className={`gala-panel rounded-xl p-4 ${highlight ? "border-[rgba(212,160,23,.4)]" : ""} ${disabled ? "opacity-45" : ""}`}>
       <h3 className="flex items-center gap-2 text-sm font-bold">
@@ -51,9 +58,17 @@ function RankCard({ icon, title, subtitle, entries, highlight = false, disabled 
         ) : entries.length === 0 ? (
           <p className="py-3 text-center text-xs text-[var(--gala-ink-dim)]">Sem dados ainda</p>
         ) : (
-          entries.map((e, i) => <Row key={e.registrationId} entry={e} rank={i + 1} />)
+          visible.map((e, i) => <Row key={e.registrationId} entry={e} rank={i + 1} />)
         )}
       </div>
+      {hasMore ? (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-3 w-full border-t border-[var(--gala-line)] pt-2 text-[10px] font-bold uppercase tracking-[2px] text-[var(--gala-gold-2)] transition-colors hover:text-[var(--gala-gold-1)]"
+        >
+          {expanded ? "Ver menos ↑" : `Ver todos (${entries.length}) →`}
+        </button>
+      ) : null}
     </div>
   );
 }
