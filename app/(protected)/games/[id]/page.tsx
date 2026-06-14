@@ -1000,6 +1000,7 @@ export default function MatchPage() {
     });
   }
 
+
   const prevStatusRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (prevStatusRef.current !== undefined && prevStatusRef.current !== "COMPLETED" && detail?.match.status === "COMPLETED") {
@@ -1170,6 +1171,21 @@ export default function MatchPage() {
           existingManagerVote={existingManagerVote}
           onClose={() => setShowVoteModal(false)}
           onSaved={() => { void fetchExistingVotes(); void loadSaves(); }}
+        />
+      )}
+      {showVoteModal && detail && (
+        <BestPlayerVoteModal
+          matchId={detail.match.id}
+          championshipId={detail.match.championship_id ?? ""}
+          homeTeam={detail.homeTeam}
+          awayTeam={detail.awayTeam}
+          homePlayers={detail.homePlayers}
+          awayPlayers={detail.awayPlayers}
+          voteWeight={detail.voteWeight}
+          existingVotes={existingVotes}
+          existingManagerVote={existingManagerVote}
+          onClose={() => setShowVoteModal(false)}
+          onSaved={() => { void fetchExistingVotes(); }}
         />
       )}
     </div>
