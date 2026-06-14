@@ -102,7 +102,7 @@ export function useGroupStandings(championshipId: string | null, phaseId: string
           .from("match_events_v2")
           .select("knockout_match_id, event_type, team_id")
           .is("deleted_at", null)
-          .in("event_type", ["GOAL", "OWN_GOAL"]),
+          .in("event_type", ["GOAL", "OWN_GOAL", "PENALTY_GOAL"]),
       ]);
 
       const ptsWin  = champSettings?.points_win  ?? 3;
@@ -239,12 +239,12 @@ export function useGroupStandings(championshipId: string | null, phaseId: string
           const evs = goalsByMatch[m.id] ?? [];
           hScore = evs.filter(
             (e) =>
-              (e.event_type === "GOAL"     && e.team_id === teams.homeCT) ||
+              ((e.event_type === "GOAL" || e.event_type === "PENALTY_GOAL") && e.team_id === teams.homeCT) ||
               (e.event_type === "OWN_GOAL" && e.team_id === teams.awayCT),
           ).length;
           aScore = evs.filter(
             (e) =>
-              (e.event_type === "GOAL"     && e.team_id === teams.awayCT) ||
+              ((e.event_type === "GOAL" || e.event_type === "PENALTY_GOAL") && e.team_id === teams.awayCT) ||
               (e.event_type === "OWN_GOAL" && e.team_id === teams.homeCT),
           ).length;
         } else {

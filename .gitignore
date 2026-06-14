@@ -46,6 +46,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# Superpowers brainstorm sessions
-.superpowers/
+.superpowers/*
+docs/superpowers/*

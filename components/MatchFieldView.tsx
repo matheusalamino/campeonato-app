@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import type { MatchDetail, MatchPlayer, MatchEventItem } from "@/features/hooks/useMatchDetail";
 
 // ─── Position mapping ────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ function getPlayerEventIndicators(events: MatchEventItem[]) {
 
     const current = acc[event.playerId] ?? { goals: 0, hasYellow: false };
 
-    if (event.eventType === "GOAL") {
+    if (event.eventType === "GOAL" || event.eventType === "PENALTY_GOAL") {
       current.goals += 1;
     }
 
@@ -188,18 +188,65 @@ function FieldPlayerMarker({
   player,
   uniformColor,
   indicators,
+  saveCount = 0,
+  onSaveAdd,
+  onSaveRemove,
 }: {
   player: FieldPlayer;
   uniformColor: string;
   indicators: PlayerEventIndicators;
+  saveCount?: number;
+  onSaveAdd?: () => void;
+  onSaveRemove?: () => void;
 }) {
   const firstName = player.name.split(" ")[0];
   const borderColor = uniformColor || "#71717A";
 
+  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressedRef = useRef(false);
+
+  function handlePressStart(e: React.MouseEvent | React.TouchEvent) {
+    if (!onSaveAdd) return;
+    e.preventDefault();
+    longPressedRef.current = false;
+    pressTimerRef.current = setTimeout(() => {
+      longPressedRef.current = true;
+      pressTimerRef.current = null;
+      onSaveRemove?.();
+    }, 600);
+  }
+
+  function handlePressEnd() {
+    if (!onSaveAdd) return;
+    if (pressTimerRef.current !== null) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+    if (!longPressedRef.current) {
+      onSaveAdd();
+    }
+    longPressedRef.current = false;
+  }
+
+  function handleMouseLeave() {
+    if (pressTimerRef.current !== null) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+      longPressedRef.current = false;
+    }
+  }
+
   return (
     <div
       className="absolute flex flex-col items-center gap-0.5 -translate-x-1/2 -translate-y-1/2 transition-all duration-500 ease-out"
-      style={{ left: `${player.x}%`, top: `${player.y}%` }}
+      style={{ left: `${player.x}%`, top: `${player.y}%`, cursor: onSaveAdd ? "pointer" : undefined }}
+      onMouseDown={onSaveAdd ? handlePressStart : undefined}
+      onMouseUp={onSaveAdd ? handlePressEnd : undefined}
+      onMouseLeave={onSaveAdd ? handleMouseLeave : undefined}
+      onTouchStart={onSaveAdd ? handlePressStart : undefined}
+      onTouchEnd={onSaveAdd ? handlePressEnd : undefined}
+      role={onSaveAdd ? "button" : undefined}
+      tabIndex={onSaveAdd ? 0 : undefined}
     >
       {/* Photo circle */}
       <div
@@ -244,6 +291,15 @@ function FieldPlayerMarker({
             aria-label="Recebeu cartão amarelo"
           />
         )}
+
+        {saveCount > 0 && (
+          <div
+            className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border border-zinc-950 bg-violet-700 text-[9px] font-black text-white shadow-md z-10"
+            title={`${saveCount} defesa${saveCount > 1 ? "s" : ""}`}
+          >
+            {saveCount}
+          </div>
+        )}
       </div>
 
       {/* Label */}
@@ -265,9 +321,12 @@ function FieldPlayerMarker({
 
 interface MatchFieldViewProps {
   detail: MatchDetail;
+  saveCountsByPlayer?: Map<string, number>;
+  onSaveAdd?: (registrationId: string) => void;
+  onSaveRemove?: (registrationId: string) => void;
 }
 
-export function MatchFieldView({ detail }: MatchFieldViewProps) {
+export function MatchFieldView({ detail, saveCountsByPlayer, onSaveAdd, onSaveRemove }: MatchFieldViewProps) {
   const { homeTeam, awayTeam, homePlayers, awayPlayers, lineups, events } = detail;
 
   const homeCurrent = useMemo(
@@ -405,6 +464,9 @@ export function MatchFieldView({ detail }: MatchFieldViewProps) {
               player={p}
               uniformColor={homeTeam.uniformColor ?? "#3B82F6"}
               indicators={playerIndicators[p.registrationId] ?? { goals: 0, hasYellow: false }}
+              saveCount={saveCountsByPlayer?.get(p.registrationId) ?? 0}
+              onSaveAdd={onSaveAdd ? () => onSaveAdd(p.registrationId) : undefined}
+              onSaveRemove={onSaveRemove ? () => onSaveRemove(p.registrationId) : undefined}
             />
           ))}
           {awayLayout.map((p) => (
@@ -413,6 +475,9 @@ export function MatchFieldView({ detail }: MatchFieldViewProps) {
               player={p}
               uniformColor={awayTeam.uniformColor ?? "#EF4444"}
               indicators={playerIndicators[p.registrationId] ?? { goals: 0, hasYellow: false }}
+              saveCount={saveCountsByPlayer?.get(p.registrationId) ?? 0}
+              onSaveAdd={onSaveAdd ? () => onSaveAdd(p.registrationId) : undefined}
+              onSaveRemove={onSaveRemove ? () => onSaveRemove(p.registrationId) : undefined}
             />
           ))}
         </div>
