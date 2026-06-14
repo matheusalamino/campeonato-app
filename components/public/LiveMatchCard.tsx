@@ -164,6 +164,11 @@ export default function LiveMatchCard({ championshipName, current, last, next }:
               <span className="text-[1.6vw] font-extrabold">{last.away.name.toUpperCase()}</span>
             </div>
           </div>
+          {last.penaltyWinner ? (
+            <span className="flex items-center gap-[0.6vw] rounded-full border border-[var(--gala-gold-3)]/40 bg-[var(--gala-gold-3)]/10 px-[1.2vw] py-[0.4vh] text-[1.1vw] font-bold text-[var(--gala-gold-1)]">
+              🏆 {(last.penaltyWinner === "home" ? last.home.name : last.away.name).toUpperCase()} venceu nos pênaltis ({last.penaltyHomeScore} × {last.penaltyAwayScore})
+            </span>
+          ) : null}
         </div>
       ) : null}
       {next ? (

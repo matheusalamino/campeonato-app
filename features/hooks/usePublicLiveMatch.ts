@@ -38,6 +38,7 @@ export type LiveMatchInfo = {
   awayScore: number;
   penaltyHomeScore: number;
   penaltyAwayScore: number;
+  penaltyWinner: "home" | "away" | null; // lado que venceu nos pênaltis (null = não decidido nos pênaltis)
   events: LiveEvent[];
 };
 
@@ -200,6 +201,16 @@ export function usePublicLiveMatch(
           ).length;
         }
 
+        // Vencedor nos pênaltis: usa penalty_winner_team_id; se ausente, deriva do placar de pênaltis
+        const penaltyHomeScore = m.penalty_home_score ?? 0;
+        const penaltyAwayScore = m.penalty_away_score ?? 0;
+        let penaltyWinner: "home" | "away" | null = null;
+        if (m.penalty_winner_team_id) {
+          penaltyWinner = m.penalty_winner_team_id === home.championshipTeamId ? "home" : "away";
+        } else if (penaltyHomeScore !== penaltyAwayScore) {
+          penaltyWinner = penaltyHomeScore > penaltyAwayScore ? "home" : "away";
+        }
+
         return {
           id: m.id,
           name: m.name,
@@ -209,8 +220,9 @@ export function usePublicLiveMatch(
           periodStartedAt: m.period_started_at,
           scheduledAt: m.scheduled_at,
           home, away, homeScore, awayScore,
-          penaltyHomeScore: m.penalty_home_score ?? 0,
-          penaltyAwayScore: m.penalty_away_score ?? 0,
+          penaltyHomeScore,
+          penaltyAwayScore,
+          penaltyWinner,
           events,
         };
       };
