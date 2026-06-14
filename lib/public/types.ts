@@ -30,6 +30,7 @@ export type RankingEntry = {
   registrationId: string;
   playerName: string;
   teamName: string | null;
+  teamLogoUrl: string | null;
   photoUrl: string | null;
   position: string | null;
   value: number;       // gols, assistências, pontos, IOG...

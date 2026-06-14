@@ -96,7 +96,7 @@ export function usePublicRankings(championshipId: string | null, topN = 3) {
         supabase.rpc("public_revelation_candidates", { p_championship_id: championshipId }),
         supabase
           .from("public_best_manager_votes")
-          .select("championship_team_id, team_name, manager_name, manager_photo, points")
+          .select("championship_team_id, team_name, team_logo_url, manager_name, manager_photo, points")
           .eq("championship_id", championshipId),
       ]);
 
@@ -112,7 +112,7 @@ export function usePublicRankings(championshipId: string | null, topN = 3) {
           const p = byId.get(r.registration_id)!;
           return {
             registrationId: p.registrationId, playerName: p.playerName,
-            teamName: p.teamName, photoUrl: p.photoUrl, position: p.position,
+            teamName: p.teamName, teamLogoUrl: p.teamLogoUrl, photoUrl: p.photoUrl, position: p.position,
             value: Number(r.iog),
             detail: `${r.decisive_saves} defesas · ${r.goals_conceded} GS`,
           };
@@ -125,7 +125,7 @@ export function usePublicRankings(championshipId: string | null, topN = 3) {
           const p = byId.get(r.registration_id)!;
           return {
             registrationId: p.registrationId, playerName: p.playerName,
-            teamName: p.teamName, photoUrl: p.photoUrl, position: p.position,
+            teamName: p.teamName, teamLogoUrl: p.teamLogoUrl, photoUrl: p.photoUrl, position: p.position,
             value: Number(r.participations_per_match),
             detail: `OVR ${r.final_overall}`,
           };

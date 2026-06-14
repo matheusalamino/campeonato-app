@@ -81,8 +81,17 @@ export default function RankingPodiumCard({ championshipName, title, subtitle, u
                 <span className="absolute -top-4 text-2xl drop-shadow-lg">{medal}</span>
                 <Avatar entry={entry} rank={rank} />
                 <span className="text-[1.3vw] font-extrabold">{entry.playerName}</span>
-                <span className="text-[0.85vw] uppercase tracking-wider text-[var(--gala-ink-dim)]">
-                  {entry.teamName ?? "—"}{entry.detail ? ` · ${entry.detail}` : ""}
+                <span className="flex items-center gap-[0.5vw] text-[0.85vw] uppercase tracking-wider text-[var(--gala-ink-dim)]">
+                  {entry.teamLogoUrl ? (
+                    <Image
+                      src={entry.teamLogoUrl}
+                      alt={entry.teamName ?? ""}
+                      width={20}
+                      height={20}
+                      className="size-[1vw] max-h-5 max-w-5 shrink-0 rounded-sm object-cover"
+                    />
+                  ) : null}
+                  <span>{entry.teamName ?? "—"}{entry.detail ? ` · ${entry.detail}` : ""}</span>
                 </span>
                 <span className={`font-serif text-[2.9vw] font-extrabold leading-none ${first ? "gala-gold-text" : "text-slate-200"}`}>
                   {formatValue(entry.value)}

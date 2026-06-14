@@ -17,6 +17,7 @@ function toEntry(p: PublicPlayer, value: number): RankingEntry {
     registrationId: p.registrationId,
     playerName: p.playerName,
     teamName: p.teamName,
+    teamLogoUrl: p.teamLogoUrl,
     photoUrl: p.photoUrl,
     position: p.position,
     value,
@@ -77,6 +78,7 @@ export function groupRankingByPosition(
 export type ManagerVoteRow = {
   championship_team_id: string;
   team_name: string | null;
+  team_logo_url: string | null;
   manager_name: string | null;
   manager_photo: string | null;
   points: number;
@@ -97,6 +99,7 @@ export function buildManagerRanking(rows: ManagerVoteRow[], topN: number): Ranki
       registrationId: row.championship_team_id,
       playerName: row.manager_name ?? "—",
       teamName: row.team_name,
+      teamLogoUrl: row.team_logo_url,
       photoUrl: row.manager_photo,
       position: null,
       value: total,

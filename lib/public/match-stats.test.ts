@@ -120,9 +120,9 @@ describe("groupRankingByPosition", () => {
 
 describe("buildManagerRanking", () => {
   const rows = [
-    { championship_team_id: "t1", team_name: "Leões", manager_name: "João", manager_photo: null, points: 3 },
-    { championship_team_id: "t1", team_name: "Leões", manager_name: "João", manager_photo: null, points: 2 },
-    { championship_team_id: "t2", team_name: "Tubarões", manager_name: "Ana", manager_photo: null, points: 4 },
+    { championship_team_id: "t1", team_name: "Leões", team_logo_url: null, manager_name: "João", manager_photo: null, points: 3 },
+    { championship_team_id: "t1", team_name: "Leões", team_logo_url: null, manager_name: "João", manager_photo: null, points: 2 },
+    { championship_team_id: "t2", team_name: "Tubarões", team_logo_url: null, manager_name: "Ana", manager_photo: null, points: 4 },
   ];
 
   it("soma pontos por time e ordena desc", () => {
