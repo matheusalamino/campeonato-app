@@ -10,7 +10,6 @@ import LiveCarousel, { type LiveCarouselHandle } from "@/components/public/LiveC
 import LiveMatchCard from "@/components/public/LiveMatchCard";
 import RankingPodiumCard from "@/components/public/RankingPodiumCard";
 import StandingsCard from "@/components/public/StandingsCard";
-import { POSITION_LABELS } from "@/lib/public/types";
 import { resolveCarouselConfig, type CarouselCardConfig, type SavedCarouselCard } from "@/lib/public/carousel";
 
 const supabase = createClient();
@@ -89,12 +88,11 @@ export default function LiveScreenPage() {
   // Cards sem dados saem da rotação. useMemo com deps primitivas: emptyCardIds
   // precisa de referência estável, senão o carrossel reinicia o timer a cada poll.
   // Fica ANTES de qualquer return condicional (Rules of Hooks).
-  const hasCraqueByPosition = Object.values(rankings.craqueByPosition).some((e) => e.length > 0);
   const emptyCardIds = useMemo(() => {
     const ids: string[] = [];
     if (rankings.topScorers.length === 0) ids.push("scorers");
     if (rankings.topAssists.length === 0) ids.push("assists");
-    if (!hasCraqueByPosition) ids.push("best-by-position");
+    if (rankings.craque.length === 0) ids.push("craque");
     if (rankings.goalkeepers.length === 0) ids.push("goalkeeper");
     if (rankings.revelations.length === 0) ids.push("revelation");
     if (rankings.managers.length === 0) ids.push("managers");
@@ -103,7 +101,7 @@ export default function LiveScreenPage() {
   }, [
     rankings.topScorers.length,
     rankings.topAssists.length,
-    hasCraqueByPosition,
+    rankings.craque.length,
     rankings.goalkeepers.length,
     rankings.revelations.length,
     rankings.managers.length,
@@ -145,22 +143,14 @@ export default function LiveScreenPage() {
             unit="ASSIST." entries={rankings.topAssists}
           />
         );
-      case "best-by-position": {
-        // Top 1 de cada posição num pódio único não cabe; mostra a primeira posição
-        // COM votados no formato pódio (a chave pode existir com lista vazia).
-        const main = Object.keys(rankings.craqueByPosition).find(
-          (pos) => rankings.craqueByPosition[pos].length > 0,
-        );
-        if (!main) return null;
+      case "craque":
         return (
           <RankingPodiumCard
             championshipName={championshipName}
-            title={`Craques — ${POSITION_LABELS[main] ?? main}`}
-            subtitle="votos por partida, peso por fase"
-            unit="PTS" entries={rankings.craqueByPosition[main]}
+            title="Craque" subtitle="votos por partida, peso por fase"
+            unit="PTS" entries={rankings.craque}
           />
         );
-      }
       case "goalkeeper":
         return (
           <RankingPodiumCard

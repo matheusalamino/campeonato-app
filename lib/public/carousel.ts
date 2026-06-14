@@ -12,7 +12,7 @@ export type CarouselMode = "rotation" | "goal";
 export type CarouselState = { index: number; mode: CarouselMode };
 
 export type CarouselCardId =
-  | "live" | "scorers" | "assists" | "best-by-position"
+  | "live" | "scorers" | "assists" | "craque"
   | "goalkeeper" | "revelation" | "managers" | "standings";
 
 export type CarouselCardCatalogEntry = {
@@ -27,7 +27,7 @@ export const CAROUSEL_CARD_CATALOG: CarouselCardCatalogEntry[] = [
   { id: "live",             label: "Jogo ao Vivo",        defaultDurationMs: 30_000, defaultEnabled: true },
   { id: "scorers",          label: "Artilheiros",         defaultDurationMs: 10_000, defaultEnabled: true },
   { id: "assists",          label: "Maestros",            defaultDurationMs: 10_000, defaultEnabled: true },
-  { id: "best-by-position", label: "Craques por Posição", defaultDurationMs: 10_000, defaultEnabled: true },
+  { id: "craque",           label: "Craque",              defaultDurationMs: 10_000, defaultEnabled: true },
   { id: "goalkeeper",       label: "Goleiro Destaque",    defaultDurationMs: 10_000, defaultEnabled: true },
   { id: "revelation",       label: "Revelações",          defaultDurationMs: 10_000, defaultEnabled: true },
   { id: "managers",         label: "Cartolas",            defaultDurationMs: 10_000, defaultEnabled: true },

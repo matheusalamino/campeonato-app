@@ -24,10 +24,12 @@ const ORDER: Array<{ rank: 1 | 2 | 3; medal: string }> = [
 ];
 
 const STEP_STYLE: Record<number, string> = {
-  1: "h-16 text-3xl border-[rgba(212,160,23,.5)] text-[var(--gala-gold-1)] bg-gradient-to-b from-[rgba(212,160,23,.24)] to-[var(--gala-panel-2)]",
-  2: "h-11 text-xl text-slate-200",
-  3: "h-7 text-base text-[#e8b27d]",
+  1: "h-16 text-[1.5vw] border-[rgba(212,160,23,.5)] text-[var(--gala-gold-1)] bg-gradient-to-b from-[rgba(212,160,23,.24)] to-[var(--gala-panel-2)]",
+  2: "h-11 text-[1.2vw] text-slate-200",
+  3: "h-7 text-[1vw] text-[#e8b27d]",
 };
+
+const STEP_LABEL: Record<number, string> = { 1: "1º lugar", 2: "2º lugar", 3: "3º lugar" };
 
 function Avatar({ entry, rank }: { entry: RankingEntry; rank: 1 | 2 | 3 }) {
   const cls =
@@ -87,8 +89,8 @@ export default function RankingPodiumCard({ championshipName, title, subtitle, u
                   <small className="ml-1 align-middle font-sans text-[0.8vw] tracking-[2px] text-[var(--gala-ink-dim)]">{unit}</small>
                 </span>
               </div>
-              <div className={`flex w-full items-center justify-center rounded-b-xl border border-[var(--gala-line)] bg-gradient-to-b from-[#1a1424] to-[#0d0a13] font-serif font-extrabold ${STEP_STYLE[rank]}`}>
-                {rank}
+              <div className={`flex w-full items-center justify-center rounded-b-xl border border-[var(--gala-line)] bg-gradient-to-b from-[#1a1424] to-[#0d0a13] font-serif font-extrabold uppercase tracking-wide ${STEP_STYLE[rank]}`}>
+                {STEP_LABEL[rank]}
               </div>
             </div>
           );

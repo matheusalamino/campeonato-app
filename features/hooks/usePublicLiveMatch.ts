@@ -18,6 +18,7 @@ export type LiveEvent = {
   eventTimeS: number;
   period: string;
   teamId: string | null;
+  playerId: string | null;
   playerName: string | null;
   assistName: string | null;
 };
@@ -42,8 +43,10 @@ export type LiveMatchInfo = {
 export type GoalSignal = {
   eventId: string;
   playerName: string | null;
+  playerPhotoUrl: string | null;
   assistName: string | null;
   teamName: string;
+  teamLogoUrl: string | null;
 };
 
 export type PublicLiveData = {
@@ -59,9 +62,11 @@ function slotToTeam(slot: any): LiveTeam {
   const team = Array.isArray(teamsRel) ? teamsRel[0] : teamsRel;
   return {
     championshipTeamId: slot?.championship_team_id ?? null,
-    name: team?.name ?? slot?.label ?? "A definir",
+    // label é "home"/"away" (não serve de nome) — sem time resolvido, "A definir"
+    name: team?.name ?? "A definir",
     logoUrl: team?.logo_url ?? null,
-    uniformColor: ct?.uniform_color ?? null,
+    // uniform_color é coluna de match_slots, não de championship_teams
+    uniformColor: slot?.uniform_color ?? null,
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -120,7 +125,7 @@ export function usePublicLiveMatch(
       const [slotsRes, eventsRes, playersRes] = await Promise.all([
         supabase
           .from("match_slots")
-          .select("match_id, slot_order, label, championship_team_id, championship_teams(id, uniform_color, teams(name, logo_url))")
+          .select("match_id, slot_order, label, uniform_color, championship_team_id, championship_teams(id, teams(name, logo_url))")
           .in("match_id", ids)
           .order("slot_order"),
         supabase
@@ -129,10 +134,11 @@ export function usePublicLiveMatch(
           .in("knockout_match_id", ids)
           .is("deleted_at", null)
           .order("event_time_s"),
-        supabase.from("public_players").select("registration_id, player_name").eq("championship_id", championshipId),
+        supabase.from("public_players").select("registration_id, player_name, photo_url").eq("championship_id", championshipId),
       ]);
 
       const playerName = new Map((playersRes.data ?? []).map((p) => [p.registration_id, p.player_name]));
+      const playerPhoto = new Map((playersRes.data ?? []).map((p) => [p.registration_id, p.photo_url as string | null]));
 
       const build = (m: typeof current): LiveMatchInfo | null => {
         if (!m) return null;
@@ -147,6 +153,7 @@ export function usePublicLiveMatch(
             eventTimeS: e.event_time_s,
             period: e.period,
             teamId: e.team_id,
+            playerId: e.player_id,
             playerName: e.player_id ? playerName.get(e.player_id) ?? null : null,
             assistName: e.assist_player_id ? playerName.get(e.assist_player_id) ?? null : null,
           }));
@@ -201,8 +208,10 @@ export function usePublicLiveMatch(
             onGoalRef.current?.({
               eventId: g.id,
               playerName: g.playerName,
+              playerPhotoUrl: g.playerId ? playerPhoto.get(g.playerId) ?? null : null,
               assistName: g.assistName,
               teamName: scoringTeam.name,
+              teamLogoUrl: scoringTeam.logoUrl,
             });
           }
         }
