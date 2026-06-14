@@ -31,7 +31,7 @@ export default function GoalCelebration({ signal }: { signal: GoalSignal }) {
 
         <span className="text-[3vw] font-extrabold text-white">{signal.playerName ?? signal.teamName}</span>
         {signal.assistName ? (
-          <span className="text-[1.6vw] text-[var(--gala-ink-dim)]">assistência de {signal.assistName}</span>
+          <span className="text-[1.6vw] text-[var(--gala-ink-dim)]">Assistência de {signal.assistName}</span>
         ) : null}
 
         {/* Logo + nome do time que marcou */}
