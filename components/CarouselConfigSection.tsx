@@ -10,11 +10,13 @@ import {
   CARD_DURATION_MAX_MS,
   resolveCarouselConfig,
   type CarouselCardConfig,
+  type SavedCarouselCard,
 } from "@/lib/public/carousel";
 
 const supabase = createClient();
 
-const LABELS = new Map(CAROUSEL_CARD_CATALOG.map((c) => [c.id, c.label]));
+// Map com chave string para lookup por card.id (que é string em CarouselCardConfig)
+const LABELS = new Map<string, string>(CAROUSEL_CARD_CATALOG.map((c) => [c.id, c.label]));
 const MIN_S = CARD_DURATION_MIN_MS / 1000;
 const MAX_S = CARD_DURATION_MAX_MS / 1000;
 
@@ -29,7 +31,7 @@ export default function CarouselConfigSection({ championshipId }: { championship
       const { data } = await supabase
         .from("championships").select("carousel_config").eq("id", championshipId).maybeSingle();
       if (cancelled) return;
-      setCards(resolveCarouselConfig((data?.carousel_config ?? null) as never));
+      setCards(resolveCarouselConfig((data?.carousel_config ?? null) as SavedCarouselCard[] | null));
     })();
     return () => { cancelled = true; };
   }, [championshipId]);
@@ -144,7 +146,7 @@ export default function CarouselConfigSection({ championshipId }: { championship
             </div>
 
             <span className="w-5 text-center text-xs font-bold text-zinc-600">{i + 1}</span>
-            <span className="flex-1 text-sm font-semibold text-white">{LABELS.get(card.id as never) ?? card.id}</span>
+            <span className="flex-1 text-sm font-semibold text-white">{LABELS.get(card.id) ?? card.id}</span>
 
             <label className="flex items-center gap-2 text-xs text-zinc-400">
               Duração (s)
