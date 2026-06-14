@@ -341,7 +341,8 @@ export function useMatchDetail(matchId: string) {
       .select("id, registration_id")
       .in("registration_id", allRegIds.length ? allRegIds : ["__none__"])
       .is("suspended_match_id", null)
-      .eq("served", false);
+      .eq("served", false)
+      .neq("origin_match_id", matchId);
 
     if (nullSuspRows && nullSuspRows.length > 0) {
       await supabase
@@ -453,12 +454,12 @@ export function useMatchDetail(matchId: string) {
     if (match.status === "IN_PROGRESS") {
       liveMatch.home_score = events.filter(
         (e) =>
-          (e.eventType === "GOAL" && e.teamId === homeCTId) ||
+          ((e.eventType === "GOAL" || e.eventType === "PENALTY_GOAL") && e.teamId === homeCTId) ||
           (e.eventType === "OWN_GOAL" && e.teamId === awayCTId),
       ).length;
       liveMatch.away_score = events.filter(
         (e) =>
-          (e.eventType === "GOAL" && e.teamId === awayCTId) ||
+          ((e.eventType === "GOAL" || e.eventType === "PENALTY_GOAL") && e.teamId === awayCTId) ||
           (e.eventType === "OWN_GOAL" && e.teamId === homeCTId),
       ).length;
     }
