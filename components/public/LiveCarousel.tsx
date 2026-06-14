@@ -6,7 +6,9 @@ import {
   GOAL_CELEBRATION_MS,
   activeCards,
   nextIndex,
+  prevIndex,
   goalInterrupt,
+  type CarouselCardConfig,
 } from "@/lib/public/carousel";
 import type { GoalSignal } from "@/features/hooks/usePublicLiveMatch";
 import GoalCelebration from "@/components/public/GoalCelebration";
@@ -16,6 +18,8 @@ type Props = {
   renderCard: (cardId: string) => React.ReactNode;
   // Cards sem dados ainda (telão pula): ex. sem classificação na fase atual
   emptyCardIds?: string[];
+  // Config resolvida (ordem/duração/visibilidade); cai no padrão se não vier
+  cards?: CarouselCardConfig[];
 };
 
 export type LiveCarouselHandle = { fireGoal: (signal: GoalSignal) => void };
@@ -23,12 +27,14 @@ export type LiveCarouselHandle = { fireGoal: (signal: GoalSignal) => void };
 export default function LiveCarousel({
   renderCard,
   emptyCardIds = [],
+  cards: cardsProp,
   handleRef,
 }: Props & { handleRef?: React.MutableRefObject<LiveCarouselHandle | null> }) {
-  // Chave estável: o pai pode passar um array novo a cada render sem reiniciar o carrossel
-  const cardsKey = emptyCardIds.join(",");
+  // Chave estável: o pai pode passar arrays novos a cada render sem reiniciar o carrossel
+  const source = cardsProp ?? DEFAULT_CAROUSEL_CARDS;
+  const cardsKey = `${source.map((c) => `${c.id}:${c.durationMs}:${c.enabled}`).join("|")}#${emptyCardIds.join(",")}`;
   const cards = useMemo(
-    () => activeCards(DEFAULT_CAROUSEL_CARDS).filter((c) => !emptyCardIds.includes(c.id)),
+    () => activeCards(source).filter((c) => !emptyCardIds.includes(c.id)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [cardsKey],
   );
@@ -69,6 +75,17 @@ export default function LiveCarousel({
   useEffect(() => {
     if (handleRef) handleRef.current = { fireGoal };
   }, [fireGoal, handleRef]);
+
+  // Navegação manual: ← card anterior, → próximo card (ignora durante a celebração)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (celebration) return;
+      if (e.key === "ArrowRight") setIndex((cur) => nextIndex(cards, cur));
+      else if (e.key === "ArrowLeft") setIndex((cur) => prevIndex(cards, cur));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [cards, celebration]);
 
   if (cards.length === 0) return null;
   const card = cards[Math.min(index, cards.length - 1)];
