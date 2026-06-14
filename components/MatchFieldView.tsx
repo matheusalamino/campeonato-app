@@ -204,10 +204,9 @@ function FieldPlayerMarker({
 
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressedRef = useRef(false);
+  const lastTouchEndRef = useRef(0);
 
-  function handlePressStart(e: React.MouseEvent | React.TouchEvent) {
-    if (!onSaveAdd) return;
-    e.preventDefault();
+  function startPressTimer() {
     longPressedRef.current = false;
     pressTimerRef.current = setTimeout(() => {
       longPressedRef.current = true;
@@ -216,16 +215,38 @@ function FieldPlayerMarker({
     }, 600);
   }
 
-  function handlePressEnd() {
-    if (!onSaveAdd) return;
+  function finishPress() {
     if (pressTimerRef.current !== null) {
       clearTimeout(pressTimerRef.current);
       pressTimerRef.current = null;
     }
     if (!longPressedRef.current) {
-      onSaveAdd();
+      onSaveAdd?.();
     }
     longPressedRef.current = false;
+  }
+
+  function handleTouchStart() {
+    if (!onSaveAdd) return;
+    startPressTimer();
+  }
+
+  function handleTouchEnd() {
+    if (!onSaveAdd) return;
+    lastTouchEndRef.current = Date.now();
+    finishPress();
+  }
+
+  function handleMouseDown() {
+    if (!onSaveAdd) return;
+    if (Date.now() - lastTouchEndRef.current < 500) return;
+    startPressTimer();
+  }
+
+  function handleMouseUp() {
+    if (!onSaveAdd) return;
+    if (Date.now() - lastTouchEndRef.current < 500) return;
+    finishPress();
   }
 
   function handleMouseLeave() {
@@ -240,11 +261,12 @@ function FieldPlayerMarker({
     <div
       className="absolute flex flex-col items-center gap-0.5 -translate-x-1/2 -translate-y-1/2 transition-all duration-500 ease-out"
       style={{ left: `${player.x}%`, top: `${player.y}%`, cursor: onSaveAdd ? "pointer" : undefined }}
-      onMouseDown={onSaveAdd ? handlePressStart : undefined}
-      onMouseUp={onSaveAdd ? handlePressEnd : undefined}
+      onMouseDown={onSaveAdd ? handleMouseDown : undefined}
+      onMouseUp={onSaveAdd ? handleMouseUp : undefined}
       onMouseLeave={onSaveAdd ? handleMouseLeave : undefined}
-      onTouchStart={onSaveAdd ? handlePressStart : undefined}
-      onTouchEnd={onSaveAdd ? handlePressEnd : undefined}
+      onTouchStart={onSaveAdd ? handleTouchStart : undefined}
+      onTouchEnd={onSaveAdd ? handleTouchEnd : undefined}
+      onContextMenu={onSaveAdd ? (e) => e.preventDefault() : undefined}
       role={onSaveAdd ? "button" : undefined}
       tabIndex={onSaveAdd ? 0 : undefined}
     >
@@ -260,8 +282,9 @@ function FieldPlayerMarker({
             src={player.photoUrl}
             alt={player.name}
             className="w-full h-full object-cover rounded-full border-[3px] lg:border-[3px]"
-            style={{ borderColor: borderColor }}
+            style={{ borderColor: borderColor, WebkitTouchCallout: "none" }}
             draggable={false}
+            onContextMenu={(e) => e.preventDefault()}
           />
         ) : (
           <div 
