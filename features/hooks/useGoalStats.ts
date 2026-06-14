@@ -95,31 +95,47 @@ export function useGoalStats(championshipId: string | null) {
 
     setLoading(true);
     try {
-      // Query events directly by championship_id — same pattern as useGroupStandings,
-      // which is the reliable filter (match_events_v2.championship_id is always set
-      // on current events; knockout_matches.championship_id is not reliable).
-      const [eventsRes, regsRes] = await Promise.all([
-        supabase
-          .from("match_events_v2")
-          .select("event_type, player_id, assist_player_id")
-          .eq("championship_id", championshipId)
-          .is("deleted_at", null)
-          .in("event_type", ["GOAL", "PENALTY_GOAL"]),
+      // Round 1: phases + registrations in parallel.
+      // phases.championship_id is always reliable; we use it to reach match IDs
+      // instead of knockout_matches.championship_id (a backfilled column, not trustworthy).
+      const [phasesRes, regsRes] = await Promise.all([
+        supabase.from("phases").select("id").eq("championship_id", championshipId),
         supabase
           .from("championship_registrations")
           .select("id, profile_photo_link, players(id, name)")
           .eq("championship_id", championshipId),
       ]);
 
+      const phaseIds = (phasesRes.data ?? []).map(p => p.id);
       const allRegIds = (regsRes.data ?? []).map(r => r.id);
 
-      const { data: ctpRows } = await supabase
-        .from("championship_team_players")
-        .select("registration_id, championship_team_id, championship_teams(id, teams(name))")
-        .in("registration_id", allRegIds.length ? allRegIds : ["__none__"]);
+      // Round 2: match IDs (via phase_id, reliable) + team info in parallel.
+      const [matchesRes, ctpRes] = await Promise.all([
+        phaseIds.length
+          ? supabase.from("knockout_matches").select("id").in("phase_id", phaseIds)
+          : Promise.resolve({ data: [] as { id: string }[] }),
+        supabase
+          .from("championship_team_players")
+          .select("registration_id, championship_team_id, championship_teams(id, teams(name))")
+          .in("registration_id", allRegIds.length ? allRegIds : ["__none__"]),
+      ]);
+
+      const matchIds = (matchesRes.data ?? []).map(m => m.id);
+
+      // Round 3: events by knockout_match_id — no championship_id filter needed
+      // since championship_id is not reliably set on match_events_v2 rows.
+      // This is the same pattern used by useGroupStandings.
+      const eventsRes = matchIds.length
+        ? await supabase
+            .from("match_events_v2")
+            .select("event_type, player_id, assist_player_id")
+            .in("knockout_match_id", matchIds)
+            .is("deleted_at", null)
+            .in("event_type", ["GOAL", "PENALTY_GOAL"])
+        : { data: [] as RawEvent[] };
 
       const ctpMap = new Map<string, { teamId: string; teamName: string }>();
-      for (const ctp of ctpRows ?? []) {
+      for (const ctp of ctpRes.data ?? []) {
         if (ctpMap.has(ctp.registration_id)) continue;
         const ct = ctp.championship_teams as unknown as { id: string; teams: { name: string } | { name: string }[] | null } | null;
         const teamsRel = ct?.teams;
