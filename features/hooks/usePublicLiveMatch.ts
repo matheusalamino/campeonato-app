@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { buildResolutionContext, resolveCtId } from "@/features/utils/resolveSlotTeam";
 
 const supabase = createClient();
 
@@ -55,22 +56,6 @@ export type PublicLiveData = {
   next: LiveMatchInfo | null;      // próximo NOT_STARTED por scheduled_at
 };
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function slotToTeam(slot: any): LiveTeam {
-  const ct = slot?.championship_teams;
-  const teamsRel = ct?.teams;
-  const team = Array.isArray(teamsRel) ? teamsRel[0] : teamsRel;
-  return {
-    championshipTeamId: slot?.championship_team_id ?? null,
-    // label é "home"/"away" (não serve de nome) — sem time resolvido, "A definir"
-    name: team?.name ?? "A definir",
-    logoUrl: team?.logo_url ?? null,
-    // uniform_color é coluna de match_slots, não de championship_teams
-    uniformColor: slot?.uniform_color ?? null,
-  };
-}
-/* eslint-enable @typescript-eslint/no-explicit-any */
-
 // Jogo ao vivo (ou último + próximo) do campeonato, com eventos nomeados.
 // onGoal dispara quando um novo evento GOAL chega após a carga inicial.
 export function usePublicLiveMatch(
@@ -102,7 +87,7 @@ export function usePublicLiveMatch(
 
       const { data: matches } = await supabase
         .from("knockout_matches")
-        .select("id, name, status, phase_id, current_period, period_started_at, scheduled_at, home_score, away_score, penalty_home_score, penalty_away_score, completed_at")
+        .select("id, name, code, status, phase_id, current_period, period_started_at, scheduled_at, home_score, away_score, penalty_home_score, penalty_away_score, penalty_winner_team_id, completed_at")
         .in("phase_id", phaseIds);
 
       const all = matches ?? [];
@@ -110,6 +95,7 @@ export function usePublicLiveMatch(
       const last = all
         .filter((m) => m.status === "COMPLETED" && m.completed_at)
         .sort((a, b) => (b.completed_at! > a.completed_at! ? 1 : -1))[0] ?? null;
+      // Próximo: não-iniciado com menor horário agendado
       const next = all
         .filter((m) => m.status === "NOT_STARTED" && m.scheduled_at)
         .sort((a, b) => (a.scheduled_at! < b.scheduled_at! ? -1 : 1))[0] ?? null;
@@ -122,29 +108,69 @@ export function usePublicLiveMatch(
         return;
       }
 
-      const [slotsRes, eventsRes, playersRes] = await Promise.all([
-        supabase
-          .from("match_slots")
-          .select("match_id, slot_order, label, uniform_color, championship_team_id, championship_teams(id, teams(name, logo_url))")
-          .in("match_id", ids)
-          .order("slot_order"),
-        supabase
-          .from("match_events_v2")
-          .select("id, knockout_match_id, event_type, event_time_s, period, team_id, player_id, assist_player_id")
-          .in("knockout_match_id", ids)
-          .is("deleted_at", null)
-          .order("event_time_s"),
+      const allMatchIds = all.map((m) => m.id);
+      const guardIds = allMatchIds.length ? allMatchIds : ["__none__"];
+
+      // Contexto de resolução de times (mesmo padrão do useMatchDetail): resolve
+      // slots sem championship_team_id direto via group_position / match_winner.
+      const [
+        allSlotsRes, groupSlotsRes, sourcesRes, ctxGoalsRes, tieBreakerRes,
+        champSettingsRes, ctRowsRes, eventsRes, playersRes,
+      ] = await Promise.all([
+        supabase.from("match_slots").select("match_id, slot_order, championship_team_id, uniform_color").in("match_id", guardIds),
+        supabase.from("group_slots").select("phase_id, label, group_letter, championship_team_id").in("phase_id", phaseIds),
+        supabase.from("knockout_match_sources").select("knockout_match_id, slot_order, source_type, source_group, source_position, source_match_code, source_phase_id").in("knockout_match_id", guardIds),
+        supabase.from("match_events_v2").select("knockout_match_id, event_type, team_id").is("deleted_at", null).in("event_type", ["GOAL", "OWN_GOAL"]).in("knockout_match_id", guardIds),
+        supabase.from("tie_breaker_rules").select("phase_id, rule, priority").in("phase_id", phaseIds).order("priority"),
+        supabase.from("championships").select("points_win, points_draw, points_loss").eq("id", championshipId).maybeSingle(),
+        supabase.from("championship_teams").select("id, team_id").eq("championship_id", championshipId),
+        supabase.from("match_events_v2").select("id, knockout_match_id, event_type, event_time_s, period, team_id, player_id, assist_player_id").in("knockout_match_id", ids).is("deleted_at", null).order("event_time_s"),
         supabase.from("public_players").select("registration_id, player_name, photo_url").eq("championship_id", championshipId),
       ]);
+
+      const ctx = buildResolutionContext(
+        all as Parameters<typeof buildResolutionContext>[0],
+        (allSlotsRes.data ?? []) as Parameters<typeof buildResolutionContext>[1],
+        (groupSlotsRes.data ?? []) as Parameters<typeof buildResolutionContext>[2],
+        (sourcesRes.data ?? []) as Parameters<typeof buildResolutionContext>[3],
+        (ctxGoalsRes.data ?? []) as Parameters<typeof buildResolutionContext>[4],
+        (tieBreakerRes.data ?? []) as Parameters<typeof buildResolutionContext>[5],
+        {
+          win: champSettingsRes.data?.points_win ?? 3,
+          draw: champSettingsRes.data?.points_draw ?? 1,
+          loss: champSettingsRes.data?.points_loss ?? 0,
+        },
+      );
+
+      // ct → time (nome/logo) e uniform_color por (match, slot)
+      const teamIds = (ctRowsRes.data ?? []).map((ct) => ct.team_id).filter(Boolean);
+      const { data: teamRows } = await supabase
+        .from("teams").select("id, name, logo_url").in("id", teamIds.length ? teamIds : ["__none__"]);
+      const teamById = new Map((teamRows ?? []).map((t) => [t.id, t]));
+      const ctToTeam = new Map((ctRowsRes.data ?? []).map((ct) => [ct.id, teamById.get(ct.team_id) ?? null]));
+      const uniformBySlot = new Map(
+        (allSlotsRes.data ?? []).map((s) => [`${s.match_id}:${s.slot_order}`, s.uniform_color as string | null]),
+      );
 
       const playerName = new Map((playersRes.data ?? []).map((p) => [p.registration_id, p.player_name]));
       const playerPhoto = new Map((playersRes.data ?? []).map((p) => [p.registration_id, p.photo_url as string | null]));
 
+      // Resolve o time de um slot (direto ou via group_position/match_winner)
+      const resolveTeam = (matchId: string, slotOrder: number): LiveTeam => {
+        const ctId = resolveCtId(matchId, slotOrder, ctx);
+        const team = ctId ? ctToTeam.get(ctId) : null;
+        return {
+          championshipTeamId: ctId,
+          name: team?.name ?? "A definir",
+          logoUrl: team?.logo_url ?? null,
+          uniformColor: uniformBySlot.get(`${matchId}:${slotOrder}`) ?? null,
+        };
+      };
+
       const build = (m: typeof current): LiveMatchInfo | null => {
         if (!m) return null;
-        const slots = (slotsRes.data ?? []).filter((s) => s.match_id === m.id);
-        const home = slotToTeam(slots[0]);
-        const away = slotToTeam(slots[1]);
+        const home = resolveTeam(m.id, 1);
+        const away = resolveTeam(m.id, 2);
         const events: LiveEvent[] = (eventsRes.data ?? [])
           .filter((e) => e.knockout_match_id === m.id)
           .map((e) => ({

@@ -154,19 +154,31 @@ export default function LiveMatchCard({ championshipName, current, last, next }:
         <div className="flex flex-col items-center gap-2">
           <span className="text-[1vw] uppercase tracking-[4px] text-[var(--gala-ink-dim)]">Último resultado</span>
           <div className="flex items-center gap-[2vw]">
-            <span className="text-[1.6vw] font-extrabold">{last.home.name.toUpperCase()}</span>
+            <div className="flex w-[18vw] flex-col items-center gap-2">
+              <Crest team={last.home} />
+              <span className="text-[1.6vw] font-extrabold">{last.home.name.toUpperCase()}</span>
+            </div>
             <ScorePanel home={last.homeScore} away={last.awayScore} />
-            <span className="text-[1.6vw] font-extrabold">{last.away.name.toUpperCase()}</span>
+            <div className="flex w-[18vw] flex-col items-center gap-2">
+              <Crest team={last.away} />
+              <span className="text-[1.6vw] font-extrabold">{last.away.name.toUpperCase()}</span>
+            </div>
           </div>
         </div>
       ) : null}
       {next ? (
         <div className="flex flex-col items-center gap-2">
           <span className="text-[1vw] uppercase tracking-[4px] text-[var(--gala-ink-dim)]">Próximo jogo</span>
-          <div className="flex items-center gap-[1.5vw] text-[1.8vw] font-extrabold">
-            {next.home.name.toUpperCase()}
+          <div className="flex items-center gap-[2vw]">
+            <div className="flex w-[16vw] flex-col items-center gap-2">
+              <Crest team={next.home} />
+              <span className="text-[1.6vw] font-extrabold">{next.home.name.toUpperCase()}</span>
+            </div>
             <span className="text-[1.2vw] font-light text-[var(--gala-gold-3)]">vs</span>
-            {next.away.name.toUpperCase()}
+            <div className="flex w-[16vw] flex-col items-center gap-2">
+              <Crest team={next.away} />
+              <span className="text-[1.6vw] font-extrabold">{next.away.name.toUpperCase()}</span>
+            </div>
           </div>
           {next.scheduledAt ? (
             <span className="text-[1.1vw] text-[var(--gala-gold-2)]">
