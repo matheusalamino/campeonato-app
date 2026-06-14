@@ -47,7 +47,7 @@ export function useGoalkeeper(championshipId: string | null) {
     const rawGoalEvents = rawGoalEventsRef.current;
 
     // Build match participation per goalkeeper: union of lineup entries and saves entries.
-    // This covers goalkeepers who played but had zero saves (lineup only).
+    // This covers goalkeepers who played but had zero saves (lineup-only).
     const gkMatchMap = new Map<string, Set<string>>();
 
     for (const lineup of rawLineupsRef.current) {
@@ -82,8 +82,8 @@ export function useGoalkeeper(championshipId: string | null) {
       const mdd = partidas > 0 ? decisiveSaves / partidas : 0;
 
       // Goals conceded = goals scored by opposing team in the gk's matches.
-      // In match_events_v2, team_id is championship_team_id of the scoring team.
-      // OWN_GOAL.team_id = team that scored own goal (the defending team).
+      // team_id in match_events_v2 is the championship_team_id of the scoring team.
+      // OWN_GOAL.team_id = the team that scored own goal (the defending/conceding team).
       let goalsConceded = 0;
       for (const event of rawGoalEvents) {
         if (!matchIds.has(event.knockout_match_id)) continue;
@@ -137,18 +137,12 @@ export function useGoalkeeper(championshipId: string | null) {
 
     setLoading(true);
     try {
-      // Fetch saves, goals, registrations (with position) in parallel
-      const [savesRes, eventsRes, regsRes] = await Promise.all([
+      // Step 1: saves + registrations in parallel
+      const [savesRes, regsRes] = await Promise.all([
         supabase
           .from("player_saves")
           .select("registration_id, match_id, is_penalty")
           .eq("championship_id", championshipId),
-        supabase
-          .from("match_events_v2")
-          .select("event_type, team_id, knockout_match_id")
-          .eq("championship_id", championshipId)
-          .is("deleted_at", null)
-          .in("event_type", ["GOAL", "OWN_GOAL", "PENALTY_GOAL"]),
         supabase
           .from("championship_registrations")
           .select("id, profile_photo_link, players(id, name, position)")
@@ -166,20 +160,44 @@ export function useGoalkeeper(championshipId: string | null) {
 
       const gkRegIdsArray = [...gkRegIds];
 
-      // Fetch lineups (starters only) and team info for goalkeepers in parallel
+      if (!gkRegIdsArray.length) {
+        if (seq !== loadSeqRef.current) return;
+        rawSavesRef.current = [];
+        rawGoalEventsRef.current = [];
+        rawLineupsRef.current = [];
+        regInfoMapRef.current = new Map();
+        return;
+      }
+
+      // Step 2: lineups (starters) + team info in parallel
       const [lineupsRes, ctpRes] = await Promise.all([
-        gkRegIdsArray.length
-          ? supabase
-              .from("match_lineups")
-              .select("player_id, knockout_match_id")
-              .in("player_id", gkRegIdsArray)
-              .eq("is_starter", true)
-          : Promise.resolve({ data: [] }),
+        supabase
+          .from("match_lineups")
+          .select("player_id, knockout_match_id")
+          .in("player_id", gkRegIdsArray)
+          .eq("is_starter", true),
         supabase
           .from("championship_team_players")
           .select("registration_id, championship_team_id, championship_teams(id, teams(name))")
-          .in("registration_id", gkRegIdsArray.length ? gkRegIdsArray : ["__none__"]),
+          .in("registration_id", gkRegIdsArray),
       ]);
+
+      // All match IDs the goalkeepers were involved in (lineups + saves)
+      const allMatchIds = new Set<string>();
+      for (const l of lineupsRes.data ?? []) allMatchIds.add(l.knockout_match_id);
+      for (const s of savesRes.data ?? []) allMatchIds.add(s.match_id);
+      const allMatchIdsArray = [...allMatchIds];
+
+      // Step 3: goal events filtered by match_id — avoids championship_id NULL issue
+      // on events recorded before championship_id was added to match_events_v2.
+      const eventsRes = allMatchIdsArray.length
+        ? await supabase
+            .from("match_events_v2")
+            .select("event_type, team_id, knockout_match_id")
+            .in("knockout_match_id", allMatchIdsArray)
+            .is("deleted_at", null)
+            .in("event_type", ["GOAL", "OWN_GOAL", "PENALTY_GOAL"])
+        : { data: [] as { event_type: string; team_id: string; knockout_match_id: string }[] };
 
       const ctpMap = new Map<string, { teamId: string; teamName: string }>();
       for (const ctp of ctpRes.data ?? []) {
