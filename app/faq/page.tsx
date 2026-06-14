@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   AlertTriangle,
   BarChart3,
+  BookOpen,
   Coins,
   Gavel,
   Goal,
@@ -18,6 +19,7 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
+  Shirt,
   Sparkles,
   Star,
   Swords,
@@ -900,7 +902,12 @@ const CAMPEONATO_SECTIONS: Section[] = [
             <li>Saldo de gols</li>
             <li>Gols marcados</li>
             <li>Confronto direto</li>
-            <li>Menor número de cartões (fair play)</li>
+            <li>
+              Fair play — menor pontuação de cartões, contando{" "}
+              <Emph>amarelo = 1 ponto</Emph> e{" "}
+              <Emph>vermelho = 3 pontos</Emph> (quem tiver menos pontos leva
+              vantagem).
+            </li>
             <li>Sorteio realizado pela organização</li>
           </ol>
         ),
@@ -909,12 +916,14 @@ const CAMPEONATO_SECTIONS: Section[] = [
   },
   {
     id: "c-eliminatoria",
-    title: "Fase Eliminatória",
+    title: "Fase Eliminatória (Playoffs)",
     icon: <Swords className="size-5" />,
     intro: (
       <p>
-        O <Emph>1º colocado</Emph> de cada grupo vai direto para a semifinal.
-        Os 2ºs e 3ºs colocados disputam uma fase prévia.
+        A fase eliminatória (também chamada de <Emph>playoffs</Emph> ou
+        mata-mata) começa com o <Emph>1º colocado</Emph> de cada grupo indo
+        direto para a semifinal. Os 2ºs e 3ºs colocados disputam uma fase
+        prévia.
       </p>
     ),
     items: [
@@ -980,11 +989,13 @@ const CAMPEONATO_SECTIONS: Section[] = [
     ),
     items: [
       {
-        q: "Quantos jogadores podem estar em campo?",
+        q: "Quantos jogadores cada time tem e quantos jogam em campo?",
         a: (
           <p>
-            No máximo <Emph>10 jogadores</Emph> e no mínimo{" "}
-            <Emph>9 jogadores</Emph>, sendo 1 deles o goleiro.
+            Cada time tem um elenco de <Emph>10 jogadores</Emph> (9 de linha
+            + 1 goleiro). Em campo, no modelo <Emph>society</Emph>, jogam{" "}
+            <Emph>6 por equipe</Emph>: 5 jogadores de linha + 1 goleiro. Os
+            demais ficam disponíveis para as substituições ilimitadas.
           </p>
         ),
       },
@@ -1028,11 +1039,13 @@ const CAMPEONATO_SECTIONS: Section[] = [
         ),
       },
       {
-        q: "Pode jogar com qualquer chuteira?",
+        q: "Quando informo a escalação inicial?",
         a: (
           <p>
-            Não. É <Emph>estritamente proibido</Emph> jogar com chuteira de
-            cravo (de campo).
+            O cartola deve comunicar a <Emph>formação inicial</Emph> do time
+            à <Emph>mesa de súmula</Emph> com{" "}
+            <Emph>7 minutos de antecedência</Emph> ao início de cada partida.
+            Isso vale para todos os jogos do campeonato.
           </p>
         ),
       },
@@ -1088,12 +1101,64 @@ const CAMPEONATO_SECTIONS: Section[] = [
           </p>
         ),
       },
+    ],
+  },
+  {
+    id: "c-uniforme",
+    title: "Uniforme e Equipamento",
+    icon: <Shirt className="size-5" />,
+    intro: (
+      <p>
+        Regras sobre o uniforme oficial, calçado e itens de segurança em
+        campo. O objetivo é garantir a identificação das equipes e a{" "}
+        <Emph>integridade física</Emph> de todos os atletas.
+      </p>
+    ),
+    items: [
       {
-        q: "E se os uniformes forem parecidos?",
+        q: "Como recebo minha camiseta de uniforme?",
         a: (
           <p>
-            É <Emph>obrigatório</Emph> o uso de colete fornecido pela
-            organização.
+            Cada jogador recebe a <Emph>camiseta do seu time</Emph>, no{" "}
+            <Emph>tamanho solicitado</Emph> e contendo o <Emph>nome</Emph> e
+            o <Emph>número</Emph> que escolheu previamente. É o uniforme
+            oficial para todas as partidas.
+          </p>
+        ),
+      },
+      {
+        q: "E se as cores dos uniformes de dois times conflitarem?",
+        a: (
+          <p>
+            Quando duas equipes entram em campo com uniformes de cores
+            parecidas, os <Emph>capitães</Emph> decidem no{" "}
+            <Emph>cara-ou-coroa</Emph> ou no <Emph>par-ou-ímpar</Emph> qual
+            time vestirá os <Emph>coletes</Emph> (fornecidos pela
+            organização) para diferenciar as equipes.
+          </p>
+        ),
+      },
+      {
+        q: "Pode jogar com qualquer chuteira?",
+        a: (
+          <p>
+            Não. É <Emph>estritamente proibido</Emph> jogar com chuteira de
+            cravo (de campo). A arbitragem orienta a troca do calçado; em
+            caso de insistência, o atleta pode receber{" "}
+            <Emph>cartão vermelho</Emph> durante a partida.
+          </p>
+        ),
+      },
+      {
+        q: "Posso usar brincos, piercings, colares ou outras bijuterias?",
+        a: (
+          <p>
+            Não. É <Emph>proibido</Emph> o uso de brincos, piercings,
+            colares, pulseiras, correntinhas e demais bijuterias ou adornos
+            que possam causar lesões ao próprio atleta ou aos demais
+            jogadores. A arbitragem solicita a retirada antes do jogo; em
+            caso de insistência, o atleta pode receber{" "}
+            <Emph>cartão vermelho</Emph> durante a partida.
           </p>
         ),
       },
@@ -1105,8 +1170,10 @@ const CAMPEONATO_SECTIONS: Section[] = [
     icon: <AlertTriangle className="size-5" />,
     intro: (
       <p>
-        Cartões podem tirar o atleta da próxima partida. Os{" "}
-        <Emph>cartões acumulados zeram</Emph> ao final da fase de grupos.
+        Cartões podem tirar o atleta da próxima partida. A contagem de
+        cartões é <Emph>zerada ao entrar nos playoffs</Emph> (fase
+        eliminatória): o atleta começa o mata-mata sem nenhum cartão
+        acumulado da fase de grupos.
       </p>
     ),
     items: [
@@ -1119,8 +1186,8 @@ const CAMPEONATO_SECTIONS: Section[] = [
             </li>
             <li>A equipe joga com um jogador a menos até o final.</li>
             <li>
-              O atleta fica <Emph>automaticamente suspenso</Emph> da próxima
-              partida.
+              O atleta fica <Emph>suspenso da próxima partida</Emph> (um
+              jogo apenas).
             </li>
           </ul>
         ),
@@ -1131,14 +1198,36 @@ const CAMPEONATO_SECTIONS: Section[] = [
           <ul className="list-disc space-y-1 pl-5 text-zinc-300">
             <li>
               <Emph>Dois amarelos na mesma partida</Emph> resultam em
-              expulsão.
+              expulsão (e suspensão de um jogo, como no vermelho).
             </li>
             <li>
-              <Emph>Dois amarelos em partidas diferentes</Emph> suspendem o
-              atleta da próxima partida.
+              <Emph>Dois amarelos em partidas diferentes</Emph> (fase de
+              grupos) suspendem o atleta da próxima partida — um jogo
+              apenas.
             </li>
-            <li>Os cartões acumulados zeram ao final da fase de grupos.</li>
           </ul>
+        ),
+      },
+      {
+        q: "O que acontece com os cartões nos playoffs?",
+        a: (
+          <p>
+            Toda a contagem de cartões da fase de grupos é{" "}
+            <Emph>zerada</Emph> ao iniciar os playoffs. A partir do
+            mata-mata, a regra de suspensão por cartão vermelho ou segundo
+            amarelo volta a valer normalmente dentro da fase.
+          </p>
+        ),
+      },
+      {
+        q: "E se um atleta suspenso entrar em campo?",
+        a: (
+          <p>
+            Não pode. Se um atleta cumprindo suspensão atuar na partida, a
+            equipe <Emph>perde o jogo por W.O.</Emph> (registrado como{" "}
+            <Emph>3 × 0</Emph>), além das demais providências disciplinares
+            cabíveis.
+          </p>
         ),
       },
     ],
@@ -1494,9 +1583,9 @@ const CAMPEONATO_SECTIONS: Section[] = [
         a: (
           <div className="space-y-2 text-zinc-300">
             <p>
-              Avaliação a cada partida pela <Emph>arbitragem</Emph> + 1
-              membro fixo da organização (ou staff exclusivo). A nota é
-              composta por 5 quesitos, cada um de 0 a 2:
+              A cada partida, a <Emph>arbitragem</Emph> em conjunto com{" "}
+              <Emph>1 membro fixo da organização</Emph> (ou staff exclusivo)
+              escolhem o melhor cartola do jogo. A escolha tem como base:
             </p>
             <ul className="list-disc space-y-0.5 pl-5">
               <li>Organização da equipe</li>
@@ -1505,20 +1594,15 @@ const CAMPEONATO_SECTIONS: Section[] = [
               <li>Gestão emocional do time</li>
               <li>Liderança e fair play</li>
             </ul>
-            <p>A nota base (0 a 10) é multiplicada pelo peso da fase:</p>
+            <p>Cada voto vale pontos de acordo com a fase:</p>
             <ul className="list-disc space-y-0.5 pl-5">
-              <li>
-                Fase de Grupos: <Emph>peso 1</Emph>
-              </li>
-              <li>
-                Semifinal: <Emph>peso 2</Emph>
-              </li>
-              <li>
-                Final: <Emph>peso 3</Emph>
-              </li>
+              <li>Fase de Grupos: 1 ponto por voto.</li>
+              <li>Semifinal: 2 pontos por voto.</li>
+              <li>Final: 3 pontos por voto.</li>
             </ul>
             <p>
-              Vence o cartola com a <Emph>maior pontuação acumulada</Emph>.
+              Vence o cartola com a <Emph>maior pontuação acumulada</Emph> ao
+              final do campeonato.
             </p>
           </div>
         ),
@@ -1610,9 +1694,10 @@ const CAMPEONATO_SECTIONS: Section[] = [
           <div className="space-y-2 text-zinc-300">
             <p>
               Elegíveis atletas com{" "}
-              <Emph>Overall Rating igual ou inferior a 79</Emph>, definido
-              pela organização. A escolha é feita pela organização com
-              auxílio da arbitragem, considerando:
+              <Emph>Overall Rating igual ou inferior a 85</Emph> (ou
+              conforme definido pela organização). A escolha é feita por um{" "}
+              <Emph>membro fixo da organização</Emph> com auxílio da
+              arbitragem, considerando:
             </p>
             <ul className="list-disc space-y-0.5 pl-5">
               <li>Evolução perceptível durante o campeonato.</li>
@@ -1621,6 +1706,103 @@ const CAMPEONATO_SECTIONS: Section[] = [
               <li>Postura e dedicação.</li>
             </ul>
           </div>
+        ),
+      },
+    ],
+  },
+  {
+    id: "c-glossario",
+    title: "Glossário Rápido",
+    icon: <BookOpen className="size-5" />,
+    intro: (
+      <p>
+        Termos que aparecem no regulamento e no app, reunidos para quem está
+        no primeiro campeonato.
+      </p>
+    ),
+    items: [
+      {
+        q: "Cartola",
+        a: (
+          <p>
+            O responsável por montar e gerir uma equipe. Participa do Draft,
+            disputa os leilões e concorre ao prêmio de{" "}
+            <Emph>Melhor Cartola</Emph>.
+          </p>
+        ),
+      },
+      {
+        q: "Overall Rating",
+        a: (
+          <p>
+            Nota geral de cada atleta (calculada a partir de 6 habilidades),
+            definida antes do campeonato. Veja a seção{" "}
+            <Emph>Avaliação dos Atletas</Emph>.
+          </p>
+        ),
+      },
+      {
+        q: "Draft / Noite de Gala",
+        a: (
+          <p>
+            Evento de abertura em que os cartolas montam suas equipes
+            leiloando jogadores. Detalhes na aba{" "}
+            <Link
+              href="?tab=leilao"
+              className="font-semibold text-amber-200 underline decoration-amber-500/50 underline-offset-2 hover:text-amber-100"
+            >
+              Noite de Gala + Leilão
+            </Link>
+            .
+          </p>
+        ),
+      },
+      {
+        q: "Pote",
+        a: (
+          <p>
+            Grupo de jogadores organizado por posição que é leiloado em
+            bloco durante o Draft.
+          </p>
+        ),
+      },
+      {
+        q: "Playoffs (Fase Eliminatória)",
+        a: (
+          <p>
+            O mata-mata: semifinais, disputa de 3º lugar e final. Ao entrar
+            nessa fase, a contagem de cartões é zerada.
+          </p>
+        ),
+      },
+      {
+        q: "Mesa de Súmula",
+        a: (
+          <p>
+            Posto da organização que registra a escalação inicial, os
+            eventos e a súmula oficial de cada partida. A formação inicial
+            deve ser informada a ela <Emph>7 minutos antes</Emph> do jogo.
+          </p>
+        ),
+      },
+      {
+        q: "W.O. (Walkover)",
+        a: (
+          <p>
+            Derrota administrativa registrada como <Emph>3 × 0</Emph>,
+            aplicada em casos como atraso além da tolerância ou escalação de
+            atleta suspenso.
+          </p>
+        ),
+      },
+      {
+        q: "IOG",
+        a: (
+          <p>
+            Índice Oficial do Goleiro — fórmula que define o{" "}
+            <Emph>Goleiro Destaque</Emph>. Veja a seção{" "}
+            <Emph>Premiações Individuais</Emph>.
+          </p>
         ),
       },
     ],
