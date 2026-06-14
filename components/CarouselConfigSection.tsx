@@ -22,7 +22,8 @@ const MAX_S = CARD_DURATION_MAX_MS / 1000;
 
 // Seção de configuração do carrossel do telão (área protegida)
 export default function CarouselConfigSection({ championshipId }: { championshipId: string }) {
-  const [cards, setCards] = useState<CarouselCardConfig[]>([]);
+  // Inicia no padrão (sem flash de lista vazia enquanto carrega); o fetch sobrescreve
+  const [cards, setCards] = useState<CarouselCardConfig[]>(() => resolveCarouselConfig(null));
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -40,10 +41,22 @@ export default function CarouselConfigSection({ championshipId }: { championship
     setCards((cs) => cs.map((c, idx) => (idx === i ? { ...c, enabled: !c.enabled } : c)));
   }
 
+  // Durante a digitação aceita o valor livremente (guarda só NaN)
   function setSeconds(i: number, raw: string) {
     const sec = parseInt(raw, 10);
     setCards((cs) =>
       cs.map((c, idx) => (idx === i ? { ...c, durationMs: Number.isNaN(sec) ? c.durationMs : sec * 1000 } : c)),
+    );
+  }
+
+  // Ao sair do campo, fixa a duração na faixa permitida (3–120s)
+  function clampSeconds(i: number) {
+    setCards((cs) =>
+      cs.map((c, idx) =>
+        idx === i
+          ? { ...c, durationMs: Math.min(CARD_DURATION_MAX_MS, Math.max(CARD_DURATION_MIN_MS, c.durationMs)) }
+          : c,
+      ),
     );
   }
 
@@ -156,6 +169,7 @@ export default function CarouselConfigSection({ championshipId }: { championship
                 max={MAX_S}
                 value={Math.round(card.durationMs / 1000)}
                 onChange={(e) => setSeconds(i, e.target.value)}
+                onBlur={() => clampSeconds(i)}
                 className="w-16 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-sm text-white outline-none focus:border-purple-500"
               />
             </label>
