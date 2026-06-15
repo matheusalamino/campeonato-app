@@ -98,7 +98,7 @@ export default function Dashboard() {
           <div className="absolute inset-0 bg-gradient-to-br from-yellow-600/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         </Link>
 
-        <Link href="/statistics" className="group relative overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/40 p-1 hover:border-purple-500/50 transition-all duration-300">
+        <Link href="/admin/statistics" className="group relative overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/40 p-1 hover:border-purple-500/50 transition-all duration-300">
           <div className="relative z-10 flex flex-col h-full bg-zinc-950 rounded-[22px] p-6 space-y-4">
             <div className="flex items-center justify-between">
               <div className="p-3 bg-purple-600/10 rounded-2xl group-hover:bg-purple-600 transition-colors duration-300">
