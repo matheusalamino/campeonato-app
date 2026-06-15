@@ -53,7 +53,7 @@ export default function LoginPage() {
         }
       }
 
-      router.replace("/");
+      router.replace("/dashboard");
       router.refresh();
     } catch {
       setErrorMessage(
