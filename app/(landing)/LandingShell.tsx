@@ -3,11 +3,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import LandingHeader from "@/components/landing/LandingHeader";
-
-// Stub replaced in Task 4 when LoginModal is created
-function LoginModal(_props: { open: boolean; onClose: () => void }) {
-  return null;
-}
+import LoginModal from "@/components/landing/LoginModal";
 
 interface LandingShellProps {
   children: ReactNode;
