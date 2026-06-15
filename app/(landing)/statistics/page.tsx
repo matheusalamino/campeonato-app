@@ -19,7 +19,7 @@ export default async function StatisticsPage() {
     <main className="mx-auto max-w-7xl px-6 py-12 md:px-10">
       <header className="mb-10 text-center">
         <p className="text-[10px] font-black uppercase tracking-[4px] text-[var(--gala-gold-2)]">
-          ━ ✦ ━ Official Statistics ━ ✦ ━
+          ━ ✦ ━ Estatísticas Oficiais ━ ✦ ━
         </p>
         <h1
           className="mt-2 font-serif text-3xl font-extrabold sm:text-4xl"
@@ -30,10 +30,10 @@ export default async function StatisticsPage() {
             color: "transparent",
           }}
         >
-          LIFAS Statistics
+          Estatísticas LIFAS
         </h1>
         <p className="mt-1 text-xs text-[var(--gala-ink-dim)]">
-          All-time records and season highlights · updated in real time
+          Recordes históricos e destaques da temporada · atualizado em tempo real
         </p>
       </header>
 

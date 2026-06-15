@@ -38,14 +38,15 @@ export default function LandingHeader({ liveChampionshipId, onLoginClick }: Land
           href="/statistics"
           className="text-xs font-bold uppercase tracking-widest text-[var(--gala-ink-dim)] hover:text-[var(--gala-gold-2)] transition-colors"
         >
-          Statistics
+          Estatísticas
         </Link>
         {liveChampionshipId && (
           <Link
             href={`/live/${liveChampionshipId}`}
-            className="text-xs font-bold uppercase tracking-widest text-[var(--gala-ink-dim)] hover:text-[var(--gala-gold-2)] transition-colors"
+            className="flex items-center gap-1 text-xs font-bold uppercase tracking-widest text-red-400 hover:text-red-300 transition-colors"
           >
-            Live
+            <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+            Ao Vivo
           </Link>
         )}
       </nav>
@@ -57,7 +58,7 @@ export default function LandingHeader({ liveChampionshipId, onLoginClick }: Land
           background: "linear-gradient(135deg, var(--gala-gold-3), var(--gala-gold-2))",
         }}
       >
-        Admin Login
+        Entrar
       </button>
     </header>
   );

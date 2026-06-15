@@ -75,25 +75,25 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
           type="button"
           onClick={() => dialogRef.current?.close()}
           className="absolute right-4 top-4 text-sm text-[var(--gala-ink-dim)] hover:text-white transition-colors"
-          aria-label="Close"
+          aria-label="Fechar"
         >
           ✕
         </button>
 
         <div className="mb-6 text-center">
           <p className="text-[9px] font-black uppercase tracking-[4px] text-[var(--gala-gold-2)]">
-            Restricted Area
+            Área Restrita
           </p>
-          <h2 className="mt-1 text-xl font-black text-white">Administrator Login</h2>
+          <h2 className="mt-1 text-xl font-black text-white">Login do Administrador</h2>
           <p className="mt-1 text-xs text-[var(--gala-ink-dim)]">
-            Only authorized admins may sign in
+            Apenas administradores autorizados podem entrar
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-[9px] font-bold uppercase tracking-[2px] text-[var(--gala-ink-dim)] mb-1">
-              Email address
+              E-mail
             </label>
             <input
               type="email"
@@ -109,7 +109,7 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
 
           <div>
             <label className="block text-[9px] font-bold uppercase tracking-[2px] text-[var(--gala-ink-dim)] mb-1">
-              Password
+              Senha
             </label>
             <input
               type="password"
@@ -137,7 +137,7 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
               background: "linear-gradient(135deg, var(--gala-gold-3), var(--gala-gold-2))",
             }}
           >
-            {loading ? "Signing in…" : "Sign In"}
+            {loading ? "Entrando…" : "Entrar"}
           </button>
         </form>
       </div>

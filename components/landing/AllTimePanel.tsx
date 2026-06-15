@@ -1,4 +1,5 @@
 import StatsChips from "@/components/landing/StatsChips";
+import PlayerAvatar from "@/components/landing/PlayerAvatar";
 import type { AggregateStats, AllTimeScorer, MostTitlesTeam, Champion } from "@/lib/landing/queries";
 
 interface AllTimePanelProps {
@@ -23,20 +24,20 @@ export default function AllTimePanel({
   hallOfChampions,
 }: AllTimePanelProps) {
   const chips = [
-    { value: aggregateStats.seasons, label: "Seasons" },
-    { value: aggregateStats.goals, label: "Goals" },
-    { value: aggregateStats.players, label: "Players" },
+    { value: aggregateStats.seasons, label: "Temporadas" },
+    { value: aggregateStats.goals, label: "Gols" },
+    { value: aggregateStats.players, label: "Jogadores" },
   ];
 
   return (
     <aside className="flex flex-col gap-8">
-      {/* Aggregate chips */}
+      {/* Números gerais */}
       <section>
-        <SectionTitle>By the numbers</SectionTitle>
+        <SectionTitle>Em números</SectionTitle>
         <StatsChips chips={chips} />
       </section>
 
-      {/* All-time top scorers */}
+      {/* Artilheiros de todos os tempos */}
       <section
         className="rounded-2xl p-5"
         style={{
@@ -44,26 +45,21 @@ export default function AllTimePanel({
           border: "1px solid var(--gala-line)",
         }}
       >
-        <SectionTitle>All-Time Top Scorers</SectionTitle>
+        <SectionTitle>Artilheiros Históricos</SectionTitle>
         {topScorers.length === 0 ? (
-          <p className="text-sm text-[var(--gala-ink-dim)]">No data yet.</p>
+          <p className="text-sm text-[var(--gala-ink-dim)]">Sem dados ainda.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {topScorers.map((scorer, i) => (
               <li key={scorer.playerName} className="flex items-center gap-3">
                 <span className="w-4 text-center text-xs font-black text-[var(--gala-gold-2)]">{i + 1}</span>
-                <span
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[8px] font-black"
-                  style={{
-                    background: i === 0
-                      ? "linear-gradient(135deg, var(--gala-gold-1), var(--gala-gold-3))"
-                      : "var(--gala-bg-1)",
-                    color: i === 0 ? "#050507" : "white",
-                    border: i !== 0 ? "1px solid var(--gala-line)" : undefined,
-                  }}
-                >
-                  {scorer.playerName.slice(0, 2).toUpperCase()}
-                </span>
+                <PlayerAvatar
+                  photoUrl={scorer.photoUrl}
+                  name={scorer.playerName}
+                  sizeClass="h-6 w-6"
+                  textSizeClass="text-[8px]"
+                  isFirst={i === 0}
+                />
                 <span className="flex-1 min-w-0 truncate text-sm font-bold text-white">{scorer.playerName}</span>
                 <span className="font-black tabular-nums text-[var(--gala-gold-2)]">
                   {scorer.totalGoals} ⚽
@@ -74,7 +70,7 @@ export default function AllTimePanel({
         )}
       </section>
 
-      {/* Most championships won */}
+      {/* Mais títulos */}
       <section
         className="rounded-2xl p-5"
         style={{
@@ -82,25 +78,23 @@ export default function AllTimePanel({
           border: "1px solid var(--gala-line)",
         }}
       >
-        <SectionTitle>Most Championships Won</SectionTitle>
+        <SectionTitle>Mais Títulos</SectionTitle>
         {mostTitlesTeams.length === 0 ? (
-          <p className="text-sm text-[var(--gala-ink-dim)]">No data yet.</p>
+          <p className="text-sm text-[var(--gala-ink-dim)]">Sem dados ainda.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {mostTitlesTeams.map((team, i) => (
               <li key={team.teamName} className="flex items-center gap-3">
                 <span className="w-4 text-center text-xs font-black text-[var(--gala-gold-2)]">{i + 1}</span>
                 <span className="flex-1 text-sm font-bold text-white">{team.teamName}</span>
-                <span className="font-black text-[var(--gala-gold-2)]">
-                  {team.titles}× 🏆
-                </span>
+                <span className="font-black text-[var(--gala-gold-2)]">{team.titles}× 🏆</span>
               </li>
             ))}
           </ul>
         )}
       </section>
 
-      {/* Hall of champions */}
+      {/* Hall dos Campeões */}
       <section
         className="rounded-2xl p-5"
         style={{
@@ -108,9 +102,9 @@ export default function AllTimePanel({
           border: "1px solid var(--gala-line)",
         }}
       >
-        <SectionTitle>Hall of Champions</SectionTitle>
+        <SectionTitle>Hall dos Campeões</SectionTitle>
         {hallOfChampions.length === 0 ? (
-          <p className="text-sm text-[var(--gala-ink-dim)]">No championships yet.</p>
+          <p className="text-sm text-[var(--gala-ink-dim)]">Nenhum campeonato ainda.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {hallOfChampions.map((c) => (
@@ -125,8 +119,8 @@ export default function AllTimePanel({
                 >
                   {c.season ?? "—"}
                 </span>
-                <span className="flex-1 truncate text-sm text-white">
-                  {c.championName ?? <span className="text-[var(--gala-ink-dim)]">TBD</span>}
+                <span className="flex-1 truncate text-sm font-bold text-white">
+                  {c.championName ?? <span className="font-normal text-[var(--gala-ink-dim)]">A definir</span>}
                 </span>
               </li>
             ))}

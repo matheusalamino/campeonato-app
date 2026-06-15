@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { TopScorer } from "@/lib/landing/queries";
+import PlayerAvatar from "@/components/landing/PlayerAvatar";
 
 interface TopScorersPreviewProps {
   scorers: TopScorer[];
@@ -21,15 +22,15 @@ export default function TopScorersPreview({ scorers, seasonName }: TopScorersPre
       <div className="mb-4 flex items-center justify-between">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[4px] text-[var(--gala-gold-2)]">
-            {seasonName ?? "Latest Season"}
+            {seasonName ?? "Última Temporada"}
           </p>
-          <h3 className="mt-0.5 text-sm font-black text-white">Top Scorers</h3>
+          <h3 className="mt-0.5 text-sm font-black text-white">Artilheiros</h3>
         </div>
         <Link
           href="/statistics"
           className="text-[10px] font-bold uppercase tracking-widest text-[var(--gala-gold-2)] hover:text-[var(--gala-gold-1)] transition-colors"
         >
-          View full statistics →
+          Ver estatísticas completas →
         </Link>
       </div>
 
@@ -39,17 +40,13 @@ export default function TopScorersPreview({ scorers, seasonName }: TopScorersPre
             <span className="w-4 text-center text-xs font-black text-[var(--gala-gold-2)]">
               {i + 1}
             </span>
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[9px] font-black"
-              style={{
-                background: i === 0
-                  ? "linear-gradient(135deg, var(--gala-gold-1), var(--gala-gold-3))"
-                  : "var(--gala-bg-1)",
-                color: i === 0 ? "#050507" : "white",
-                border: i !== 0 ? "1px solid var(--gala-line)" : undefined,
-              }}
-            >
-              {scorer.playerName.slice(0, 2).toUpperCase()}
-            </div>
+            <PlayerAvatar
+              photoUrl={scorer.photoUrl}
+              name={scorer.playerName}
+              sizeClass="h-7 w-7"
+              textSizeClass="text-[9px]"
+              isFirst={i === 0}
+            />
             <span className="flex-1 min-w-0">
               <span className="block truncate text-sm font-bold text-white">{scorer.playerName}</span>
               {scorer.teamName && (
