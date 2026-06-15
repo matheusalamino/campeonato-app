@@ -1,3 +1,12 @@
-export default function LandingPage() {
-  return <div className="px-6 py-20 text-center text-white">Coming soon</div>;
+import HeroSection from "@/components/landing/HeroSection";
+import { getRecentChampions } from "@/lib/landing/queries";
+
+export default async function LandingPage() {
+  const recentChampions = await getRecentChampions(4);
+
+  return (
+    <main>
+      <HeroSection recentChampions={recentChampions} />
+    </main>
+  );
 }
