@@ -1,8 +1,19 @@
 import SeasonStatsPanel from "@/components/landing/SeasonStatsPanel";
-import { getAllChampionships } from "@/lib/landing/queries";
+import AllTimePanel from "@/components/landing/AllTimePanel";
+import {
+  getAllChampionships,
+  getAggregateStats,
+  getAllTimeTopScorers,
+  getMostTitlesTeams,
+} from "@/lib/landing/queries";
 
 export default async function StatisticsPage() {
-  const championships = await getAllChampionships();
+  const [championships, aggregateStats, topScorers, mostTitlesTeams] = await Promise.all([
+    getAllChampionships(),
+    getAggregateStats(),
+    getAllTimeTopScorers(),
+    getMostTitlesTeams(5),
+  ]);
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-12 md:px-10">
@@ -28,7 +39,12 @@ export default async function StatisticsPage() {
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_360px]">
         <SeasonStatsPanel championships={championships} />
-        {/* AllTimePanel added in Task 9 */}
+        <AllTimePanel
+          aggregateStats={aggregateStats}
+          topScorers={topScorers}
+          mostTitlesTeams={mostTitlesTeams}
+          hallOfChampions={championships}
+        />
       </div>
     </main>
   );
