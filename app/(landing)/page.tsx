@@ -1,31 +1,40 @@
 import HeroCarousel from "@/components/landing/HeroCarousel";
-import StatsChips from "@/components/landing/StatsChips";
+import HomeNumbersBar from "@/components/landing/HomeNumbersBar";
+import HomeTournamentCards from "@/components/landing/HomeTournamentCards";
 import TopScorersPreview from "@/components/landing/TopScorersPreview";
-import { getRecentChampions, getAggregateStats, getLatestSeasonTopScorers } from "@/lib/landing/queries";
+import {
+  getRecentChampions,
+  getAggregateStats,
+  getLatestSeasonTopScorers,
+  getLatestChampionByType,
+} from "@/lib/landing/queries";
 
 export default async function LandingPage() {
-  const [recentChampions, stats, { scorers, seasonName }] = await Promise.all([
-    getRecentChampions(4),
-    getAggregateStats(),
-    getLatestSeasonTopScorers(5),
-  ]);
+  const [recentChampions, stats, { scorers, seasonName, tournamentType }, latest] =
+    await Promise.all([
+      getRecentChampions(4),
+      getAggregateStats(),
+      getLatestSeasonTopScorers(5),
+      getLatestChampionByType(),
+    ]);
 
-  const chips = [
-    { value: stats.seasons, label: "Temporadas" },
-    { value: stats.goals, label: "Gols Marcados" },
-    { value: stats.players, label: "Jogadores" },
-  ];
+  const statsHref =
+    tournamentType === "copa_do_mundo" ? "/copa-do-mundo" : "/champions-league";
 
   return (
     <main>
       <HeroCarousel recentChampions={recentChampions} />
-
-      <section className="mx-auto max-w-6xl px-6 py-16 md:px-10">
-        <p className="mb-6 text-center text-[10px] font-black uppercase tracking-[4px] text-[var(--gala-gold-2)]">
-          Em Números
-        </p>
-        <StatsChips chips={chips} />
-        <TopScorersPreview scorers={scorers} seasonName={seasonName} />
+      <HomeTournamentCards
+        copaDomundo={latest.copaDomundo}
+        championsLeague={latest.championsLeague}
+      />
+      <HomeNumbersBar stats={stats} />
+      <section className="px-8 py-12 md:px-14">
+        <TopScorersPreview
+          scorers={scorers}
+          seasonName={seasonName}
+          statsHref={statsHref}
+        />
       </section>
     </main>
   );

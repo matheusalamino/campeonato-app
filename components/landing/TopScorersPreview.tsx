@@ -5,9 +5,10 @@ import PlayerAvatar from "@/components/landing/PlayerAvatar";
 interface TopScorersPreviewProps {
   scorers: TopScorer[];
   seasonName: string | null;
+  statsHref?: string;
 }
 
-export default function TopScorersPreview({ scorers, seasonName }: TopScorersPreviewProps) {
+export default function TopScorersPreview({ scorers, seasonName, statsHref }: TopScorersPreviewProps) {
   if (scorers.length === 0) return null;
   const max = scorers[0]?.goals ?? 1;
 
@@ -27,7 +28,7 @@ export default function TopScorersPreview({ scorers, seasonName }: TopScorersPre
           <h3 className="mt-0.5 text-sm font-black text-white">Artilheiros</h3>
         </div>
         <Link
-          href="/statistics"
+          href={statsHref ?? "/champions-league"}
           className="text-[10px] font-bold uppercase tracking-widest text-[var(--gala-gold-2)] hover:text-[var(--gala-gold-1)] transition-colors"
         >
           Ver estatísticas completas →
