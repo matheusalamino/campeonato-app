@@ -4,12 +4,24 @@ import type { ReactNode } from "react";
 
 export default async function LandingLayout({ children }: { children: ReactNode }) {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("championships")
-    .select("id")
-    .order("season", { ascending: false })
+
+  // Find a championship that has an in-progress match right now
+  const { data: liveMatch } = await supabase
+    .from("knockout_matches")
+    .select("phase_id")
+    .eq("status", "IN_PROGRESS")
     .limit(1)
     .maybeSingle();
 
-  return <LandingShell liveChampionshipId={data?.id ?? null}>{children}</LandingShell>;
+  let liveChampionshipId: string | null = null;
+  if (liveMatch?.phase_id) {
+    const { data: phase } = await supabase
+      .from("phases")
+      .select("championship_id")
+      .eq("id", liveMatch.phase_id)
+      .maybeSingle();
+    liveChampionshipId = phase?.championship_id ?? null;
+  }
+
+  return <LandingShell liveChampionshipId={liveChampionshipId}>{children}</LandingShell>;
 }

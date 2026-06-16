@@ -66,7 +66,11 @@ export default function FilteredRankingsTab({ rankings }: { rankings: PublicRank
       return vb - va;
     });
 
-    return entries.filter((e) => e.combined > 0).slice(0, 30);
+    // When position is filtered, show all players in that position (even zero-stat ones)
+    // so that e.g. "Goleiro + Goals" still shows goalkeepers who haven't scored
+    return entries
+      .filter((e) => position !== null || e.combined > 0)
+      .slice(0, 30);
   }, [rankings.players, statsMap, selectedStats, position, sortKey]);
 
   if (rankings.players.length === 0) {
