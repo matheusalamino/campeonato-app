@@ -1,9 +1,7 @@
-import StatsChips from "@/components/landing/StatsChips";
 import PlayerAvatar from "@/components/landing/PlayerAvatar";
-import type { AggregateStats, AllTimeScorer, MostTitlesTeam, Champion } from "@/lib/landing/queries";
+import type { AllTimeScorer, MostTitlesTeam, Champion } from "@/lib/landing/queries";
 
 interface AllTimePanelProps {
-  aggregateStats: AggregateStats;
   topScorers: AllTimeScorer[];
   mostTitlesTeams: MostTitlesTeam[];
   hallOfChampions: Champion[];
@@ -18,25 +16,12 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 export default function AllTimePanel({
-  aggregateStats,
   topScorers,
   mostTitlesTeams,
   hallOfChampions,
 }: AllTimePanelProps) {
-  const chips = [
-    { value: aggregateStats.seasons, label: "Temporadas" },
-    { value: aggregateStats.goals, label: "Gols" },
-    { value: aggregateStats.players, label: "Jogadores" },
-  ];
-
   return (
     <aside className="flex flex-col gap-8">
-      {/* Números gerais */}
-      <section>
-        <SectionTitle>Em números</SectionTitle>
-        <StatsChips chips={chips} />
-      </section>
-
       {/* Artilheiros de todos os tempos */}
       <section
         className="rounded-2xl p-5"
@@ -85,9 +70,23 @@ export default function AllTimePanel({
           <ul className="flex flex-col gap-2">
             {mostTitlesTeams.map((team, i) => (
               <li key={team.teamName} className="flex items-center gap-3">
-                <span className="w-4 text-center text-xs font-black text-[var(--gala-gold-2)]">{i + 1}</span>
+                <span className="w-5 text-center text-xs font-black text-[var(--gala-gold-2)]">{i + 1}</span>
                 <span className="flex-1 text-sm font-bold text-white">{team.teamName}</span>
-                <span className="font-black text-[var(--gala-gold-2)]">{team.titles}× 🏆</span>
+                <span className="flex items-center gap-2 text-xs font-black text-[var(--gala-gold-2)]">
+                  {team.titles}× 🏆
+                </span>
+                <span className="flex gap-1">
+                  {team.championsLeague > 0 && (
+                    <span className="rounded px-1.5 py-0.5 text-[9px] font-black" style={{ background: "rgba(212,160,23,0.12)", border: "1px solid rgba(212,160,23,0.2)", color: "var(--gala-gold-2)" }}>
+                      CL {team.championsLeague}×
+                    </span>
+                  )}
+                  {team.copaDomundo > 0 && (
+                    <span className="rounded px-1.5 py-0.5 text-[9px] font-black" style={{ background: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.2)", color: "#60a5fa" }}>
+                      CM {team.copaDomundo}×
+                    </span>
+                  )}
+                </span>
               </li>
             ))}
           </ul>
@@ -110,15 +109,23 @@ export default function AllTimePanel({
             {hallOfChampions.map((c) => (
               <li
                 key={c.id}
-                className="flex items-center gap-3 rounded-lg px-3 py-2"
+                className="flex items-center gap-3 rounded-xl px-4 py-2.5"
                 style={{ background: "var(--gala-bg-1)", border: "1px solid var(--gala-line)" }}
               >
-                <span
-                  className="text-xs font-black"
-                  style={{ color: "var(--gala-gold-2)", minWidth: "2.5rem" }}
-                >
+                <span className="text-xs font-black text-[var(--gala-gold-2)] w-10 shrink-0">
                   {c.season ?? "—"}
                 </span>
+                {c.tournamentType && (
+                  <span className="text-[8px] font-black rounded px-1.5 py-0.5 shrink-0"
+                    style={
+                      c.tournamentType === "champions_league"
+                        ? { background: "rgba(212,160,23,0.12)", border: "1px solid rgba(212,160,23,0.2)", color: "var(--gala-gold-2)" }
+                        : { background: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.2)", color: "#60a5fa" }
+                    }
+                  >
+                    {c.tournamentType === "champions_league" ? "🏆 CL" : "🌍 CM"}
+                  </span>
+                )}
                 <span className="flex-1 truncate text-sm font-bold text-white">
                   {c.championName ?? <span className="font-normal text-[var(--gala-ink-dim)]">A definir</span>}
                 </span>

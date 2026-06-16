@@ -1,21 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import type { Champion, AggregateStats, AllTimeScorer, MostTitlesTeam } from "@/lib/landing/queries";
+import type { Champion, AllTimeScorer, MostTitlesTeam } from "@/lib/landing/queries";
 import AllTimePanel from "@/components/landing/AllTimePanel";
 import ChampionshipTabs from "@/components/landing/ChampionshipTabs";
 import PlayerAvatar from "@/components/landing/PlayerAvatar";
 
 interface StatisticsShellProps {
   championships: Champion[];
-  aggregateStats: AggregateStats;
   topScorers: AllTimeScorer[];
   mostTitlesTeams: MostTitlesTeam[];
 }
 
 export default function StatisticsShell({
   championships,
-  aggregateStats,
   topScorers,
   mostTitlesTeams,
 }: StatisticsShellProps) {
@@ -48,7 +46,6 @@ export default function StatisticsShell({
       {/* Content */}
       {selectedId === null || selected === null ? (
         <AllTimePanel
-          aggregateStats={aggregateStats}
           topScorers={topScorers}
           mostTitlesTeams={mostTitlesTeams}
           hallOfChampions={championships}
