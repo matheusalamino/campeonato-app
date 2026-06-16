@@ -105,15 +105,10 @@ export function aggregateMostTitlesByType(
 
 // ── Server queries ────────────────────────────────────────────────────────────
 
-const CHAMPION_SELECT = `
-  id, name, season,
-  tournament_type,
-  championship_teams!champion_team_id (
-    teams ( name )
-  )
-`.trim();
+const CHAMPION_SELECT =
+  "id, name, season, tournament_type, championship_teams!champion_team_id ( teams ( name ) )";
 
-function rowToChampion(row: {
+type ChampionSelectRow = {
   id: string;
   name: string;
   season: string | null;
@@ -122,7 +117,9 @@ function rowToChampion(row: {
     | { teams: { name: string } | { name: string }[] | null }
     | { teams: { name: string } | { name: string }[] | null }[]
     | null;
-}): Champion {
+};
+
+function rowToChampion(row: ChampionSelectRow): Champion {
   const ct = Array.isArray(row.championship_teams)
     ? row.championship_teams[0]
     : row.championship_teams;
@@ -142,7 +139,7 @@ export async function getAllChampionships(): Promise<Champion[]> {
     .from("championships")
     .select(CHAMPION_SELECT)
     .order("season", { ascending: false });
-  return (data ?? []).map(rowToChampion);
+  return ((data ?? []) as unknown as ChampionSelectRow[]).map(rowToChampion);
 }
 
 export async function getChampionshipsByType(type: TournamentType): Promise<Champion[]> {
@@ -152,7 +149,7 @@ export async function getChampionshipsByType(type: TournamentType): Promise<Cham
     .select(CHAMPION_SELECT)
     .eq("tournament_type", type)
     .order("season", { ascending: false });
-  return (data ?? []).map(rowToChampion);
+  return ((data ?? []) as unknown as ChampionSelectRow[]).map(rowToChampion);
 }
 
 export async function getLatestChampionByType(): Promise<{
@@ -177,8 +174,8 @@ export async function getLatestChampionByType(): Promise<{
       .maybeSingle(),
   ]);
   return {
-    copaDomundo: copaRes.data ? rowToChampion(copaRes.data) : null,
-    championsLeague: clRes.data ? rowToChampion(clRes.data) : null,
+    copaDomundo: copaRes.data ? rowToChampion(copaRes.data as unknown as ChampionSelectRow) : null,
+    championsLeague: clRes.data ? rowToChampion(clRes.data as unknown as ChampionSelectRow) : null,
   };
 }
 
@@ -204,15 +201,12 @@ export async function getPodiumByChampionship(id: string): Promise<PodiumEntry[]
     return (t as { name: string } | null)?.name ?? null;
   }
 
-  const first = extractName(
-    Array.isArray(data.championship_teams) ? data.championship_teams[0] : data.championship_teams,
-  );
-  const second = extractName(
-    Array.isArray(data.runner_up) ? data.runner_up[0] : (data.runner_up as typeof data.championship_teams),
-  );
-  const third = extractName(
-    Array.isArray(data.third_place) ? data.third_place[0] : (data.third_place as typeof data.championship_teams),
-  );
+  type PodiumRel = { teams: { name: string } | { name: string }[] | null } | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const anyData = data as any;
+  const first = extractName(anyData.championship_teams as PodiumRel);
+  const second = extractName(anyData.runner_up as PodiumRel);
+  const third = extractName(anyData.third_place as PodiumRel);
 
   const podium: PodiumEntry[] = [];
   if (first) podium.push({ teamName: first, place: 1 });
@@ -246,7 +240,7 @@ export async function getRecentChampions(limit = 4): Promise<Champion[]> {
     .select(CHAMPION_SELECT)
     .order("season", { ascending: false })
     .limit(limit);
-  return (data ?? []).map(rowToChampion);
+  return ((data ?? []) as unknown as ChampionSelectRow[]).map(rowToChampion);
 }
 
 export async function getAllTimeTopScorers(): Promise<AllTimeScorer[]> {
