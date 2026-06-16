@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aggregateAllTimeScorers, mapChampionRows, type ChampionRow, type RawPlayerStat } from "./queries";
+import { aggregateAllTimeScorers, mapChampionRows, aggregateMostTitlesByType, type ChampionRow, type RawPlayerStat } from "./queries";
 
 describe("aggregateAllTimeScorers", () => {
   it("sums goals for the same player name across seasons", () => {
@@ -43,11 +43,25 @@ describe("aggregateAllTimeScorers", () => {
 describe("mapChampionRows", () => {
   it("maps DB rows to typed champion objects", () => {
     const rows: ChampionRow[] = [
-      { id: "c1", name: "Campeonato V", season: "2025", champion_name: "União FC" },
-      { id: "c2", name: "Campeonato IV", season: "2024", champion_name: null },
+      { id: "c1", name: "Campeonato V", season: "2025", champion_name: "União FC", tournament_type: null },
+      { id: "c2", name: "Campeonato IV", season: "2024", champion_name: null, tournament_type: null },
     ];
     const result = mapChampionRows(rows);
-    expect(result[0]).toEqual({ id: "c1", name: "Campeonato V", season: "2025", championName: "União FC" });
+    expect(result[0]).toEqual({ id: "c1", name: "Campeonato V", season: "2025", championName: "União FC", tournamentType: null });
     expect(result[1].championName).toBeNull();
+  });
+});
+
+describe("aggregateMostTitlesByType", () => {
+  it("splits title counts by tournament_type", () => {
+    const champions: import("./queries").Champion[] = [
+      { id: "1", name: "CL 2026", season: "2026", championName: "Time A", tournamentType: "champions_league" },
+      { id: "2", name: "CL 2024", season: "2024", championName: "Time A", tournamentType: "champions_league" },
+      { id: "3", name: "Copa 2024", season: "2024", championName: "Time B", tournamentType: "copa_do_mundo" },
+      { id: "4", name: "CL 2022", season: "2022", championName: "Time B", tournamentType: "champions_league" },
+    ];
+    const result = aggregateMostTitlesByType(champions, 3);
+    expect(result[0]).toMatchObject({ teamName: "Time A", titles: 2, championsLeague: 2, copaDomundo: 0 });
+    expect(result[1]).toMatchObject({ teamName: "Time B", titles: 2, championsLeague: 1, copaDomundo: 1 });
   });
 });
