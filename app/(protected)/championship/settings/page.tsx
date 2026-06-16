@@ -64,13 +64,23 @@ export default function SettingsPage() {
       .from("championships")
       .update(globalSettings)
       .eq("id", championship.id);
-    
+
     setSavingGlobal(false);
     if (error) {
       toast.error("Erro ao salvar configurações");
     } else {
       toast.success("Configurações salvas com sucesso");
     }
+  }
+
+  async function handleSaveTournamentType(type: string) {
+    if (!championship?.id) return;
+    const { error } = await supabase
+      .from("championships")
+      .update({ tournament_type: type || null })
+      .eq("id", championship.id);
+    if (error) toast.error("Erro ao salvar tipo de torneio");
+    else toast.success("Tipo de torneio salvo");
   }
 
   if (!championship) {
@@ -265,6 +275,26 @@ export default function SettingsPage() {
           ))}
         </div>
       </div>
+
+      {/* TIPO DE TORNEIO */}
+      <section className="rounded-xl border border-[var(--gala-line)] bg-[var(--gala-panel)] p-5">
+        <h3 className="mb-4 flex items-center gap-2 text-sm font-black">
+          <Trophy className="h-4 w-4 text-[var(--gala-gold-2)]" />
+          Tipo de Torneio
+        </h3>
+        <p className="mb-4 text-xs text-[var(--gala-ink-dim)]">
+          Classifica este campeonato para as páginas públicas (Copa do Mundo ou Champions League).
+        </p>
+        <select
+          className="w-full rounded-lg border border-[var(--gala-line)] bg-[var(--gala-bg-0)] px-3 py-2 text-sm"
+          defaultValue={(championship as { tournament_type?: string | null }).tournament_type ?? ""}
+          onChange={async (e) => { await handleSaveTournamentType(e.target.value); }}
+        >
+          <option value="">— Sem classificação —</option>
+          <option value="champions_league">🏆 Champions League Sorocaba</option>
+          <option value="copa_do_mundo">🌍 Copa do Mundo Sorocaba</option>
+        </select>
+      </section>
 
       {/* CARROSSEL DO TELÃO */}
       <CarouselConfigSection championshipId={championship.id} />
