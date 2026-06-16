@@ -18,7 +18,7 @@ export default function HeroCarousel({ recentChampions }: HeroCarouselProps) {
 
   useEffect(() => {
     if (paused) return;
-    const id = setInterval(next, 6000);
+    const id = setInterval(next, 5000);
     return () => clearInterval(id);
   }, [paused, next]);
 

@@ -26,7 +26,7 @@ export default function StatsChips({ chips }: { chips: Chip[] }) {
           >
             {chip.value.toLocaleString()}
           </p>
-          <p className="mt-1 text-[10px] font-bold uppercase tracking-[3px] text-[var(--gala-ink-dim)]">
+          <p className="mt-1 text-[10px] font-bold uppercase tracking-[1px] text-[var(--gala-ink-dim)] break-words">
             {chip.label}
           </p>
         </div>

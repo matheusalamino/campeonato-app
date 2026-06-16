@@ -40,6 +40,12 @@ export default function LandingHeader({ liveChampionshipId, onLoginClick }: Land
         >
           Estatísticas
         </Link>
+        <Link
+          href="/historico"
+          className="text-xs font-bold uppercase tracking-widest text-[var(--gala-ink-dim)] hover:text-[var(--gala-gold-2)] transition-colors"
+        >
+          Histórico
+        </Link>
         {liveChampionshipId && (
           <Link
             href={`/live/${liveChampionshipId}`}
