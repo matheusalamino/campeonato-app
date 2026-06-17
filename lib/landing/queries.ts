@@ -45,7 +45,7 @@ export type TopScorer = {
   goals: number;
 };
 
-export type PodiumEntry = { teamName: string; place: 1 | 2 | 3 };
+export type PodiumEntry = { teamName: string; logoUrl: string | null; place: 1 | 2 | 3 };
 
 // ── Pure transformers (exported for tests) ────────────────────────────────────
 
@@ -184,34 +184,35 @@ export async function getPodiumByChampionship(id: string): Promise<PodiumEntry[]
   const { data } = await supabase
     .from("championships")
     .select(`
-      championship_teams!champion_team_id ( teams ( name ) ),
-      runner_up:championship_teams!runner_up_team_id ( teams ( name ) ),
-      third_place:championship_teams!third_place_team_id ( teams ( name ) )
+      championship_teams!champion_team_id ( teams ( name, logo_url ) ),
+      runner_up:championship_teams!runner_up_team_id ( teams ( name, logo_url ) ),
+      third_place:championship_teams!third_place_team_id ( teams ( name, logo_url ) )
     `)
     .eq("id", id)
     .maybeSingle();
 
   if (!data) return [];
 
-  function extractName(
-    rel: { teams: { name: string } | { name: string }[] | null } | null | undefined,
-  ): string | null {
+  function extractTeam(
+    rel: { teams: { name: string; logo_url?: string | null } | { name: string; logo_url?: string | null }[] | null } | null | undefined,
+  ): { name: string; logoUrl: string | null } | null {
     if (!rel) return null;
     const t = Array.isArray(rel.teams) ? rel.teams[0] : rel.teams;
-    return (t as { name: string } | null)?.name ?? null;
+    if (!t) return null;
+    return { name: t.name, logoUrl: (t as { logo_url?: string | null }).logo_url ?? null };
   }
 
-  type PodiumRel = { teams: { name: string } | { name: string }[] | null } | null;
+  type PodiumRel = { teams: { name: string; logo_url?: string | null } | { name: string; logo_url?: string | null }[] | null } | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const anyData = data as any;
-  const first = extractName(anyData.championship_teams as PodiumRel);
-  const second = extractName(anyData.runner_up as PodiumRel);
-  const third = extractName(anyData.third_place as PodiumRel);
+  const first = extractTeam(anyData.championship_teams as PodiumRel);
+  const second = extractTeam(anyData.runner_up as PodiumRel);
+  const third = extractTeam(anyData.third_place as PodiumRel);
 
   const podium: PodiumEntry[] = [];
-  if (first) podium.push({ teamName: first, place: 1 });
-  if (second) podium.push({ teamName: second, place: 2 });
-  if (third) podium.push({ teamName: third, place: 3 });
+  if (first) podium.push({ teamName: first.name, logoUrl: first.logoUrl, place: 1 });
+  if (second) podium.push({ teamName: second.name, logoUrl: second.logoUrl, place: 2 });
+  if (third) podium.push({ teamName: third.name, logoUrl: third.logoUrl, place: 3 });
   return podium;
 }
 

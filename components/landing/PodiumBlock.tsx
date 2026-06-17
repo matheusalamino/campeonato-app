@@ -1,6 +1,7 @@
 import type { PodiumEntry } from "@/lib/landing/queries";
 import type { PublicRankings } from "@/features/hooks/usePublicRankings";
 import PlayerAvatar from "@/components/landing/PlayerAvatar";
+import TeamLogo from "@/components/landing/TeamLogo";
 
 interface PodiumBlockProps {
   championshipName: string;
@@ -52,19 +53,19 @@ export default function PodiumBlock({
       {!isAllEditions && (
         <div className="mb-8 flex items-end justify-center gap-4">
           {second ? (
-            <PodiumCard place={2} teamName={second.teamName} />
+            <PodiumCard place={2} teamName={second.teamName} logoUrl={second.logoUrl} />
           ) : (
             <div className="w-36" />
           )}
           {first ? (
-            <PodiumCard place={1} teamName={first.teamName} />
+            <PodiumCard place={1} teamName={first.teamName} logoUrl={first.logoUrl} />
           ) : (
             <div className="w-44 h-28 rounded-xl flex items-center justify-center" style={{ border: "2px dashed var(--gala-line)" }}>
               <p className="text-xs text-[var(--gala-ink-dim)]">A definir</p>
             </div>
           )}
           {third ? (
-            <PodiumCard place={3} teamName={third.teamName} />
+            <PodiumCard place={3} teamName={third.teamName} logoUrl={third.logoUrl} />
           ) : (
             <div className="w-32" />
           )}
@@ -110,15 +111,17 @@ export default function PodiumBlock({
   );
 }
 
-function PodiumCard({ place, teamName }: { place: 1 | 2 | 3; teamName: string }) {
+function PodiumCard({ place, teamName, logoUrl }: { place: 1 | 2 | 3; teamName: string; logoUrl: string | null }) {
   const cfg = PLACE_CONFIG[place];
   const widthClass = place === 1 ? "w-44" : place === 2 ? "w-36" : "w-32";
+  const logoSize = place === 1 ? 40 : 32;
   return (
     <div className="flex flex-col items-center gap-2">
       <div
-        className={`${widthClass} ${cfg.height} rounded-xl flex items-center justify-center px-3`}
+        className={`${widthClass} ${cfg.height} rounded-xl flex flex-col items-center justify-center gap-2 px-3`}
         style={{ background: cfg.bg, border: cfg.border, boxShadow: cfg.shadow }}
       >
+        <TeamLogo logoUrl={logoUrl} name={teamName} size={logoSize} />
         <p
           className="text-center font-black text-sm leading-tight"
           style={{ color: place === 1 ? "var(--gala-gold-1)" : "var(--gala-ink)" }}

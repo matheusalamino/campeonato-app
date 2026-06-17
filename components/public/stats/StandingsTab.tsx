@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useGroupStandings } from "@/features/hooks/useGroupStandings";
 import { useChampionshipMatches } from "@/features/hooks/useChampionshipMatches";
+import TeamLogo from "@/components/landing/TeamLogo";
 
 const supabase = createClient();
 const HEADERS = ["P", "J", "V", "E", "D", "GP", "GC", "SG"];
@@ -69,7 +70,8 @@ export default function StandingsTab({ championshipId }: { championshipId: strin
                 {standings[g].map((t, i) => (
                   <tr key={t.championshipTeamId} className={`border-t border-[var(--gala-line)]/60 ${i < 2 ? "text-[var(--gala-gold-1)]" : ""}`}>
                     <td className="flex items-center gap-2 py-1.5 font-semibold">
-                      <span className={`w-4 text-center font-extrabold ${i < 2 ? "text-[var(--gala-gold-2)]" : "text-[var(--gala-ink-dim)]"}`}>{i + 1}</span>
+                      <span className={`w-4 text-center font-extrabold shrink-0 ${i < 2 ? "text-[var(--gala-gold-2)]" : "text-[var(--gala-ink-dim)]"}`}>{i + 1}</span>
+                      <TeamLogo logoUrl={t.logoUrl} name={t.name} size={20} />
                       {t.name}
                     </td>
                     <td className="text-center font-extrabold">{t.points}</td>
@@ -113,9 +115,10 @@ export default function StandingsTab({ championshipId }: { championshipId: strin
                       {match.groupLabel}
                     </span>
                   )}
-                  <span className="flex-1 min-w-0 text-right text-sm font-bold text-white truncate">
-                    {match.home.label}
-                  </span>
+                  <div className="flex-1 min-w-0 flex items-center justify-end gap-2">
+                    <span className="truncate text-sm font-bold text-white">{match.home.label}</span>
+                    <TeamLogo logoUrl={match.home.logoUrl} name={match.home.label} size={22} />
+                  </div>
                   <div
                     className="shrink-0 rounded px-2 py-1 text-sm font-black tabular-nums"
                     style={{
@@ -127,9 +130,10 @@ export default function StandingsTab({ championshipId }: { championshipId: strin
                   >
                     {hasScore ? `${match.homeScore} × ${match.awayScore}` : isLive ? "Ao vivo" : "—"}
                   </div>
-                  <span className="flex-1 min-w-0 text-sm font-bold text-white truncate">
-                    {match.away.label}
-                  </span>
+                  <div className="flex-1 min-w-0 flex items-center gap-2">
+                    <TeamLogo logoUrl={match.away.logoUrl} name={match.away.label} size={22} />
+                    <span className="truncate text-sm font-bold text-white">{match.away.label}</span>
+                  </div>
                   {isLive && (
                     <span className="shrink-0 text-[9px] font-black text-red-400">● AO VIVO</span>
                   )}

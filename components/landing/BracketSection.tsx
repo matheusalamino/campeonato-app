@@ -1,6 +1,7 @@
 "use client";
 
 import { useChampionshipMatches, type ChampionshipMatchItem } from "@/features/hooks/useChampionshipMatches";
+import TeamLogo from "@/components/landing/TeamLogo";
 
 const CARD_H = 76;   // match card height in px
 const SLOT_H = 96;   // base slot height (card + gap)
@@ -214,7 +215,8 @@ function MatchCard({
       )}
 
       {/* Home */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-1.5">
+        <TeamLogo logoUrl={match.home.logoUrl} name={match.home.label} size={16} />
         <span className="flex-1 min-w-0 truncate text-[11px] font-bold text-white group-hover:text-[var(--gala-gold-1)] transition-colors leading-none">
           {match.home.label}
         </span>
@@ -227,7 +229,8 @@ function MatchCard({
       </div>
 
       {/* Away */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-1.5">
+        <TeamLogo logoUrl={match.away.logoUrl} name={match.away.label} size={16} />
         <span className="flex-1 min-w-0 truncate text-[11px] font-bold text-white group-hover:text-[var(--gala-gold-1)] transition-colors leading-none">
           {match.away.label}
         </span>
