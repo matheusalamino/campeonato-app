@@ -36,6 +36,7 @@ export type RankingEntry = {
   position: string | null;
   value: number;       // gols, assistências, pontos, IOG...
   detail?: string;     // ex.: "OVR 78"
+  isOverride?: boolean;
 };
 
 export const POSITION_LABELS: Record<string, string> = {
