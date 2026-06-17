@@ -54,7 +54,7 @@ export default function TournamentTabs({ championshipId, rankings, loading }: To
       </nav>
 
       {/* Tab content */}
-      <div className="px-6 py-8 md:px-10">
+      <div className="px-4 py-6 sm:px-6 md:py-8 md:px-10">
         {loading && rankings.players.length === 0 ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {Array.from({ length: 4 }).map((_, i) => (

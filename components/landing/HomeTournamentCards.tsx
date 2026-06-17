@@ -18,7 +18,7 @@ function TournamentCard({ href, icon, title, subtitle, latest }: TournamentCardP
   return (
     <Link
       href={href}
-      className="group relative flex-1 min-w-0 rounded-2xl p-8 flex flex-col gap-4 transition-all hover:scale-[1.01]"
+      className="group relative flex-1 min-w-0 rounded-2xl p-5 sm:p-8 flex flex-col gap-4 transition-all hover:scale-[1.01]"
       style={{
         background: "linear-gradient(135deg, rgba(212,160,23,0.06), rgba(5,5,7,0.95))",
         border: "1px solid var(--gala-line)",
@@ -77,7 +77,7 @@ function TournamentCard({ href, icon, title, subtitle, latest }: TournamentCardP
 
 export default function HomeTournamentCards({ copaDomundo, championsLeague }: HomeTournamentCardsProps) {
   return (
-    <section className="w-full px-8 py-12 md:px-14">
+    <section className="w-full px-4 py-8 sm:px-8 md:py-12 md:px-14">
       <div className="flex flex-col md:flex-row gap-6">
         <TournamentCard
           href="/copa-do-mundo"

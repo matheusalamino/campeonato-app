@@ -13,7 +13,7 @@ export default function HomeNumbersBar({ stats }: HomeNumbersBarProps) {
 
   return (
     <div
-      className="w-full py-10 px-8 md:px-14"
+      className="w-full py-8 px-4 sm:px-8 md:py-10 md:px-14"
       style={{ background: "var(--gala-bg-1)", borderTop: "1px solid var(--gala-line)", borderBottom: "1px solid var(--gala-line)" }}
     >
       <div className="flex flex-wrap justify-center gap-12 md:gap-24">

@@ -42,7 +42,7 @@ export default function PodiumBlock({
 
   return (
     <div
-      className="w-full px-8 py-8 md:px-10"
+      className="w-full px-4 py-6 sm:px-8 md:py-8 md:px-10"
       style={{ borderBottom: "1px solid var(--gala-line)" }}
     >
       <p className="mb-6 text-[9px] font-black uppercase tracking-[4px] text-[var(--gala-gold-2)]">
@@ -51,7 +51,7 @@ export default function PodiumBlock({
 
       {/* Podium — only when a specific edition is selected */}
       {!isAllEditions && (
-        <div className="mb-8 flex items-end justify-center gap-4">
+        <div className="mb-6 flex items-end justify-center gap-2 sm:gap-4">
           {second ? (
             <PodiumCard place={2} teamName={second.teamName} logoUrl={second.logoUrl} />
           ) : (
