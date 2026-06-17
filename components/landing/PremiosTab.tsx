@@ -104,7 +104,17 @@ function AwardCard({
       />
 
       <div className="min-w-0 flex-1">
-        <p className="truncate font-bold text-white">{entry.playerName}</p>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p className="truncate font-bold text-white">{entry.playerName}</p>
+          {entry.isOverride && (
+            <span
+              className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide"
+              style={{ background: "rgba(212,160,23,0.15)", border: "1px solid var(--gala-gold-3)", color: "var(--gala-gold-2)" }}
+            >
+              ★ Premiado
+            </span>
+          )}
+        </div>
         <p className="text-[10px] text-[var(--gala-ink-dim)] truncate">{entry.teamName}</p>
         {entry.detail && (
           <p className="text-[10px] text-[var(--gala-gold-2)] font-bold mt-0.5">{entry.detail}</p>

@@ -26,8 +26,18 @@ function Row({ entry, rank }: { entry: RankingEntry; rank: number }) {
           {entry.playerName.slice(0, 2).toUpperCase()}
         </span>
       )}
-      <span className="flex-1 truncate">
-        {entry.playerName}
+      <span className="flex-1 min-w-0">
+        <span className="flex items-center gap-1 flex-wrap">
+          <span className="truncate">{entry.playerName}</span>
+          {entry.isOverride && (
+            <span
+              className="shrink-0 rounded-full px-1 py-0.5 text-[8px] font-black uppercase"
+              style={{ background: "rgba(212,160,23,0.12)", border: "1px solid var(--gala-gold-3)", color: "var(--gala-gold-2)" }}
+            >
+              ★
+            </span>
+          )}
+        </span>
         <small className="block text-[10px] uppercase tracking-wide text-[var(--gala-ink-dim)]">
           {entry.teamName ?? "—"}{entry.detail ? ` · ${entry.detail}` : ""}
         </small>

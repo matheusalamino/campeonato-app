@@ -15,6 +15,15 @@ const supabase = createClient();
 
 type ChampTeamOption = { id: string; name: string };
 
+type PrizeKey = 'craque' | 'goleiro' | 'revelacao' | 'tecnico';
+
+const PRIZE_LABELS: Record<PrizeKey, { label: string; emoji: string; isTeam: boolean }> = {
+  craque:    { label: "Melhor Jogador",  emoji: "⭐", isTeam: false },
+  goleiro:   { label: "Melhor Goleiro",  emoji: "🧤", isTeam: false },
+  revelacao: { label: "Revelação",       emoji: "🚀", isTeam: false },
+  tecnico:   { label: "Técnico",         emoji: "📋", isTeam: true  },
+};
+
 type GlobalSettings = {
   points_win: number;
   points_draw: number;
@@ -46,6 +55,10 @@ export default function SettingsPage() {
   const [podium, setPodium] = useState({ champion: "", runnerUp: "", thirdPlace: "" });
   const [savingPodium, setSavingPodium] = useState(false);
 
+  const [registeredPlayers, setRegisteredPlayers] = useState<{ id: string; name: string }[]>([]);
+  const [prizeOverrides, setPrizeOverrides] = useState<Partial<Record<PrizeKey, string>>>({});
+  const [savingPrize, setSavingPrize] = useState<PrizeKey | null>(null);
+
   const { phases, loading, deletePhase, reload } = usePhases(championship?.id || null);
 
   const [globalSettings, setGlobalSettings] = useState<GlobalSettings>({
@@ -66,7 +79,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!championship?.id) return;
     void (async () => {
-      const [teamsRes, champRes] = await Promise.all([
+      const [teamsRes, champRes, playersRes, overridesRes] = await Promise.all([
         supabase
           .from("championship_teams")
           .select("id, teams ( name )")
@@ -76,6 +89,14 @@ export default function SettingsPage() {
           .select("champion_team_id, runner_up_team_id, third_place_team_id")
           .eq("id", championship.id)
           .maybeSingle(),
+        supabase
+          .from("championship_registrations")
+          .select("id, players(name)")
+          .eq("championship_id", championship.id),
+        supabase
+          .from("championship_prize_overrides")
+          .select("prize_key, override_value")
+          .eq("championship_id", championship.id),
       ]);
       const teams: ChampTeamOption[] = (teamsRes.data ?? []).map((r: any) => ({
         id: r.id,
@@ -89,6 +110,18 @@ export default function SettingsPage() {
           thirdPlace: champRes.data.third_place_team_id ?? "",
         });
       }
+
+      const players = ((playersRes.data ?? []) as any[]).map((r) => ({
+        id: r.id as string,
+        name: (Array.isArray(r.players) ? r.players[0]?.name : r.players?.name) as string ?? r.id,
+      })).sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, "pt-BR"));
+      setRegisteredPlayers(players);
+
+      const overrides: Partial<Record<PrizeKey, string>> = {};
+      for (const row of (overridesRes.data ?? []) as { prize_key: string; override_value: string }[]) {
+        overrides[row.prize_key as PrizeKey] = row.override_value;
+      }
+      setPrizeOverrides(overrides);
     })();
   }, [championship?.id]);
 
@@ -122,6 +155,34 @@ export default function SettingsPage() {
     setSavingPodium(false);
     if (error) toast.error("Erro ao salvar pódio");
     else toast.success("Pódio salvo com sucesso");
+  }
+
+  async function handleSavePrizeOverride(prizeKey: PrizeKey, overrideValue: string | null) {
+    if (!championship?.id) return;
+    setSavingPrize(prizeKey);
+    try {
+      if (overrideValue) {
+        await supabase.from("championship_prize_overrides").upsert({
+          championship_id: championship.id,
+          prize_key: prizeKey,
+          override_value: overrideValue,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "championship_id,prize_key" });
+        setPrizeOverrides(prev => ({ ...prev, [prizeKey]: overrideValue }));
+        toast.success("Prêmio salvo");
+      } else {
+        await supabase.from("championship_prize_overrides")
+          .delete()
+          .eq("championship_id", championship.id)
+          .eq("prize_key", prizeKey);
+        setPrizeOverrides(prev => { const next = { ...prev }; delete next[prizeKey]; return next; });
+        toast.success("Override removido");
+      }
+    } catch {
+      toast.error("Erro ao salvar prêmio");
+    } finally {
+      setSavingPrize(null);
+    }
   }
 
   async function handleSaveTournamentType(type: string) {
@@ -388,6 +449,55 @@ export default function SettingsPage() {
               </select>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* PRÊMIOS INDIVIDUAIS */}
+      <section className="rounded-xl border border-[var(--gala-line)] bg-[var(--gala-panel)] p-5">
+        <h3 className="mb-1 flex items-center gap-2 text-sm font-black">
+          <Trophy className="h-4 w-4 text-[var(--gala-gold-2)]" />
+          Prêmios Individuais
+        </h3>
+        <p className="mb-4 text-xs text-[var(--gala-ink-dim)]">
+          Define o vencedor votado de cada prêmio. Substitui o resultado algorítmico nas páginas públicas.
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {(Object.entries(PRIZE_LABELS) as [PrizeKey, typeof PRIZE_LABELS[PrizeKey]][]).map(([key, { label, emoji, isTeam }]) => {
+            const options = isTeam ? champTeams : registeredPlayers;
+            return (
+              <div key={key} className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-[2px] text-[var(--gala-gold-2)]">
+                  {emoji} {label}
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    className="flex-1 rounded-lg border border-[var(--gala-line)] bg-[var(--gala-bg-0)] px-3 py-2 text-sm"
+                    value={prizeOverrides[key] ?? ""}
+                    onChange={(e) => void handleSavePrizeOverride(key, e.target.value || null)}
+                    disabled={savingPrize === key}
+                  >
+                    <option value="">— Sem override (automático) —</option>
+                    {options.map(o => (
+                      <option key={o.id} value={o.id}>{o.name}</option>
+                    ))}
+                  </select>
+                  {prizeOverrides[key] && (
+                    <button
+                      onClick={() => void handleSavePrizeOverride(key, null)}
+                      disabled={savingPrize === key}
+                      className="rounded-lg border border-red-900/50 px-2 py-1 text-xs text-red-400 hover:bg-red-900/20 transition-all disabled:opacity-50"
+                      title="Remover override"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                {savingPrize === key && (
+                  <p className="text-[10px] text-[var(--gala-ink-dim)]">Salvando...</p>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
 

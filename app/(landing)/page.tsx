@@ -29,7 +29,7 @@ export default async function LandingPage() {
         championsLeague={latest.championsLeague}
       />
       <HomeNumbersBar stats={stats} />
-      <section className="px-8 py-12 md:px-14">
+      <section className="px-4 py-8 sm:px-8 md:py-12 md:px-14">
         <TopScorersPreview
           scorers={scorers}
           seasonName={seasonName}
