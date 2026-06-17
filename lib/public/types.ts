@@ -23,6 +23,7 @@ export type PublicPlayerStats = {
   penaltySaves: number;
   fouls: number;
   matchesPlayed: number;
+  minutesPlayed: number;
 };
 
 // Entrada genérica de ranking exibida nos pódios/listas
@@ -45,3 +46,16 @@ export const POSITION_LABELS: Record<string, string> = {
   MEI: "Meia",
   ATA: "Atacante",
 };
+
+// Maps full-word labels (as stored in DB) back to position codes
+const LABEL_TO_CODE: Record<string, string> = {
+  Goleiro: "GOL", Zagueiro: "ZAG", Lateral: "LAT",
+  Volante: "VOL", Meia: "MEI", Atacante: "ATA",
+  // tolerate codes already being codes
+  GOL: "GOL", ZAG: "ZAG", LAT: "LAT", VOL: "VOL", MEI: "MEI", ATA: "ATA",
+};
+
+export function normalizePosition(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  return LABEL_TO_CODE[raw] ?? LABEL_TO_CODE[raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()] ?? raw;
+}
