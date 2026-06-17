@@ -41,6 +41,7 @@ export default function LiveCarousel({
   const [index, setIndex] = useState(0);
   const [celebration, setCelebration] = useState<GoalSignal | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchStartX = useRef<number | null>(null);
 
   // Avanço automático: agenda o próximo card pela duração do atual.
   // Pausa durante a celebração de gol; ao terminar, reagenda a duração cheia do card live.
@@ -87,11 +88,30 @@ export default function LiveCarousel({
     return () => window.removeEventListener("keydown", onKey);
   }, [cards, celebration]);
 
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  }, []);
+
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (touchStartX.current === null || celebration) return;
+      const delta = e.changedTouches[0].clientX - touchStartX.current;
+      touchStartX.current = null;
+      if (delta < -50) setIndex((cur) => nextIndex(cards, cur));
+      else if (delta > 50) setIndex((cur) => prevIndex(cards, cur));
+    },
+    [cards, celebration],
+  );
+
   if (cards.length === 0) return null;
   const card = cards[Math.min(index, cards.length - 1)];
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden">
+    <div
+      className="relative h-screen w-screen overflow-hidden"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       {/* fundo animado compartilhado */}
       <div className="gala-beams pointer-events-none absolute inset-0" />
       {[12, 28, 55, 72, 88].map((left, i) => (
