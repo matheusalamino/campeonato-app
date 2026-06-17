@@ -5,7 +5,7 @@ import type { PublicRankings } from "@/features/hooks/usePublicRankings";
 import { POSITION_LABELS } from "@/lib/public/types";
 import PlayerAvatar from "@/components/landing/PlayerAvatar";
 
-type StatKey = "goals" | "assists" | "decisiveSaves" | "penaltySaves" | "fouls" | "matchesPlayed";
+type StatKey = "goals" | "assists" | "decisiveSaves" | "penaltySaves" | "fouls" | "matchesPlayed" | "minutesPlayed";
 
 const STAT_OPTS: { key: StatKey; label: string }[] = [
   { key: "goals", label: "Gols" },
@@ -14,6 +14,7 @@ const STAT_OPTS: { key: StatKey; label: string }[] = [
   { key: "penaltySaves", label: "Def. Pênalti" },
   { key: "fouls", label: "Faltas" },
   { key: "matchesPlayed", label: "Jogos" },
+  { key: "minutesPlayed", label: "Minutos" },
 ];
 
 const POSITIONS = Object.entries(POSITION_LABELS).map(([k, v]) => ({ key: k, label: v }));

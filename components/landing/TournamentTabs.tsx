@@ -8,13 +8,13 @@ import BracketSection from "@/components/landing/BracketSection";
 import PremiosTab from "@/components/landing/PremiosTab";
 import DisciplineTab from "@/components/landing/DisciplineTab";
 
-type TabId = "classificacao" | "artilheiros" | "disciplina" | "bracket" | "premios";
+type TabId = "classificacao" | "bracket" | "estatisticas" | "disciplina" | "premios";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "classificacao", label: "🗂️ Classificação" },
-  { id: "artilheiros", label: "📊 Artilheiros" },
+  { id: "bracket", label: "🗓️ Fase Eliminatória" },
+  { id: "estatisticas", label: "📊 Estatísticas" },
   { id: "disciplina", label: "🟨 Disciplina" },
-  { id: "bracket", label: "🗓️ Bracket" },
   { id: "premios", label: "🏅 Prêmios" },
 ];
 
@@ -63,12 +63,12 @@ export default function TournamentTabs({ championshipId, rankings, loading }: To
           </div>
         ) : tab === "classificacao" ? (
           <StandingsTab championshipId={championshipId} />
-        ) : tab === "artilheiros" ? (
+        ) : tab === "bracket" ? (
+          <BracketSection championshipId={championshipId} />
+        ) : tab === "estatisticas" ? (
           <FilteredRankingsTab rankings={rankings} />
         ) : tab === "disciplina" ? (
           <DisciplineTab rankings={rankings} />
-        ) : tab === "bracket" ? (
-          <BracketSection championshipId={championshipId} />
         ) : (
           <PremiosTab rankings={rankings} />
         )}
