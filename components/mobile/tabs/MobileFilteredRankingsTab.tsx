@@ -76,6 +76,10 @@ export default function MobileFilteredRankingsTab({ rankings }: { rankings: Publ
     (position ? 1 : 0) +
     (selectedStats.length > 1 || selectedStats[0] !== "goals" ? 1 : 0);
 
+  const pendingFilterCount =
+    (pendingPosition ? 1 : 0) +
+    (pendingStats.length > 1 || pendingStats[0] !== "goals" ? 1 : 0);
+
   if (rankings.players.length === 0) {
     return <p className="py-8 text-center text-sm text-[var(--gala-ink-dim)]">Nenhum dado disponível.</p>;
   }
@@ -153,7 +157,12 @@ export default function MobileFilteredRankingsTab({ rankings }: { rankings: Publ
                       />
                       <div className="min-w-0">
                         <p className="truncate text-[12px] font-bold text-white">{player.playerName}</p>
-                        <p className="truncate text-[9px] text-[var(--gala-ink-dim)]">{player.teamName}</p>
+                        <p className="truncate text-[9px] text-[var(--gala-ink-dim)]">
+                          {player.teamName}
+                          {player.position && (
+                            <span className="ml-1 opacity-60">· {POSITION_LABELS[player.position] ?? player.position}</span>
+                          )}
+                        </p>
                       </div>
                     </div>
                   </td>
@@ -250,7 +259,7 @@ export default function MobileFilteredRankingsTab({ rankings }: { rankings: Publ
                 onClick={applyFilters}
                 className="flex-[2] rounded-xl bg-amber-600 py-3 text-sm font-black uppercase tracking-wider text-white transition-all hover:bg-amber-500"
               >
-                Aplicar{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+                Aplicar{pendingFilterCount > 0 ? ` (${pendingFilterCount})` : ""}
               </button>
             </div>
           </div>
