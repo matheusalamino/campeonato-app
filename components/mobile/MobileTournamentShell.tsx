@@ -45,19 +45,19 @@ export default function MobileTournamentShell({ tournamentTitle: _tournamentTitl
         className="sticky top-[53px] z-40 flex gap-2 overflow-x-auto px-4 py-3"
         style={{ background: "var(--gala-bg-1)", borderBottom: "1px solid var(--gala-line)" }}
       >
-        <ChipButton label="Todos" active={selectedId === null} onClick={() => setSelectedId(null)} />
+        <ChipButton label="Todos" active={selectedId === null} onClick={() => { setSelectedId(null); setTab("classificacao"); }} />
         {editions.map((e) => (
           <ChipButton
             key={e.id}
             label={e.season ?? e.name}
             active={selectedId === e.id}
-            onClick={() => setSelectedId(e.id)}
+            onClick={() => { setSelectedId(e.id); setTab("classificacao"); }}
           />
         ))}
       </div>
 
-      {/* Champion strip */}
-      {!isAllEditions && first && (
+      {/* Champion strip — only shown for editions[0] since initialPodium is fetched for that edition */}
+      {!isAllEditions && selectedId === (editions[0]?.id ?? null) && first && (
         <div
           className="px-4 py-3"
           style={{
@@ -106,7 +106,7 @@ export default function MobileTournamentShell({ tournamentTitle: _tournamentTitl
           <p className="py-8 text-center text-sm text-[var(--gala-ink-dim)]">
             Selecione uma edição acima para ver classificação, artilheiros, bracket e prêmios.
           </p>
-        ) : loading && rankings.players.length === 0 ? (
+        ) : loading && rankings.players.length === 0 && (tab === "estatisticas" || tab === "disciplina" || tab === "premios") ? (
           <div className="space-y-3">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="h-16 animate-pulse rounded-xl bg-[#171320]" />
@@ -117,7 +117,7 @@ export default function MobileTournamentShell({ tournamentTitle: _tournamentTitl
         ) : tab === "bracket" && selectedId ? (
           <BracketSection championshipId={selectedId} />
         ) : tab === "estatisticas" ? (
-          <MobileFilteredRankingsTab rankings={rankings} />
+          <MobileFilteredRankingsTab key={selectedId} rankings={rankings} />
         ) : tab === "disciplina" ? (
           <DisciplineTab rankings={rankings} />
         ) : (
@@ -129,7 +129,7 @@ export default function MobileTournamentShell({ tournamentTitle: _tournamentTitl
       {!isAllEditions && (
         <div
           className="fixed bottom-0 left-0 right-0 z-50 flex"
-          style={{ background: "#0d0b17", borderTop: "1px solid var(--gala-line)" }}
+          style={{ background: "#0d0b17", borderTop: "1px solid var(--gala-line)", paddingBottom: "env(safe-area-inset-bottom)" }}
         >
           {TABS.map((t) => (
             <button
