@@ -13,6 +13,8 @@ import { Settings, Save, LayoutGrid, Trophy, Clock, Settings2 } from "lucide-rea
 
 const supabase = createClient();
 
+type ChampTeamOption = { id: string; name: string };
+
 type GlobalSettings = {
   points_win: number;
   points_draw: number;
@@ -40,6 +42,10 @@ export default function SettingsPage() {
   const [selectedPhase, setSelectedPhase] = useState<Phase | null>(null);
   const [configPhase, setConfigPhase] = useState<Phase | null>(null);
 
+  const [champTeams, setChampTeams] = useState<ChampTeamOption[]>([]);
+  const [podium, setPodium] = useState({ champion: "", runnerUp: "", thirdPlace: "" });
+  const [savingPodium, setSavingPodium] = useState(false);
+
   const { phases, loading, deletePhase, reload } = usePhases(championship?.id || null);
 
   const [globalSettings, setGlobalSettings] = useState<GlobalSettings>({
@@ -57,6 +63,35 @@ export default function SettingsPage() {
     queueMicrotask(() => setGlobalSettings(nextSettings));
   }, [championship]);
 
+  useEffect(() => {
+    if (!championship?.id) return;
+    void (async () => {
+      const [teamsRes, champRes] = await Promise.all([
+        supabase
+          .from("championship_teams")
+          .select("id, teams ( name )")
+          .eq("championship_id", championship.id),
+        supabase
+          .from("championships")
+          .select("champion_team_id, runner_up_team_id, third_place_team_id")
+          .eq("id", championship.id)
+          .maybeSingle(),
+      ]);
+      const teams: ChampTeamOption[] = (teamsRes.data ?? []).map((r: any) => ({
+        id: r.id,
+        name: r.teams?.name ?? r.id,
+      })).sort((a: ChampTeamOption, b: ChampTeamOption) => a.name.localeCompare(b.name, "pt-BR"));
+      setChampTeams(teams);
+      if (champRes.data) {
+        setPodium({
+          champion: champRes.data.champion_team_id ?? "",
+          runnerUp: champRes.data.runner_up_team_id ?? "",
+          thirdPlace: champRes.data.third_place_team_id ?? "",
+        });
+      }
+    })();
+  }, [championship?.id]);
+
   async function handleSaveGlobal() {
     if (!championship) return;
     setSavingGlobal(true);
@@ -64,13 +99,39 @@ export default function SettingsPage() {
       .from("championships")
       .update(globalSettings)
       .eq("id", championship.id);
-    
+
     setSavingGlobal(false);
     if (error) {
       toast.error("Erro ao salvar configurações");
     } else {
       toast.success("Configurações salvas com sucesso");
     }
+  }
+
+  async function handleSavePodium() {
+    if (!championship?.id) return;
+    setSavingPodium(true);
+    const { error } = await supabase
+      .from("championships")
+      .update({
+        champion_team_id: podium.champion || null,
+        runner_up_team_id: podium.runnerUp || null,
+        third_place_team_id: podium.thirdPlace || null,
+      })
+      .eq("id", championship.id);
+    setSavingPodium(false);
+    if (error) toast.error("Erro ao salvar pódio");
+    else toast.success("Pódio salvo com sucesso");
+  }
+
+  async function handleSaveTournamentType(type: string) {
+    if (!championship?.id) return;
+    const { error } = await supabase
+      .from("championships")
+      .update({ tournament_type: type || null })
+      .eq("id", championship.id);
+    if (error) toast.error("Erro ao salvar tipo de torneio");
+    else toast.success("Tipo de torneio salvo");
   }
 
   if (!championship) {
@@ -265,6 +326,70 @@ export default function SettingsPage() {
           ))}
         </div>
       </div>
+
+      {/* TIPO DE TORNEIO */}
+      <section className="rounded-xl border border-[var(--gala-line)] bg-[var(--gala-panel)] p-5">
+        <h3 className="mb-4 flex items-center gap-2 text-sm font-black">
+          <Trophy className="h-4 w-4 text-[var(--gala-gold-2)]" />
+          Tipo de Torneio
+        </h3>
+        <p className="mb-4 text-xs text-[var(--gala-ink-dim)]">
+          Classifica este campeonato para as páginas públicas (Copa do Mundo ou Champions League).
+        </p>
+        <select
+          className="w-full rounded-lg border border-[var(--gala-line)] bg-[var(--gala-bg-0)] px-3 py-2 text-sm"
+          defaultValue={(championship as { tournament_type?: string | null }).tournament_type ?? ""}
+          onChange={async (e) => { await handleSaveTournamentType(e.target.value); }}
+        >
+          <option value="">— Sem classificação —</option>
+          <option value="champions_league">🏆 Champions League Sorocaba</option>
+          <option value="copa_do_mundo">🌍 Copa do Mundo Sorocaba</option>
+        </select>
+      </section>
+
+      {/* RESULTADO FINAL / PÓDIO */}
+      <section className="rounded-xl border border-[var(--gala-line)] bg-[var(--gala-panel)] p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-sm font-black">
+            <Trophy className="h-4 w-4 text-[var(--gala-gold-2)]" />
+            Resultado Final / Pódio
+          </h3>
+          <button
+            onClick={handleSavePodium}
+            disabled={savingPodium}
+            className="flex items-center gap-2 rounded-lg bg-[rgba(212,160,23,0.15)] border border-[var(--gala-gold-3)] px-3 py-1.5 text-xs font-bold text-[var(--gala-gold-1)] transition-all hover:bg-[rgba(212,160,23,0.25)] disabled:opacity-50"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {savingPodium ? "Salvando..." : "Salvar Pódio"}
+          </button>
+        </div>
+        <p className="mb-4 text-xs text-[var(--gala-ink-dim)]">
+          Define o pódio exibido na página pública do campeonato.
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {(
+            [
+              { label: "🏆 Campeão", key: "champion" },
+              { label: "🥈 Vice-Campeão", key: "runnerUp" },
+              { label: "🥉 3º Lugar", key: "thirdPlace" },
+            ] as const
+          ).map(({ label, key }) => (
+            <div key={key} className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase tracking-[2px] text-[var(--gala-gold-2)]">{label}</label>
+              <select
+                className="w-full rounded-lg border border-[var(--gala-line)] bg-[var(--gala-bg-0)] px-3 py-2 text-sm"
+                value={podium[key]}
+                onChange={(e) => setPodium((p) => ({ ...p, [key]: e.target.value }))}
+              >
+                <option value="">— Não definido —</option>
+                {champTeams.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* CARROSSEL DO TELÃO */}
       <CarouselConfigSection championshipId={championship.id} />

@@ -131,9 +131,9 @@ export function Sidebar({ role }: { role: string | null }) {
 
           {/* DASHBOARD */}
           <Link
-            href="/"
+            href="/dashboard"
             className={`px-4 py-2 rounded-lg ${
-              isActive("/") ? "bg-blue-600 text-white" : "text-zinc-400"
+              isActive("/dashboard") ? "bg-blue-600 text-white" : "text-zinc-400"
             }`}
           >
             Dashboard
