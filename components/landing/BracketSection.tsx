@@ -16,12 +16,14 @@ const CONN_W = 56;
 const ROW_GAP_TOP = 48;
 const ROW_GAP_BOT = 40;
 
+const LABEL_H = 15; // phase name label height (text-[9px] + mb-1.5)
+
 const COL2_X = CARD_W + CONN_W;
 const COL3_X = CARD_W + CONN_W + CARD_W + CONN_W;
 const ROW2_Y = CARD_H + ROW_GAP_TOP;
 const ROW3_Y = ROW2_Y + CARD_H + ROW_GAP_BOT;
 const TOTAL_W = COL3_X + CARD_W;
-const TOTAL_H = ROW3_Y + CARD_H;
+const TOTAL_H = ROW3_Y + LABEL_H + CARD_H;
 
 // Center-x of each column (for SVG connector endpoints)
 const LEFT_CX = CARD_W / 2;
@@ -50,8 +52,8 @@ export default function BracketSection({ championshipId }: BracketSectionProps) 
     );
   }
 
-  const midY = ROW2_Y + CARD_H / 2;
-  const disparY = ROW3_Y + CARD_H / 2;
+  const midY = ROW2_Y + LABEL_H + CARD_H / 2;
+  const disparY = ROW3_Y + LABEL_H + CARD_H / 2;
 
   return (
     <div className="overflow-x-auto pb-4">
@@ -66,16 +68,16 @@ export default function BracketSection({ championshipId }: BracketSectionProps) 
           {/* Repescagem Left → Semi Left (vertical) */}
           {copa.repescagemLeft && copa.semiLeft && (
             <line
-              x1={LEFT_CX} y1={CARD_H}
-              x2={LEFT_CX} y2={ROW2_Y}
+              x1={LEFT_CX} y1={LABEL_H + CARD_H}
+              x2={LEFT_CX} y2={ROW2_Y + LABEL_H}
               stroke="var(--gala-line)" strokeWidth="1.5"
             />
           )}
           {/* Repescagem Right → Semi Right (vertical) */}
           {copa.repescagemRight && copa.semiRight && (
             <line
-              x1={RIGHT_CX} y1={CARD_H}
-              x2={RIGHT_CX} y2={ROW2_Y}
+              x1={RIGHT_CX} y1={LABEL_H + CARD_H}
+              x2={RIGHT_CX} y2={ROW2_Y + LABEL_H}
               stroke="var(--gala-line)" strokeWidth="1.5"
             />
           )}
@@ -98,7 +100,7 @@ export default function BracketSection({ championshipId }: BracketSectionProps) 
           {/* Semi Left → Disputa (dashed L: down then right) */}
           {copa.semiLeft && copa.disputa && (
             <polyline
-              points={`${LEFT_CX},${ROW2_Y + CARD_H} ${LEFT_CX},${disparY} ${COL2_X},${disparY}`}
+              points={`${LEFT_CX},${ROW2_Y + LABEL_H + CARD_H} ${LEFT_CX},${disparY} ${COL2_X},${disparY}`}
               fill="none"
               stroke="var(--gala-line)"
               strokeWidth="1.5"
@@ -109,7 +111,7 @@ export default function BracketSection({ championshipId }: BracketSectionProps) 
           {/* Semi Right → Disputa (dashed L: down then left) */}
           {copa.semiRight && copa.disputa && (
             <polyline
-              points={`${RIGHT_CX},${ROW2_Y + CARD_H} ${RIGHT_CX},${disparY} ${COL2_X + CARD_W},${disparY}`}
+              points={`${RIGHT_CX},${ROW2_Y + LABEL_H + CARD_H} ${RIGHT_CX},${disparY} ${COL2_X + CARD_W},${disparY}`}
               fill="none"
               stroke="var(--gala-line)"
               strokeWidth="1.5"
@@ -239,6 +241,22 @@ function MatchCard({
           {hasScore ? match.awayScore : "—"}
         </span>
       </div>
+
+      {/* Status row */}
+      <p className="text-[8px] leading-none" style={{ color: isLive ? "#ef4444" : "var(--gala-ink-dim)" }}>
+        {isLive
+          ? "● Ao vivo"
+          : isFinished
+          ? "Encerrado"
+          : match.scheduledAt
+          ? new Date(match.scheduledAt).toLocaleDateString("pt-BR", {
+              day: "2-digit",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "A definir"}
+      </p>
     </a>
   );
 }
@@ -275,7 +293,7 @@ function BracketSkeleton() {
         <div
           key={i}
           className="absolute animate-pulse rounded-xl bg-[#171320]"
-          style={{ left: pos.x, top: pos.y + 20, width: CARD_W, height: CARD_H }}
+          style={{ left: pos.x, top: pos.y + LABEL_H, width: CARD_W, height: CARD_H }}
         />
       ))}
     </div>

@@ -25,7 +25,7 @@ export function classifyBracketPhases(
 
   const final =
     sorted.find((p) => {
-      const hasFinalMatch = p.matches.some((m) => m.isFinal);
+      const hasFinalMatch = p.matches.some((m) => m.isFinal) && !has(p.name, "semi");
       const nameIsFinal = has(p.name, "final") && !has(p.name, "semi");
       return hasFinalMatch || nameIsFinal;
     }) ?? null;

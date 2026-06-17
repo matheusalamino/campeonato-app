@@ -82,4 +82,12 @@ describe("classifyBracketPhases", () => {
     expect(r.repescagemLeft?.name).toBe("Repescagem 1");
     expect(r.repescagemRight?.name).toBe("Repescagem 2");
   });
+
+  it("does not classify a Semifinal phase with isFinal match as final", () => {
+    const phase = makePhase("Semifinal", 1, true); // isFinal: true on the match
+    const r = classifyBracketPhases([phase]);
+    expect(r.final).toBeNull();
+    expect(r.semiLeft?.name).toBe("Semifinal");
+    expect(r.isValid).toBe(false);
+  });
 });
