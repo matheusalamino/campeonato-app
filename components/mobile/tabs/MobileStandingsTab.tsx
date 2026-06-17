@@ -112,6 +112,8 @@ export default function MobileStandingsTab({ championshipId }: { championshipId:
               </tbody>
             </table>
             <button
+              type="button"
+              aria-expanded={expanded}
               onClick={() => toggleExpand(g)}
               className="w-full border-t border-[var(--gala-line)]/60 py-2 text-center text-[9px] font-black uppercase tracking-[2px] text-[var(--gala-gold-2)]"
             >
