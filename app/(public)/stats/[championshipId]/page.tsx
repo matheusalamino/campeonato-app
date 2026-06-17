@@ -58,7 +58,7 @@ export default function PublicStatsPage() {
         <p className="mt-1 text-xs text-[var(--gala-ink-dim)]">
           {championship?.season ? `Temporada ${championship.season} · ` : ""}atualizado em tempo real
         </p>
-        <nav className="mt-5 flex justify-center gap-1" role="tablist">
+        <nav className="mt-5 flex gap-1 overflow-x-auto pb-1 justify-start sm:justify-center" role="tablist">
           {TABS.map((t) => (
             <button
               key={t.id}
