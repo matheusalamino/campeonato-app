@@ -12,8 +12,9 @@ function formatValue(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
-function Row({ entry, rank }: { entry: RankingEntry; rank: number }) {
+function Row({ entry, rank, hideValueIfOverride = false }: { entry: RankingEntry; rank: number; hideValueIfOverride?: boolean }) {
   const first = rank === 1;
+  const showValue = !(hideValueIfOverride && entry.isOverride);
   return (
     <div className="flex items-center gap-2 text-sm">
       <span className={`w-4 text-center font-extrabold ${first ? "text-[var(--gala-gold-2)]" : "text-[var(--gala-ink-dim)]"}`}>
@@ -42,14 +43,14 @@ function Row({ entry, rank }: { entry: RankingEntry; rank: number }) {
           {entry.teamName ?? "—"}{entry.detail ? ` · ${entry.detail}` : ""}
         </small>
       </span>
-      <span className="font-extrabold tabular-nums text-[var(--gala-gold-2)]">{formatValue(entry.value)}</span>
+      {showValue && <span className="font-extrabold tabular-nums text-[var(--gala-gold-2)]">{formatValue(entry.value)}</span>}
     </div>
   );
 }
 
-function RankCard({ icon, title, subtitle, entries, highlight = false, disabled = false }: {
+function RankCard({ icon, title, subtitle, entries, highlight = false, disabled = false, hideValueIfOverride = false }: {
   icon: string; title: string; subtitle: string;
-  entries: RankingEntry[]; highlight?: boolean; disabled?: boolean;
+  entries: RankingEntry[]; highlight?: boolean; disabled?: boolean; hideValueIfOverride?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? entries : entries.slice(0, PREVIEW_COUNT);
@@ -68,7 +69,7 @@ function RankCard({ icon, title, subtitle, entries, highlight = false, disabled 
         ) : entries.length === 0 ? (
           <p className="py-3 text-center text-xs text-[var(--gala-ink-dim)]">Sem dados ainda</p>
         ) : (
-          visible.map((e, i) => <Row key={e.registrationId} entry={e} rank={i + 1} />)
+          visible.map((e, i) => <Row key={e.registrationId} entry={e} rank={i + 1} hideValueIfOverride={hideValueIfOverride} />)
         )}
       </div>
       {hasMore ? (
@@ -90,7 +91,7 @@ export default function RankingsTab({ rankings }: { rankings: PublicRankings }) 
       <RankCard icon="🎯" title="Maestros" subtitle="líderes de assistência" entries={rankings.topAssists} />
       <RankCard icon="👑" title="Craque" subtitle="votos por partida" entries={rankings.craque} />
       <RankCard icon="🧤" title="Goleiro Destaque" subtitle="índice oficial do goleiro (IOG)" entries={rankings.goalkeepers} />
-      <RankCard icon="💎" title="Revelações" subtitle="candidatos · overall ≤ 85" entries={rankings.revelations} />
+      <RankCard icon="💎" title="Revelações" subtitle="candidatos · overall ≤ 85" entries={rankings.revelations} hideValueIfOverride />
       <RankCard icon="🎩" title="Cartolas" subtitle="votos por partida, peso por fase" entries={rankings.managers} />
     </div>
   );

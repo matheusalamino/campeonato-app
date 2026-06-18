@@ -141,7 +141,7 @@ export function usePublicRankings(championshipId: string | null, topN = 3) {
           };
         });
 
-      const managers = buildManagerRanking((managerVotesRes.data ?? []) as ManagerVoteRow[], topN);
+      const managers = buildManagerRanking((managerVotesRes.data ?? []) as ManagerVoteRow[], Infinity);
 
       const overrideMap = new Map<string, string>(
         ((overridesRes.data ?? []) as PrizeOverrideRow[]).map(r => [r.prize_key, r.override_value])
