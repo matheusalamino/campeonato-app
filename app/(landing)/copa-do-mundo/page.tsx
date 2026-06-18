@@ -1,4 +1,5 @@
 import TournamentPageShell from "@/components/landing/TournamentPageShell";
+import MobileTournamentShell from "@/components/mobile/MobileTournamentShell";
 import { getChampionshipsByType, getPodiumByChampionship } from "@/lib/landing/queries";
 
 export default async function CopaDomundoPage() {
@@ -8,10 +9,21 @@ export default async function CopaDomundoPage() {
     : [];
 
   return (
-    <TournamentPageShell
-      tournamentTitle="Copa do Mundo Sorocaba"
-      editions={editions}
-      initialPodium={initialPodium}
-    />
+    <>
+      <div className="hidden md:block">
+        <TournamentPageShell
+          tournamentTitle="Copa do Mundo Sorocaba"
+          editions={editions}
+          initialPodium={initialPodium}
+        />
+      </div>
+      <div className="md:hidden">
+        <MobileTournamentShell
+          tournamentTitle="Copa do Mundo Sorocaba"
+          editions={editions}
+          initialPodium={initialPodium}
+        />
+      </div>
+    </>
   );
 }
