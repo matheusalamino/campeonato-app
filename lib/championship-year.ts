@@ -12,7 +12,7 @@ export function parseSeasonYear(
     if (match) return Number(match[1]);
   }
   if (createdAt) {
-    const year = new Date(createdAt).getFullYear();
+    const year = new Date(createdAt).getUTCFullYear();
     if (!Number.isNaN(year)) return year;
   }
   return 0;
