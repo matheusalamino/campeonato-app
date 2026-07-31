@@ -20,6 +20,11 @@ function toDateInput(value?: string | null): string {
   return new Date(value).toISOString().slice(0, 10);
 }
 
+function FieldError({ errors, name }: { errors: FieldErrors; name: string }) {
+  if (!errors[name]) return null;
+  return <p className="mt-1 text-xs text-red-400">{errors[name]}</p>;
+}
+
 export function ChampionshipForm({
   mode,
   initial,
@@ -103,11 +108,6 @@ export function ChampionshipForm({
     "w-full rounded-md bg-zinc-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-600";
   const labelClass = "mb-1 block text-sm text-zinc-300";
 
-  function Error({ name }: { name: string }) {
-    if (!errors[name]) return null;
-    return <p className="mt-1 text-xs text-red-400">{errors[name]}</p>;
-  }
-
   return (
     <form onSubmit={handleSubmit} className="max-w-3xl space-y-8">
       {/* Basic */}
@@ -120,7 +120,7 @@ export function ChampionshipForm({
             value={form.name}
             onChange={(e) => set("name", e.target.value)}
           />
-          <Error name="name" />
+          <FieldError errors={errors} name="name" />
         </div>
         <div>
           <label className={labelClass}>Temporada (ex.: 2026)</label>
@@ -129,7 +129,7 @@ export function ChampionshipForm({
             value={form.season}
             onChange={(e) => set("season", e.target.value)}
           />
-          <Error name="season" />
+          <FieldError errors={errors} name="season" />
         </div>
         <div>
           <label className={labelClass}>Descrição / Regulamento</label>
@@ -138,7 +138,7 @@ export function ChampionshipForm({
             value={form.description}
             onChange={(e) => set("description", e.target.value)}
           />
-          <Error name="description" />
+          <FieldError errors={errors} name="description" />
         </div>
       </section>
 
@@ -154,7 +154,7 @@ export function ChampionshipForm({
               value={form.registration_start_date}
               onChange={(e) => set("registration_start_date", e.target.value)}
             />
-            <Error name="registration_start_date" />
+            <FieldError errors={errors} name="registration_start_date" />
           </div>
           <div>
             <label className={labelClass}>Finalização Inscrições</label>
@@ -164,7 +164,7 @@ export function ChampionshipForm({
               value={form.registration_end_date}
               onChange={(e) => set("registration_end_date", e.target.value)}
             />
-            <Error name="registration_end_date" />
+            <FieldError errors={errors} name="registration_end_date" />
           </div>
           <div>
             <label className={labelClass}>Noite de Gala</label>
@@ -174,7 +174,7 @@ export function ChampionshipForm({
               value={form.gala_night_date}
               onChange={(e) => set("gala_night_date", e.target.value)}
             />
-            <Error name="gala_night_date" />
+            <FieldError errors={errors} name="gala_night_date" />
           </div>
           <div>
             <label className={labelClass}>Jogos (início do torneio)</label>
@@ -184,7 +184,7 @@ export function ChampionshipForm({
               value={form.tournament_start_date}
               onChange={(e) => set("tournament_start_date", e.target.value)}
             />
-            <Error name="tournament_start_date" />
+            <FieldError errors={errors} name="tournament_start_date" />
           </div>
         </div>
       </section>
@@ -202,7 +202,7 @@ export function ChampionshipForm({
               value={form.max_players}
               onChange={(e) => set("max_players", e.target.value)}
             />
-            <Error name="max_players" />
+            <FieldError errors={errors} name="max_players" />
           </div>
           <div>
             <label className={labelClass}>Máx. lista de espera</label>
@@ -213,7 +213,7 @@ export function ChampionshipForm({
               value={form.max_waitlist_players}
               onChange={(e) => set("max_waitlist_players", e.target.value)}
             />
-            <Error name="max_waitlist_players" />
+            <FieldError errors={errors} name="max_waitlist_players" />
           </div>
         </div>
       </section>
@@ -232,7 +232,7 @@ export function ChampionshipForm({
             </option>
           ))}
         </select>
-        <Error name="status" />
+        <FieldError errors={errors} name="status" />
       </section>
 
       <div className="flex gap-3">
