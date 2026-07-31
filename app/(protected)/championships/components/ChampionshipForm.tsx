@@ -1,0 +1,256 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { championshipFormSchema } from "@/features/championships/schema";
+import { createChampionship, updateChampionship } from "../actions";
+import {
+  CHAMPIONSHIP_STATUS,
+  STATUS_LABELS,
+  type Championship,
+  type ChampionshipStatus,
+} from "@/types/championship";
+
+type FieldErrors = Record<string, string>;
+
+/** ISO timestamp -> "YYYY-MM-DD" for <input type="date">. */
+function toDateInput(value?: string | null): string {
+  if (!value) return "";
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+export function ChampionshipForm({
+  mode,
+  initial,
+}: {
+  mode: "create" | "edit";
+  initial?: Championship;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [errors, setErrors] = useState<FieldErrors>({});
+
+  const [form, setForm] = useState({
+    name: initial?.name ?? "",
+    season: initial?.season ?? "",
+    description: initial?.description ?? "",
+    registration_start_date: toDateInput(initial?.registration_start_date),
+    registration_end_date: toDateInput(initial?.registration_end_date),
+    gala_night_date: toDateInput(initial?.gala_night_date),
+    tournament_start_date: toDateInput(initial?.tournament_start_date),
+    max_players: initial?.max_players != null ? String(initial.max_players) : "",
+    max_waitlist_players:
+      initial?.max_waitlist_players != null ? String(initial.max_waitlist_players) : "0",
+    status: (initial?.status as ChampionshipStatus) ?? "draft",
+  });
+
+  function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function buildPayload() {
+    const emptyToUndef = (v: string) => (v.trim() === "" ? undefined : v);
+    return {
+      name: form.name,
+      season: emptyToUndef(form.season),
+      description: emptyToUndef(form.description),
+      registration_start_date: emptyToUndef(form.registration_start_date),
+      registration_end_date: emptyToUndef(form.registration_end_date),
+      gala_night_date: emptyToUndef(form.gala_night_date),
+      tournament_start_date: emptyToUndef(form.tournament_start_date),
+      max_players: emptyToUndef(form.max_players),
+      max_waitlist_players: form.max_waitlist_players,
+      status: form.status,
+    };
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErrors({});
+
+    const payload = buildPayload();
+    const parsed = championshipFormSchema.safeParse(payload);
+    if (!parsed.success) {
+      const next: FieldErrors = {};
+      for (const issue of parsed.error.issues) {
+        const key = issue.path.join(".") || "form";
+        if (!next[key]) next[key] = issue.message;
+      }
+      setErrors(next);
+      toast.error("Corrija os campos destacados");
+      return;
+    }
+
+    startTransition(async () => {
+      const result =
+        mode === "create"
+          ? await createChampionship(payload)
+          : await updateChampionship({ ...payload, id: initial!.id });
+
+      if (result.ok) {
+        toast.success(mode === "create" ? "Campeonato criado" : "Campeonato atualizado");
+        router.push("/championships");
+        router.refresh();
+      } else {
+        if (result.fieldErrors) setErrors(result.fieldErrors);
+        toast.error(result.error);
+      }
+    });
+  }
+
+  const inputClass =
+    "w-full rounded-md bg-zinc-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-600";
+  const labelClass = "mb-1 block text-sm text-zinc-300";
+
+  function Error({ name }: { name: string }) {
+    if (!errors[name]) return null;
+    return <p className="mt-1 text-xs text-red-400">{errors[name]}</p>;
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="max-w-3xl space-y-8">
+      {/* Basic */}
+      <section className="space-y-4 rounded-2xl bg-zinc-900 p-6">
+        <h2 className="text-lg font-semibold">Informações básicas</h2>
+        <div>
+          <label className={labelClass}>Nome</label>
+          <input
+            className={inputClass}
+            value={form.name}
+            onChange={(e) => set("name", e.target.value)}
+          />
+          <Error name="name" />
+        </div>
+        <div>
+          <label className={labelClass}>Temporada (ex.: 2026)</label>
+          <input
+            className={inputClass}
+            value={form.season}
+            onChange={(e) => set("season", e.target.value)}
+          />
+          <Error name="season" />
+        </div>
+        <div>
+          <label className={labelClass}>Descrição / Regulamento</label>
+          <textarea
+            className={`${inputClass} min-h-24`}
+            value={form.description}
+            onChange={(e) => set("description", e.target.value)}
+          />
+          <Error name="description" />
+        </div>
+      </section>
+
+      {/* Dates */}
+      <section className="space-y-4 rounded-2xl bg-zinc-900 p-6">
+        <h2 className="text-lg font-semibold">Datas importantes</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className={labelClass}>Abertura Inscrições</label>
+            <input
+              type="date"
+              className={inputClass}
+              value={form.registration_start_date}
+              onChange={(e) => set("registration_start_date", e.target.value)}
+            />
+            <Error name="registration_start_date" />
+          </div>
+          <div>
+            <label className={labelClass}>Finalização Inscrições</label>
+            <input
+              type="date"
+              className={inputClass}
+              value={form.registration_end_date}
+              onChange={(e) => set("registration_end_date", e.target.value)}
+            />
+            <Error name="registration_end_date" />
+          </div>
+          <div>
+            <label className={labelClass}>Noite de Gala</label>
+            <input
+              type="date"
+              className={inputClass}
+              value={form.gala_night_date}
+              onChange={(e) => set("gala_night_date", e.target.value)}
+            />
+            <Error name="gala_night_date" />
+          </div>
+          <div>
+            <label className={labelClass}>Jogos (início do torneio)</label>
+            <input
+              type="date"
+              className={inputClass}
+              value={form.tournament_start_date}
+              onChange={(e) => set("tournament_start_date", e.target.value)}
+            />
+            <Error name="tournament_start_date" />
+          </div>
+        </div>
+      </section>
+
+      {/* Capacity */}
+      <section className="space-y-4 rounded-2xl bg-zinc-900 p-6">
+        <h2 className="text-lg font-semibold">Capacidade</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className={labelClass}>Máx. de jogadores</label>
+            <input
+              type="number"
+              min={1}
+              className={inputClass}
+              value={form.max_players}
+              onChange={(e) => set("max_players", e.target.value)}
+            />
+            <Error name="max_players" />
+          </div>
+          <div>
+            <label className={labelClass}>Máx. lista de espera</label>
+            <input
+              type="number"
+              min={0}
+              className={inputClass}
+              value={form.max_waitlist_players}
+              onChange={(e) => set("max_waitlist_players", e.target.value)}
+            />
+            <Error name="max_waitlist_players" />
+          </div>
+        </div>
+      </section>
+
+      {/* Status */}
+      <section className="space-y-4 rounded-2xl bg-zinc-900 p-6">
+        <h2 className="text-lg font-semibold">Status</h2>
+        <select
+          className={inputClass}
+          value={form.status}
+          onChange={(e) => set("status", e.target.value as ChampionshipStatus)}
+        >
+          {CHAMPIONSHIP_STATUS.map((s) => (
+            <option key={s} value={s}>
+              {STATUS_LABELS[s]}
+            </option>
+          ))}
+        </select>
+        <Error name="status" />
+      </section>
+
+      <div className="flex gap-3">
+        <button
+          type="submit"
+          disabled={isPending}
+          className="rounded-xl bg-green-600 px-6 py-2 font-medium hover:bg-green-500 disabled:opacity-50"
+        >
+          {isPending ? "Salvando..." : "Salvar"}
+        </button>
+        <button
+          type="button"
+          onClick={() => router.push("/championships")}
+          className="rounded-xl bg-zinc-700 px-6 py-2 font-medium hover:bg-zinc-600"
+        >
+          Cancelar
+        </button>
+      </div>
+    </form>
+  );
+}
