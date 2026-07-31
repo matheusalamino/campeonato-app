@@ -96,12 +96,21 @@ export async function changeChampionshipStatus(input: unknown): Promise<ActionRe
     if (!parsed.success) {
       return { ok: false, error: "Transição de status inválida" };
     }
-    const { id, to } = parsed.data;
-    const { error } = await supabase
+    const { id, from, to } = parsed.data;
+    const { data, error } = await supabase
       .from("championships")
       .update({ status: to })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("status", from)
+      .is("deleted_at", null)
+      .select("id");
     if (error) return { ok: false, error: error.message };
+    if (!data || data.length === 0) {
+      return {
+        ok: false,
+        error: "O status do campeonato mudou. Recarregue a página e tente novamente.",
+      };
+    }
     revalidatePath("/championships");
     return { ok: true };
   } catch (e) {
