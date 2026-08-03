@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  championshipFormSchema,
-  statusChangeSchema,
-  isValidTransition,
-} from "./schema";
+import { championshipFormSchema, statusChangeSchema } from "./schema";
 
 const validDraft = {
   name: "Copa Interna",
@@ -87,29 +83,20 @@ describe("championshipFormSchema", () => {
   });
 });
 
-describe("isValidTransition", () => {
-  it("allows draft -> active", () => {
-    expect(isValidTransition("draft", "active")).toBe(true);
-  });
-  it("blocks draft -> completed", () => {
-    expect(isValidTransition("draft", "completed")).toBe(false);
-  });
-});
-
 describe("statusChangeSchema", () => {
-  it("rejects an illegal transition", () => {
-    const r = statusChangeSchema.safeParse({
-      id: "550e8400-e29b-41d4-a716-446655440000",
-      from: "draft",
-      to: "completed",
-    });
-    expect(r.success).toBe(false);
-  });
-  it("accepts a legal transition", () => {
+  it("rejects changing to the same status", () => {
     const r = statusChangeSchema.safeParse({
       id: "550e8400-e29b-41d4-a716-446655440000",
       from: "subscribing",
-      to: "subscribed",
+      to: "subscribing",
+    });
+    expect(r.success).toBe(false);
+  });
+  it("accepts any distinct status change (including a jump)", () => {
+    const r = statusChangeSchema.safeParse({
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      from: "completed",
+      to: "draft",
     });
     expect(r.success).toBe(true);
   });

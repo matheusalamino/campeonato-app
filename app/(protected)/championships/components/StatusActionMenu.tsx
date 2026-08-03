@@ -7,10 +7,11 @@ import { toast } from "sonner";
 import { ChevronDown } from "lucide-react";
 import {
   STATUS_LABELS,
-  ALLOWED_TRANSITIONS,
+  CHAMPIONSHIP_STATUS,
   type ChampionshipStatus,
 } from "@/types/championship";
 import { changeChampionshipStatus } from "../actions";
+import { StatusBadge } from "./StatusBadge";
 
 export function StatusActionMenu({
   id,
@@ -28,7 +29,8 @@ export function StatusActionMenu({
     null,
   );
   const [isPending, startTransition] = useTransition();
-  const targets = ALLOWED_TRANSITIONS[status];
+  // Admins may switch to any other status.
+  const targets = CHAMPIONSHIP_STATUS.filter((s) => s !== status);
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -95,9 +97,10 @@ export function StatusActionMenu({
                   key={to}
                   type="button"
                   onClick={() => handleSelect(to)}
-                  className="block w-full px-3 py-1.5 text-left text-sm text-zinc-200 hover:bg-zinc-800"
+                  className="flex w-full items-center px-3 py-1.5 text-left hover:bg-zinc-800"
+                  title={STATUS_LABELS[to]}
                 >
-                  {STATUS_LABELS[to]}
+                  <StatusBadge status={to} />
                 </button>
               ))}
             </div>

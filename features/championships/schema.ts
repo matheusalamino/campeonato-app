@@ -1,9 +1,5 @@
 import { z } from "zod";
-import {
-  CHAMPIONSHIP_STATUS,
-  ALLOWED_TRANSITIONS,
-  type ChampionshipStatus,
-} from "@/types/championship";
+import { CHAMPIONSHIP_STATUS } from "@/types/championship";
 
 export const championshipStatusSchema = z.enum(CHAMPIONSHIP_STATUS);
 
@@ -91,13 +87,9 @@ export const updateChampionshipSchema = baseChampionshipObject
 
 export type ChampionshipFormValues = z.infer<typeof championshipFormSchema>;
 
-export function isValidTransition(
-  from: ChampionshipStatus,
-  to: ChampionshipStatus,
-): boolean {
-  return ALLOWED_TRANSITIONS[from]?.includes(to) ?? false;
-}
-
+// Admins may switch a championship to any status; the only rule is that the
+// new status must differ from the current one. The stale-status safety check
+// lives in the changeChampionshipStatus server action (.eq("status", from)).
 export const statusChangeSchema = z
   .object({
     id: z.string().uuid(),
@@ -105,11 +97,11 @@ export const statusChangeSchema = z
     to: championshipStatusSchema,
   })
   .superRefine((data, ctx) => {
-    if (!isValidTransition(data.from, data.to)) {
+    if (data.to === data.from) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["to"],
-        message: "Transição de status inválida",
+        message: "O novo status deve ser diferente do atual",
       });
     }
   });

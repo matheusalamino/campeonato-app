@@ -18,24 +18,14 @@ export const STATUS_LABELS: Record<ChampionshipStatus, string> = {
   completed: "Concluído",
 };
 
-/** Tailwind classes for the status badge (bg + text). */
+/** Tailwind classes for the status badge (bg + text) — one distinct hue per status. */
 export const STATUS_COLORS: Record<ChampionshipStatus, string> = {
-  draft: "bg-zinc-700 text-zinc-100",
-  active: "bg-blue-600 text-white",
+  draft: "bg-zinc-600 text-white",
+  active: "bg-sky-600 text-white",
   subscribing: "bg-emerald-600 text-white",
-  subscribed: "bg-amber-600 text-white",
-  in_progress: "bg-indigo-600 text-white",
-  completed: "bg-zinc-500 text-white",
-};
-
-/** Valid forward/backward status transitions an admin may perform. */
-export const ALLOWED_TRANSITIONS: Record<ChampionshipStatus, ChampionshipStatus[]> = {
-  draft: ["active"],
-  active: ["subscribing", "draft"],
-  subscribing: ["subscribed", "active"],
-  subscribed: ["in_progress", "subscribing"],
-  in_progress: ["completed", "subscribed"],
-  completed: ["in_progress"],
+  subscribed: "bg-amber-500 text-black",
+  in_progress: "bg-violet-600 text-white",
+  completed: "bg-rose-600 text-white",
 };
 
 export interface Championship {
