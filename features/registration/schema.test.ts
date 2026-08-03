@@ -65,4 +65,16 @@ describe("makeRegistrationSchema", () => {
     const r = schema.safeParse(base({ skills: { visao: 9, controle: 4, finalizacao: 2, velocidade: 5, desarme: 3, drible: 3 } }));
     expect(r.success).toBe(false);
   });
+
+  it("rejects a line player missing a required skill", () => {
+    const bad = base();
+    delete (bad.skills as Record<string, number>).drible;
+    expect(schema.safeParse(bad).success).toBe(false);
+  });
+
+  it("requires keeper skills for a goalkeeper", () => {
+    const r = schema.safeParse(base({ preferred_position: "Goleiro" }));
+    // base() supplies line skills, not keeper skills, so a goalkeeper payload must fail
+    expect(r.success).toBe(false);
+  });
 });

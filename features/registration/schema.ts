@@ -2,6 +2,7 @@ import { z } from "zod";
 import { isValidCpf } from "@/lib/cpf";
 import { isMinor } from "./minor";
 import { groupRequiresInviteCode } from "./groups";
+import { skillsFor } from "./skills";
 import type { GroupOption } from "@/types/championship";
 
 const rating = z.coerce.number().int().min(1).max(5);
@@ -43,6 +44,15 @@ export function makeRegistrationSchema(groupOptions: GroupOption[]) {
           path: ["legal_authorization_link"],
           message: "Autorização do responsável é obrigatória para menores de 18",
         });
+      }
+      for (const skill of skillsFor(data.preferred_position)) {
+        if (data.skills[skill] === undefined) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["skills", skill],
+            message: "Avaliação obrigatória",
+          });
+        }
       }
     });
 }
