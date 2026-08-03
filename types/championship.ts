@@ -5,6 +5,7 @@ export const CHAMPIONSHIP_STATUS = [
   "subscribed",
   "in_progress",
   "completed",
+  "rest",
 ] as const;
 
 export type ChampionshipStatus = (typeof CHAMPIONSHIP_STATUS)[number];
@@ -16,6 +17,7 @@ export const STATUS_LABELS: Record<ChampionshipStatus, string> = {
   subscribed: "Inscrições Encerradas",
   in_progress: "Em Andamento",
   completed: "Concluído",
+  rest: "Rest",
 };
 
 /** Tailwind classes for the status badge (bg + text) — one distinct hue per status. */
@@ -26,7 +28,13 @@ export const STATUS_COLORS: Record<ChampionshipStatus, string> = {
   subscribed: "bg-amber-500 text-black",
   in_progress: "bg-violet-600 text-white",
   completed: "bg-rose-600 text-white",
+  rest: "bg-indigo-600 text-white",
 };
+
+export interface GroupOption {
+  label: string;
+  requires_invite_code: boolean;
+}
 
 export interface Championship {
   id: string;
@@ -44,6 +52,11 @@ export interface Championship {
   tournament_start_date?: string | null;
   max_players?: number | null;
   max_waitlist_players?: number | null;
+  slug?: string | null;
+  registration_image_url?: string | null;
+  base_price?: number | null;
+  extra_ticket_price?: number | null;
+  registration_group_options?: GroupOption[] | null;
 
   // ── Configurações globais de pontuação (Módulo 1) ──────────────────────────
   /** Pontos por vitória. Default: 3 */

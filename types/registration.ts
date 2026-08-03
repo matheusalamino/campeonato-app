@@ -9,6 +9,13 @@ export interface Registration {
   created_at: string;
   legal_authorization_link: string | null;
   profile_photo_link: string | null;
+  is_waitlist?: boolean;
+  group_affiliation?: string | null;
+  invite_code?: string | null;
+  extra_tickets_count?: number;
+  tickets_total?: number | null;
+  payment_receipt_link?: string | null;
+  payment_verified?: boolean;
 }
 
 export interface RegistrationWithPlayer extends Registration {
