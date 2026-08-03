@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import StarRating from "./StarRating";
 import { Player } from "@/types/player";
 import { Championship } from "@/types/championship";
+import { reconcileCapacityAction } from "@/app/(protected)/championships/actions";
 
 const skillsLinha = [
   "visao",
@@ -72,6 +73,9 @@ export default function InscricaoForm({
     }));
 
     await supabase.from("self_evaluations").insert(selfRows);
+
+    // Re-check capacity: closes subscriptions if the championship just filled up.
+    await reconcileCapacityAction(championshipId);
 
     alert("Inscrição realizada com sucesso!");
     router.push(`/players/${player.id}`);

@@ -1,3 +1,33 @@
+export const CHAMPIONSHIP_STATUS = [
+  "draft",
+  "active",
+  "subscribing",
+  "subscribed",
+  "in_progress",
+  "completed",
+] as const;
+
+export type ChampionshipStatus = (typeof CHAMPIONSHIP_STATUS)[number];
+
+export const STATUS_LABELS: Record<ChampionshipStatus, string> = {
+  draft: "Rascunho",
+  active: "Ativo",
+  subscribing: "Inscrições Abertas",
+  subscribed: "Inscrições Encerradas",
+  in_progress: "Em Andamento",
+  completed: "Concluído",
+};
+
+/** Tailwind classes for the status badge (bg + text) — one distinct hue per status. */
+export const STATUS_COLORS: Record<ChampionshipStatus, string> = {
+  draft: "bg-zinc-600 text-white",
+  active: "bg-sky-600 text-white",
+  subscribing: "bg-emerald-600 text-white",
+  subscribed: "bg-amber-500 text-black",
+  in_progress: "bg-violet-600 text-white",
+  completed: "bg-rose-600 text-white",
+};
+
 export interface Championship {
   id: string;
   name: string;
@@ -5,6 +35,15 @@ export interface Championship {
   status?: string;
   overall?: number;
   champion_team_id?: string | null;
+
+  // ── Championship Management ────────────────────────────────────────────────
+  description?: string | null;
+  registration_start_date?: string | null;
+  registration_end_date?: string | null;
+  gala_night_date?: string | null;
+  tournament_start_date?: string | null;
+  max_players?: number | null;
+  max_waitlist_players?: number | null;
 
   // ── Configurações globais de pontuação (Módulo 1) ──────────────────────────
   /** Pontos por vitória. Default: 3 */
