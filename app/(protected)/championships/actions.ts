@@ -9,6 +9,7 @@ import {
   statusChangeSchema,
 } from "@/features/championships/schema";
 import { reconcileChampionshipCapacity } from "@/services/championship-capacity";
+import { slugify } from "@/lib/slug";
 
 export type ActionResult =
   | { ok: true }
@@ -35,10 +36,15 @@ function toRow(values: {
   max_players?: number;
   max_waitlist_players: number;
   status: string;
+  registration_image_url?: string;
+  base_price?: number;
+  extra_ticket_price?: number;
+  registration_group_options?: { label: string; requires_invite_code: boolean }[];
 }) {
   const iso = (d?: Date) => (d ? d.toISOString() : null);
   return {
     name: values.name,
+    slug: slugify(values.season ? `${values.name}-${values.season}` : values.name),
     season: values.season ?? null,
     description: values.description ?? null,
     registration_start_date: iso(values.registration_start_date),
@@ -48,6 +54,10 @@ function toRow(values: {
     max_players: values.max_players ?? null,
     max_waitlist_players: values.max_waitlist_players,
     status: values.status,
+    registration_image_url: values.registration_image_url ?? null,
+    base_price: values.base_price ?? null,
+    extra_ticket_price: values.extra_ticket_price ?? null,
+    registration_group_options: values.registration_group_options ?? [],
   };
 }
 

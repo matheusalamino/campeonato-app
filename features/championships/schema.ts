@@ -16,6 +16,12 @@ const baseChampionshipObject = z.object({
   max_players: z.coerce.number().int().positive().optional(),
   max_waitlist_players: z.coerce.number().int().min(0).default(0),
   status: championshipStatusSchema.default("draft"),
+  registration_image_url: z.string().trim().url().optional().or(z.literal("")).transform((v) => v || undefined),
+  base_price: z.coerce.number().min(0).optional(),
+  extra_ticket_price: z.coerce.number().min(0).optional(),
+  registration_group_options: z
+    .array(z.object({ label: z.string().trim().min(1), requires_invite_code: z.boolean() }))
+    .default([]),
 });
 
 function refineChampionship(
