@@ -144,10 +144,13 @@ export async function submitRegistration(
   if (existing) return { ok: false, error: "Você já está inscrito neste campeonato." };
 
   // Derive waitlist from the live count against main capacity.
-  const { count } = await supabase
+  const { count, error: countError } = await supabase
     .from("championship_registrations")
     .select("id", { count: "exact", head: true })
     .eq("championship_id", champ.id);
+  if (countError) {
+    return { ok: false, error: "Não foi possível concluir a inscrição. Tente novamente." };
+  }
   const isWaitlist = deriveIsWaitlist({
     registrationCount: count ?? 0,
     maxPlayers: champ.max_players,
