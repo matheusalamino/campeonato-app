@@ -44,7 +44,6 @@ function toRow(values: {
   const iso = (d?: Date) => (d ? d.toISOString() : null);
   return {
     name: values.name,
-    slug: slugify(values.season ? `${values.name}-${values.season}` : values.name),
     season: values.season ?? null,
     description: values.description ?? null,
     registration_start_date: iso(values.registration_start_date),
@@ -68,7 +67,12 @@ export async function createChampionship(input: unknown): Promise<ActionResult> 
     if (!parsed.success) {
       return { ok: false, error: "Dados inválidos", fieldErrors: zodToFieldErrors(parsed.error) };
     }
-    const { error } = await supabase.from("championships").insert(toRow(parsed.data));
+    const slug = slugify(
+      parsed.data.season ? `${parsed.data.name}-${parsed.data.season}` : parsed.data.name
+    );
+    const { error } = await supabase
+      .from("championships")
+      .insert({ ...toRow(parsed.data), slug });
     if (error) return { ok: false, error: error.message };
     revalidatePath("/championships");
     return { ok: true };

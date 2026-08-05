@@ -295,30 +295,32 @@ export function ChampionshipForm({
         <div className="space-y-2">
           <label className={labelClass}>Grupos / afiliações</label>
           {form.groups.map((g, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input
-                className={inputClass}
-                placeholder="Ex.: IASD Campolim"
-                value={g.label}
-                onChange={(e) => updateGroup(i, { label: e.target.value })}
-              />
-              <label className="flex items-center gap-1 whitespace-nowrap text-xs text-zinc-400">
+            <div key={i}>
+              <div className="flex items-center gap-2">
                 <input
-                  type="checkbox"
-                  checked={g.requires_invite_code}
-                  onChange={(e) => updateGroup(i, { requires_invite_code: e.target.checked })}
+                  className={inputClass}
+                  placeholder="Ex.: IASD Campolim"
+                  value={g.label}
+                  onChange={(e) => updateGroup(i, { label: e.target.value })}
                 />
-                exige código
-              </label>
-              <button type="button" onClick={() => removeGroup(i)} className="px-2 text-red-400">
-                ✕
-              </button>
+                <label className="flex items-center gap-1 whitespace-nowrap text-xs text-zinc-400">
+                  <input
+                    type="checkbox"
+                    checked={g.requires_invite_code}
+                    onChange={(e) => updateGroup(i, { requires_invite_code: e.target.checked })}
+                  />
+                  exige código
+                </label>
+                <button type="button" onClick={() => removeGroup(i)} className="px-2 text-red-400">
+                  ✕
+                </button>
+              </div>
+              <FieldError errors={errors} name={`registration_group_options.${i}.label`} />
             </div>
           ))}
           <button type="button" onClick={addGroup} className="text-xs text-emerald-400">
             + adicionar grupo
           </button>
-          <FieldError errors={errors} name="registration_group_options" />
         </div>
       </section>
 
