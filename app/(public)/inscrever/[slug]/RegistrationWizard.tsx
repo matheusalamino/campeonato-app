@@ -4,8 +4,13 @@ import { toast } from "sonner";
 import type { GroupOption } from "@/types/championship";
 import { isValidCpf, formatCpf } from "@/lib/cpf";
 import { groupRequiresInviteCode } from "@/features/registration/groups";
-import { lookupCpfAction } from "./actions";
+import { skillsFor, SKILL_LABELS } from "@/features/registration/skills";
+import { computeTicketsTotal } from "@/features/registration/pricing";
+import { isMinor } from "@/features/registration/minor";
+import { lookupCpfAction, submitRegistrationAction } from "./actions";
 import StepShell from "./steps/StepShell";
+import SkillStars from "./steps/SkillStars";
+import UploadCard from "./steps/UploadCard";
 
 export type WizardChampionship = {
   id: string; name: string; slug: string;
@@ -68,6 +73,60 @@ export default function RegistrationWizard({
 
   const needsInvite = groupRequiresInviteCode(championship.registration_group_options, form.group_affiliation);
 
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; isWaitlist?: boolean } | null>(null);
+  const activeSkills = skillsFor(form.preferred_position);
+  const total = computeTicketsTotal({
+    basePrice: championship.base_price,
+    extraTicketPrice: championship.extra_ticket_price,
+    extraTicketsCount: form.extra_tickets_count,
+  });
+  const minor = form.birth_date ? isMinor(form.birth_date) : false;
+
+  function setSkill(skill: string, v: number) {
+    setForm((p) => ({ ...p, skills: { ...p.skills, [skill]: v } }));
+  }
+
+  async function onSubmit() {
+    setSubmitting(true);
+    try {
+      const payload = {
+        championship_slug: championship.slug,
+        cpf: form.cpf, name: form.name, shirt_name: form.shirt_name,
+        email: form.email, whatsapp: form.whatsapp, birth_date: form.birth_date,
+        birth_state: form.birth_state, instagram: form.instagram,
+        preferred_position: form.preferred_position,
+        height: form.height, weight: form.weight,
+        group_affiliation: form.group_affiliation, invite_code: form.invite_code,
+        skills: Object.fromEntries(activeSkills.map((s) => [s, form.skills[s] ?? 1])),
+        extra_tickets_count: form.extra_tickets_count,
+        profile_photo_link: form.profile_photo_link,
+        payment_receipt_link: form.payment_receipt_link,
+        legal_authorization_link: form.legal_authorization_link,
+      };
+      const res = await submitRegistrationAction(payload);
+      if (res.ok) {
+        setResult({ ok: true, isWaitlist: res.isWaitlist });
+      } else {
+        toast.error(res.error);
+      }
+    } finally { setSubmitting(false); }
+  }
+
+  if (result?.ok) {
+    return (
+      <div className="max-w-md mx-auto min-h-screen flex flex-col items-center justify-center text-center px-6 gap-4">
+        <div className="text-5xl">🎉</div>
+        <h1 className="text-2xl font-extrabold text-[var(--gala-gold-2)]">Inscrição concluída!</h1>
+        <p className="text-sm text-[var(--gala-ink-dim)] max-w-sm">
+          {result.isWaitlist
+            ? "Você entrou na LISTA DE ESPERA. Avisaremos se uma vaga abrir."
+            : "Sua inscrição foi registrada com sucesso. Nos vemos em campo!"}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-md mx-auto px-4 pb-24 pt-6">
       {championship.registration_image_url && (
@@ -119,8 +178,65 @@ export default function RegistrationWizard({
           </button>
         </StepShell>
 
-        {/* Steps 3 (Perfil de jogo), 4 (Ingressos & pagamento), 5 (Revisão) are added in Task 11,
-            reusing StepShell, `form`/`set`, `advance`, `input`, `isFull`, and championship props. */}
+        <StepShell index={3} title="Perfil de jogo" open={step === 3} done={!!done[3]} onToggle={() => open(3)}>
+          <select className={input} value={form.preferred_position} onChange={(e) => set("preferred_position", e.target.value)}>
+            <option>Zagueiro</option><option>Meia</option><option>Atacante</option><option>Goleiro</option>
+          </select>
+          <div className="grid grid-cols-2 gap-2">
+            <input className={input} inputMode="decimal" placeholder="Altura (m)" value={form.height} onChange={(e) => set("height", e.target.value)} />
+            <input className={input} inputMode="decimal" placeholder="Peso (kg)" value={form.weight} onChange={(e) => set("weight", e.target.value)} />
+          </div>
+          {activeSkills.map((s) => (
+            <div key={s} className="flex items-center justify-between py-1 border-b border-white/5">
+              <span className="text-sm text-[var(--gala-ink)]">{SKILL_LABELS[s]}</span>
+              <SkillStars value={form.skills[s] ?? 0} onChange={(v) => setSkill(s, v)} />
+            </div>
+          ))}
+          <button onClick={() => advance(3)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
+                  style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>Continuar</button>
+        </StepShell>
+
+        <StepShell index={4} title="Ingressos & pagamento" open={step === 4} done={!!done[4]} onToggle={() => open(4)}>
+          <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3">
+            <span className="text-sm">Ingressos extras (Noite de Gala)</span>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => set("extra_tickets_count", Math.max(0, form.extra_tickets_count - 1))}
+                      className="w-8 h-8 rounded-lg font-bold text-[#050507]" style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>–</button>
+              <b>{form.extra_tickets_count}</b>
+              <button type="button" onClick={() => set("extra_tickets_count", form.extra_tickets_count + 1)}
+                      className="w-8 h-8 rounded-lg font-bold text-[#050507]" style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>+</button>
+            </div>
+          </div>
+          <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3">
+            <span className="text-sm text-[var(--gala-ink-dim)]">Total</span>
+            <b className="text-[var(--gala-gold-2)]">R$ {total.toFixed(2)}</b>
+          </div>
+          <UploadCard icon="📷" label="Foto de perfil (3x4)" hint="Toque para enviar" required bucket="registration-photos"
+                      value={form.profile_photo_link} onChange={(u) => set("profile_photo_link", u)} />
+          {total > 0 && (
+            <UploadCard icon="🧾" label="Comprovante de pagamento" hint="PIX / transferência" required bucket="registration-docs"
+                        value={form.payment_receipt_link} onChange={(u) => set("payment_receipt_link", u)} />
+          )}
+          {minor && (
+            <UploadCard icon="📝" label="Autorização do responsável" hint="Obrigatório para menores" required bucket="registration-docs"
+                        value={form.legal_authorization_link} onChange={(u) => set("legal_authorization_link", u)} />
+          )}
+          <button onClick={() => advance(4)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
+                  style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>Revisar</button>
+        </StepShell>
+
+        <StepShell index={5} title="Revisão & envio" open={step === 5} done={false} onToggle={() => open(5)}>
+          <div className="text-sm text-[var(--gala-ink-dim)] space-y-1">
+            <div><b className="text-[var(--gala-ink)]">{form.name || "—"}</b> · {form.preferred_position}</div>
+            <div>{form.group_affiliation || "—"}</div>
+            <div>Total: R$ {total.toFixed(2)}{isFull ? " · Lista de espera" : ""}</div>
+          </div>
+          <button onClick={onSubmit} disabled={submitting}
+                  className="w-full rounded-xl py-3 font-black uppercase tracking-wide text-[#050507]"
+                  style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>
+            {submitting ? "Enviando…" : "Enviar inscrição"}
+          </button>
+        </StepShell>
       </div>
     </div>
   );
