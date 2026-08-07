@@ -90,9 +90,24 @@ export async function updateChampionship(input: unknown): Promise<ActionResult> 
       return { ok: false, error: "Dados inválidos", fieldErrors: zodToFieldErrors(parsed.error) };
     }
     const { id, ...values } = parsed.data;
+    const row = toRow(values);
+
+    // Assign a slug on edit when the row lacks one (legacy championships created
+    // before slugs). Never overwrites an existing slug, keeping shared
+    // /inscrever/[slug] links stable.
+    const { data: current } = await supabase
+      .from("championships")
+      .select("slug")
+      .eq("id", id)
+      .maybeSingle();
+    const rowToWrite =
+      current && !current.slug
+        ? { ...row, slug: slugify(values.season ? `${values.name}-${values.season}` : values.name) }
+        : row;
+
     const { error } = await supabase
       .from("championships")
-      .update(toRow(values))
+      .update(rowToWrite)
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
     revalidatePath("/championships");
@@ -111,9 +126,26 @@ export async function changeChampionshipStatus(input: unknown): Promise<ActionRe
       return { ok: false, error: "Transição de status inválida" };
     }
     const { id, from, to } = parsed.data;
+
+    // Backfill a slug when the championship lacks one (legacy rows created before
+    // slugs existed). Without a slug it can never surface for public registration
+    // or resolve at /inscrever/[slug]. Only sets it when missing — never rewrites
+    // an existing slug, so shared links stay stable.
+    const updatePayload: { status: string; slug?: string } = { status: to };
+    const { data: current } = await supabase
+      .from("championships")
+      .select("name, season, slug")
+      .eq("id", id)
+      .maybeSingle();
+    if (current && !current.slug) {
+      updatePayload.slug = slugify(
+        current.season ? `${current.name}-${current.season}` : current.name,
+      );
+    }
+
     const { data, error } = await supabase
       .from("championships")
-      .update({ status: to })
+      .update(updatePayload)
       .eq("id", id)
       .eq("status", from)
       .is("deleted_at", null)
