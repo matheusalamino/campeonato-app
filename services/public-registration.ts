@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { normalizeCpf } from "@/lib/cpf";
 import { makeRegistrationSchema } from "@/features/registration/schema";
 import { computeTicketsTotal } from "@/features/registration/pricing";
@@ -65,17 +66,26 @@ export async function checkLookupRateLimit(ip: string): Promise<boolean> {
 }
 
 export async function getOpenRegistrationChampionship(): Promise<{ slug: string; name: string } | null> {
-  const supabase = createAdminClient();
-  const { data } = await supabase
-    .from("championships")
-    .select("slug, name")
-    .in("status", ["subscribing", "rest"])
-    .not("slug", "is", null)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return data ?? null;
+  // Reads public championship data (anon-readable) for the landing header, so it
+  // uses the anon server client — NOT the service-role admin client. This keeps
+  // the public landing independent of SUPABASE_SERVICE_ROLE_KEY. Any failure
+  // degrades to "no open championship" (button hidden) rather than crashing the
+  // landing, since this is a non-critical convenience link.
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("championships")
+      .select("slug, name")
+      .in("status", ["subscribing", "rest"])
+      .not("slug", "is", null)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function fieldErrorsFrom(error: z.ZodError): Record<string, string> {
