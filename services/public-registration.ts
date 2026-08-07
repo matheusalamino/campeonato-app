@@ -42,6 +42,28 @@ export async function lookupPlayerByCpf(
   return { exists: true, player: data as PlayerPrefill };
 }
 
+/** Per-IP sliding-window limit for the public CPF lookup. Returns true if allowed. */
+export async function checkLookupRateLimit(ip: string): Promise<boolean> {
+  const supabase = createAdminClient();
+  const now = Date.now();
+  const windowStart = new Date(now - 60_000).toISOString();
+  // Opportunistic prune of this IP's stale rows (keeps the table bounded).
+  await supabase
+    .from("registration_lookup_attempts")
+    .delete()
+    .eq("ip", ip)
+    .lt("attempted_at", new Date(now - 3_600_000).toISOString());
+  const { count, error } = await supabase
+    .from("registration_lookup_attempts")
+    .select("id", { count: "exact", head: true })
+    .eq("ip", ip)
+    .gte("attempted_at", windowStart);
+  if (error) return false; // fail closed on a rate-check error
+  if ((count ?? 0) >= 20) return false;
+  await supabase.from("registration_lookup_attempts").insert({ ip });
+  return true;
+}
+
 export async function getOpenRegistrationChampionship(): Promise<{ slug: string; name: string } | null> {
   const supabase = createAdminClient();
   const { data } = await supabase

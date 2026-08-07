@@ -52,6 +52,10 @@ export default function RegistrationWizard({
     setLooking(true);
     try {
       const res = await lookupCpfAction(form.cpf);
+      if ("throttled" in res) {
+        toast.error("Muitas tentativas. Aguarde um momento e tente novamente.");
+        return;
+      }
       if (res.exists) {
         const p = res.player;
         setForm((prev) => ({
