@@ -8,9 +8,10 @@ import LoginModal from "@/components/landing/LoginModal";
 interface LandingShellProps {
   children: ReactNode;
   liveChampionshipId: string | null;
+  registerSlug: string | null;
 }
 
-export default function LandingShell({ children, liveChampionshipId }: LandingShellProps) {
+export default function LandingShell({ children, liveChampionshipId, registerSlug }: LandingShellProps) {
   const [loginOpen, setLoginOpen] = useState(false);
 
   return (
@@ -21,6 +22,7 @@ export default function LandingShell({ children, liveChampionshipId }: LandingSh
       <LandingHeader
         liveChampionshipId={liveChampionshipId}
         onLoginClick={() => setLoginOpen(true)}
+        registerSlug={registerSlug}
       />
       {children}
       <footer
