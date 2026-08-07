@@ -110,6 +110,8 @@ export default function RegistrationWizard({
       } else {
         toast.error(res.error);
       }
+    } catch {
+      toast.error("Não foi possível concluir a inscrição. Tente novamente.");
     } finally { setSubmitting(false); }
   }
 
