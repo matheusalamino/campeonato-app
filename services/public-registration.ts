@@ -112,8 +112,26 @@ export async function submitRegistration(
     };
   }
 
-  // Upsert player by CPF.
+  // Idempotency: reject a second registration for this player + championship,
+  // BEFORE any write, so a duplicate attempt never mutates the player's
+  // existing identity fields.
   const cpf = normalizeCpf(data.cpf);
+  const { data: existingPlayer } = await supabase
+    .from("players")
+    .select("id")
+    .eq("cpf", cpf)
+    .maybeSingle();
+  if (existingPlayer) {
+    const { data: existingReg } = await supabase
+      .from("championship_registrations")
+      .select("id")
+      .eq("championship_id", champ.id)
+      .eq("player_id", existingPlayer.id)
+      .maybeSingle();
+    if (existingReg) return { ok: false, error: "Você já está inscrito neste campeonato." };
+  }
+
+  // Upsert player by CPF.
   const playerRow = {
     cpf,
     name: data.name,
@@ -133,15 +151,6 @@ export async function submitRegistration(
     .select("id")
     .single();
   if (playerErr || !player) return { ok: false, error: "Não foi possível salvar o jogador." };
-
-  // Idempotency: reject a second registration for this player + championship.
-  const { data: existing } = await supabase
-    .from("championship_registrations")
-    .select("id")
-    .eq("championship_id", champ.id)
-    .eq("player_id", player.id)
-    .maybeSingle();
-  if (existing) return { ok: false, error: "Você já está inscrito neste campeonato." };
 
   // Derive waitlist from the live count against main capacity.
   const { count, error: countError } = await supabase
