@@ -60,8 +60,10 @@ export default function RegistrationWizard({
         }));
         toast.success("Encontramos você! Confira seus dados.");
       }
+      advance(1);
+    } catch {
+      toast.error("Não foi possível verificar o CPF. Tente novamente.");
     } finally { setLooking(false); }
-    advance(1);
   }
 
   const needsInvite = groupRequiresInviteCode(championship.registration_group_options, form.group_affiliation);
