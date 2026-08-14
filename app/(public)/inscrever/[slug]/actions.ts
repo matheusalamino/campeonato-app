@@ -1,6 +1,11 @@
 "use server";
 import { headers } from "next/headers";
-import { lookupPlayerByCpf, submitRegistration, checkLookupRateLimit } from "@/services/public-registration";
+import {
+  lookupPlayerByCpf,
+  submitRegistration,
+  checkLookupRateLimit,
+  deleteRegistrationFile,
+} from "@/services/public-registration";
 
 export async function lookupCpfAction(cpf: string) {
   const h = await headers();
@@ -15,4 +20,11 @@ export async function lookupCpfAction(cpf: string) {
 
 export async function submitRegistrationAction(input: unknown) {
   return submitRegistration(input);
+}
+
+export async function deleteRegistrationFileAction(
+  ref: string,
+  bucket: "registration-photos" | "registration-docs",
+) {
+  await deleteRegistrationFile(ref, bucket);
 }

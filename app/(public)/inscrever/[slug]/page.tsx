@@ -5,6 +5,7 @@ import RegistrationWizard from "./RegistrationWizard";
 import RestOverlay from "./RestOverlay";
 import ClosedNotice from "./ClosedNotice";
 import NotOpenNotice from "./NotOpenNotice";
+import InscreverHeader from "./InscreverHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -32,14 +33,24 @@ export default async function InscreverPage({ params }: { params: Promise<{ slug
   };
   const liveCount = count ?? 0;
 
-  if (champ.status === "subscribing") {
-    return <RegistrationWizard championship={championship} liveCount={liveCount} />;
-  }
+  // The Sabbath "rest" view is a full-screen modal experience — no header.
   if (champ.status === "rest") {
     return <RestOverlay championship={championship} liveCount={liveCount} />;
   }
-  if (champ.status === "subscribed") {
-    return <ClosedNotice name={champ.name} />;
+
+  let view;
+  if (champ.status === "subscribing") {
+    view = <RegistrationWizard championship={championship} liveCount={liveCount} />;
+  } else if (champ.status === "subscribed") {
+    view = <ClosedNotice name={champ.name} />;
+  } else {
+    view = <NotOpenNotice />;
   }
-  return <NotOpenNotice />;
+
+  return (
+    <>
+      <InscreverHeader />
+      {view}
+    </>
+  );
 }

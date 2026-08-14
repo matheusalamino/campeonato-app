@@ -21,10 +21,12 @@ export type PlayerPrefill = {
   preferred_position?: string;
   height?: number;
   weight?: number;
+  group_affiliation?: string;
+  profile_photo_link?: string;
 };
 
 const PREFILL_COLUMNS =
-  "name, shirt_name, email, whatsapp, birth_date, instagram, birth_state, preferred_position, height, weight";
+  "id, name, shirt_name, email, whatsapp, birth_date, instagram, birth_state, preferred_position, height, weight";
 
 export async function lookupPlayerByCpf(
   cpf: string,
@@ -40,7 +42,51 @@ export async function lookupPlayerByCpf(
     .maybeSingle();
 
   if (!data) return { exists: false };
-  return { exists: true, player: data as PlayerPrefill };
+
+  const { id, ...prefill } = data as PlayerPrefill & { id: string };
+
+  // Carry over the group and profile photo from the player's most recent
+  // registration so returning players don't re-pick their group and can see
+  // (and optionally replace) their existing photo.
+  const { data: lastReg } = await supabase
+    .from("championship_registrations")
+    .select("group_affiliation, profile_photo_link")
+    .eq("player_id", id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return {
+    exists: true,
+    player: {
+      ...prefill,
+      group_affiliation: lastReg?.group_affiliation ?? undefined,
+      profile_photo_link: lastReg?.profile_photo_link ?? undefined,
+    },
+  };
+}
+
+/**
+ * Remove a previously uploaded registration file. Accepts either a public URL
+ * (registration-photos) or a "bucket/path" reference (registration-docs).
+ * Uses the service-role client so it works regardless of anon storage policies.
+ */
+export async function deleteRegistrationFile(
+  ref: string,
+  bucket: "registration-photos" | "registration-docs",
+): Promise<void> {
+  if (!ref) return;
+  const supabase = createAdminClient();
+  let path = ref;
+  const marker = `/object/public/${bucket}/`;
+  const idx = ref.indexOf(marker);
+  if (idx !== -1) {
+    path = ref.slice(idx + marker.length);
+  } else if (ref.startsWith(`${bucket}/`)) {
+    path = ref.slice(bucket.length + 1);
+  }
+  if (!path) return;
+  await supabase.storage.from(bucket).remove([path]);
 }
 
 /** Per-IP sliding-window limit for the public CPF lookup. Returns true if allowed. */
@@ -101,7 +147,7 @@ export async function submitRegistration(
   input: unknown,
 ): Promise<
   | { ok: true; registrationId: string; isWaitlist: boolean }
-  | { ok: false; error: string; fieldErrors?: Record<string, string> }
+  | { ok: false; error: string; fieldErrors?: Record<string, string>; alreadyRegistered?: boolean }
 > {
   const supabase = createAdminClient();
 
@@ -160,7 +206,9 @@ export async function submitRegistration(
       .eq("championship_id", champ.id)
       .eq("player_id", existingPlayer.id)
       .maybeSingle();
-    if (existingReg) return { ok: false, error: "Você já está inscrito neste campeonato." };
+    if (existingReg) {
+      return { ok: false, error: "Você já está inscrito neste campeonato.", alreadyRegistered: true };
+    }
   }
 
   // Upsert player by CPF.

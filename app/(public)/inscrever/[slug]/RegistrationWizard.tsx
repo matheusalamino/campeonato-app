@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { GroupOption } from "@/types/championship";
 import { isValidCpf, formatCpf } from "@/lib/cpf";
@@ -36,10 +37,12 @@ const input =
 export default function RegistrationWizard({
   championship, liveCount,
 }: { championship: WizardChampionship; liveCount: number }) {
+  const router = useRouter();
   const [form, setForm] = useState({ ...EMPTY });
   const [step, setStep] = useState(1);
   const [done, setDone] = useState<Record<number, boolean>>({});
   const [looking, setLooking] = useState(false);
+  const [hideGroup, setHideGroup] = useState(false);
 
   const isFull = championship.max_players != null && liveCount >= championship.max_players;
 
@@ -68,7 +71,10 @@ export default function RegistrationWizard({
           preferred_position: p.preferred_position ?? "Meia",
           height: p.height != null ? heightToMask(p.height) : "",
           weight: p.weight != null ? String(p.weight) : "",
+          group_affiliation: p.group_affiliation ?? "",
+          profile_photo_link: p.profile_photo_link ?? "",
         }));
+        setHideGroup(!!p.group_affiliation);
         toast.success("Encontramos você! Confira seus dados.");
       }
       advance(1);
@@ -80,7 +86,15 @@ export default function RegistrationWizard({
   const needsInvite = groupRequiresInviteCode(championship.registration_group_options, form.group_affiliation);
 
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; isWaitlist?: boolean } | null>(null);
+  const [result, setResult] = useState<{ ok: boolean; isWaitlist?: boolean; already?: boolean } | null>(null);
+
+  // On any terminal outcome (success / already-registered), send the player
+  // back to the home screen after a few seconds.
+  useEffect(() => {
+    if (!result) return;
+    const t = setTimeout(() => router.push("/"), 6000);
+    return () => clearTimeout(t);
+  }, [result, router]);
   const activeSkills = skillsFor(form.preferred_position);
   const total = computeTicketsTotal({
     basePrice: championship.base_price,
@@ -113,6 +127,8 @@ export default function RegistrationWizard({
       const res = await submitRegistrationAction(payload);
       if (res.ok) {
         setResult({ ok: true, isWaitlist: res.isWaitlist });
+      } else if (res.alreadyRegistered) {
+        setResult({ ok: false, already: true });
       } else {
         toast.error(res.error);
       }
@@ -131,6 +147,20 @@ export default function RegistrationWizard({
             ? "Você entrou na LISTA DE ESPERA. Avisaremos se uma vaga abrir."
             : "Sua inscrição foi registrada com sucesso. Nos vemos em campo!"}
         </p>
+        <p className="text-xs text-[var(--gala-ink-dim)]">Redirecionando para o início…</p>
+      </div>
+    );
+  }
+
+  if (result?.already) {
+    return (
+      <div className="max-w-md mx-auto min-h-screen flex flex-col items-center justify-center text-center px-6 gap-4">
+        <div className="text-5xl">✅</div>
+        <h1 className="text-2xl font-extrabold text-[var(--gala-gold-2)]">Você já está inscrito!</h1>
+        <p className="text-sm text-[var(--gala-ink-dim)] max-w-sm">
+          Encontramos uma inscrição sua para {championship.name}. Não é necessário se inscrever novamente.
+        </p>
+        <p className="text-xs text-[var(--gala-ink-dim)]">Redirecionando para o início…</p>
       </div>
     );
   }
@@ -177,12 +207,14 @@ export default function RegistrationWizard({
             ))}
           </select>
           <input className={input} placeholder="Instagram (opcional)" value={form.instagram} onChange={(e) => set("instagram", e.target.value)} />
-          <select className={input} value={form.group_affiliation} onChange={(e) => set("group_affiliation", e.target.value)}>
-            <option value="">Selecione seu grupo…</option>
-            {championship.registration_group_options.map((g) => (
-              <option key={g.label} value={g.label}>{g.label}</option>
-            ))}
-          </select>
+          {!hideGroup && (
+            <select className={input} value={form.group_affiliation} onChange={(e) => set("group_affiliation", e.target.value)}>
+              <option value="">Selecione seu grupo…</option>
+              {championship.registration_group_options.map((g) => (
+                <option key={g.label} value={g.label}>{g.label}</option>
+              ))}
+            </select>
+          )}
           {needsInvite && (
             <input className={input} placeholder="Código de convite" value={form.invite_code} onChange={(e) => set("invite_code", e.target.value)} />
           )}
