@@ -3,6 +3,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 import type { GroupOption } from "@/types/championship";
 import { isValidCpf, formatCpf } from "@/lib/cpf";
+import { formatPhoneBR, formatHeightM, heightToMask, heightMaskToNumeric } from "@/lib/masks";
+import { BR_STATES } from "@/lib/br-states";
 import { groupRequiresInviteCode } from "@/features/registration/groups";
 import { skillsFor, SKILL_LABELS } from "@/features/registration/skills";
 import { computeTicketsTotal } from "@/features/registration/pricing";
@@ -61,10 +63,10 @@ export default function RegistrationWizard({
         setForm((prev) => ({
           ...prev,
           name: p.name ?? "", shirt_name: p.shirt_name ?? "", email: p.email ?? "",
-          whatsapp: p.whatsapp ?? "", birth_date: (p.birth_date ?? "").slice(0, 10),
+          whatsapp: p.whatsapp ? formatPhoneBR(p.whatsapp) : "", birth_date: (p.birth_date ?? "").slice(0, 10),
           birth_state: p.birth_state ?? "", instagram: p.instagram ?? "",
           preferred_position: p.preferred_position ?? "Meia",
-          height: p.height != null ? String(p.height) : "",
+          height: p.height != null ? heightToMask(p.height) : "",
           weight: p.weight != null ? String(p.weight) : "",
         }));
         toast.success("Encontramos você! Confira seus dados.");
@@ -100,7 +102,7 @@ export default function RegistrationWizard({
         email: form.email, whatsapp: form.whatsapp, birth_date: form.birth_date,
         birth_state: form.birth_state, instagram: form.instagram,
         preferred_position: form.preferred_position,
-        height: form.height, weight: form.weight,
+        height: heightMaskToNumeric(form.height), weight: form.weight,
         group_affiliation: form.group_affiliation, invite_code: form.invite_code,
         skills: Object.fromEntries(activeSkills.map((s) => [s, form.skills[s] ?? 1])),
         extra_tickets_count: form.extra_tickets_count,
@@ -165,9 +167,15 @@ export default function RegistrationWizard({
           <input className={input} placeholder="Nome completo" value={form.name} onChange={(e) => set("name", e.target.value)} />
           <input className={input} placeholder="Nome da camisa" value={form.shirt_name} onChange={(e) => set("shirt_name", e.target.value)} />
           <input className={input} placeholder="E-mail" value={form.email} onChange={(e) => set("email", e.target.value)} />
-          <input className={input} placeholder="WhatsApp" value={form.whatsapp} onChange={(e) => set("whatsapp", e.target.value)} />
+          <input className={input} type="tel" inputMode="numeric" placeholder="WhatsApp — (11) 99999-9999"
+                 value={form.whatsapp} onChange={(e) => set("whatsapp", formatPhoneBR(e.target.value))} />
           <input className={input} type="date" value={form.birth_date} onChange={(e) => set("birth_date", e.target.value)} />
-          <input className={input} placeholder="Estado de nascimento" value={form.birth_state} onChange={(e) => set("birth_state", e.target.value)} />
+          <select className={input} value={form.birth_state} onChange={(e) => set("birth_state", e.target.value)}>
+            <option value="">Estado de nascimento…</option>
+            {BR_STATES.map((uf) => (
+              <option key={uf} value={uf}>{uf}</option>
+            ))}
+          </select>
           <input className={input} placeholder="Instagram (opcional)" value={form.instagram} onChange={(e) => set("instagram", e.target.value)} />
           <select className={input} value={form.group_affiliation} onChange={(e) => set("group_affiliation", e.target.value)}>
             <option value="">Selecione seu grupo…</option>
@@ -189,7 +197,7 @@ export default function RegistrationWizard({
             <option>Zagueiro</option><option>Meia</option><option>Atacante</option><option>Goleiro</option>
           </select>
           <div className="grid grid-cols-2 gap-2">
-            <input className={input} inputMode="decimal" placeholder="Altura (m)" value={form.height} onChange={(e) => set("height", e.target.value)} />
+            <input className={input} inputMode="numeric" placeholder="Altura — 1,80 m" value={form.height} onChange={(e) => set("height", formatHeightM(e.target.value))} />
             <input className={input} inputMode="decimal" placeholder="Peso (kg)" value={form.weight} onChange={(e) => set("weight", e.target.value)} />
           </div>
           {activeSkills.map((s) => (

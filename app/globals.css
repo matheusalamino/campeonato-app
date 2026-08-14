@@ -329,3 +329,16 @@
   [class*="gala-shine"]::after { animation: none !important; }
   [class*="goal-flash"], [class*="goal-pop"] { animation: none !important; }
 }
+
+/* Interactive elements read as clickable on hover. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+label:has(> input[type="file"]),
+select:not(:disabled),
+a[href] {
+  cursor: pointer;
+}
+button:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
