@@ -8,14 +8,16 @@ import {
   getLatestSeasonTopScorers,
   getLatestChampionByType,
 } from "@/lib/landing/queries";
+import { getOpenRegistrationChampionship } from "@/services/public-registration";
 
 export default async function LandingPage() {
-  const [recentChampions, stats, { scorers, seasonName, tournamentType }, latest] =
+  const [recentChampions, stats, { scorers, seasonName, tournamentType }, latest, openChampionship] =
     await Promise.all([
       getRecentChampions(4),
       getAggregateStats(),
       getLatestSeasonTopScorers(5),
       getLatestChampionByType(),
+      getOpenRegistrationChampionship(),
     ]);
 
   const statsHref =
@@ -23,7 +25,7 @@ export default async function LandingPage() {
 
   return (
     <main>
-      <HeroCarousel recentChampions={recentChampions} />
+      <HeroCarousel recentChampions={recentChampions} registerSlug={openChampionship?.slug ?? null} />
       <HomeTournamentCards
         copaDomundo={latest.copaDomundo}
         championsLeague={latest.championsLeague}

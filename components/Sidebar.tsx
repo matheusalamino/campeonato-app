@@ -55,7 +55,7 @@ export function Sidebar({ role }: { role: string | null }) {
   // 🚪 Logout
   async function handleLogout() {
     await supabase.auth.signOut();
-    router.push("/login");
+    router.push("/");
     router.refresh();
   }
 

@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 interface LandingHeaderProps {
   liveChampionshipId: string | null;
   onLoginClick: () => void;
+  registerSlug: string | null;
 }
 
 const NAV_LINKS = [
@@ -15,7 +16,7 @@ const NAV_LINKS = [
   { href: "/historico", label: "Histórico" },
 ];
 
-export default function LandingHeader({ liveChampionshipId, onLoginClick }: LandingHeaderProps) {
+export default function LandingHeader({ liveChampionshipId, onLoginClick, registerSlug }: LandingHeaderProps) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -73,6 +74,15 @@ export default function LandingHeader({ liveChampionshipId, onLoginClick }: Land
         </nav>
 
         <div className="flex items-center gap-3">
+          {registerSlug && (
+            <Link
+              href={`/inscrever/${registerSlug}`}
+              className="rounded-lg px-4 py-2 text-xs font-black uppercase tracking-widest transition-opacity hover:opacity-90 shrink-0"
+              style={{ border: "1px solid var(--gala-gold-2)", color: "var(--gala-gold-2)" }}
+            >
+              Inscrever
+            </Link>
+          )}
           <button
             onClick={onLoginClick}
             className="rounded-lg px-4 py-2 text-xs font-black uppercase tracking-widest text-[#050507] transition-opacity hover:opacity-90 shrink-0"
@@ -111,6 +121,16 @@ export default function LandingHeader({ liveChampionshipId, onLoginClick }: Land
               {link.label}
             </Link>
           ))}
+          {registerSlug && (
+            <Link
+              href={`/inscrever/${registerSlug}`}
+              onClick={() => setMenuOpen(false)}
+              className="block px-6 py-3.5 text-xs font-black uppercase tracking-widest"
+              style={{ color: "var(--gala-gold-2)", borderBottom: "1px solid var(--gala-line)" }}
+            >
+              Inscrever
+            </Link>
+          )}
           {liveChampionshipId && (
             <Link
               href={`/live/${liveChampionshipId}`}

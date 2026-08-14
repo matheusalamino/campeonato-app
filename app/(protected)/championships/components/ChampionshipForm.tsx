@@ -48,6 +48,10 @@ export function ChampionshipForm({
     max_waitlist_players:
       initial?.max_waitlist_players != null ? String(initial.max_waitlist_players) : "0",
     status: (initial?.status as ChampionshipStatus) ?? "draft",
+    registration_image_url: initial?.registration_image_url ?? "",
+    base_price: initial?.base_price != null ? String(initial.base_price) : "",
+    extra_ticket_price: initial?.extra_ticket_price != null ? String(initial.extra_ticket_price) : "",
+    groups: (initial?.registration_group_options ?? []) as { label: string; requires_invite_code: boolean }[],
   });
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -67,6 +71,10 @@ export function ChampionshipForm({
       max_players: emptyToUndef(form.max_players),
       max_waitlist_players: form.max_waitlist_players,
       status: form.status,
+      registration_image_url: emptyToUndef(form.registration_image_url),
+      base_price: emptyToUndef(form.base_price),
+      extra_ticket_price: emptyToUndef(form.extra_ticket_price),
+      registration_group_options: form.groups,
     };
   }
 
@@ -102,6 +110,16 @@ export function ChampionshipForm({
         toast.error(result.error);
       }
     });
+  }
+
+  function addGroup() {
+    set("groups", [...form.groups, { label: "", requires_invite_code: false }] as typeof form.groups);
+  }
+  function updateGroup(i: number, patch: Partial<{ label: string; requires_invite_code: boolean }>) {
+    set("groups", form.groups.map((g, idx) => (idx === i ? { ...g, ...patch } : g)) as typeof form.groups);
+  }
+  function removeGroup(i: number) {
+    set("groups", form.groups.filter((_, idx) => idx !== i) as typeof form.groups);
   }
 
   const inputClass =
@@ -233,6 +251,77 @@ export function ChampionshipForm({
           ))}
         </select>
         <FieldError errors={errors} name="status" />
+      </section>
+
+      {/* Inscrição */}
+      <section className="space-y-4 rounded-2xl bg-zinc-900 p-6">
+        <h2 className="text-lg font-semibold">Inscrição</h2>
+
+        <div>
+          <label className={labelClass}>Imagem da inscrição (URL)</label>
+          <input
+            className={inputClass}
+            value={form.registration_image_url}
+            onChange={(e) => set("registration_image_url", e.target.value)}
+          />
+          <FieldError errors={errors} name="registration_image_url" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className={labelClass}>Valor base (R$)</label>
+            <input
+              type="number"
+              step="0.01"
+              className={inputClass}
+              value={form.base_price}
+              onChange={(e) => set("base_price", e.target.value)}
+            />
+            <FieldError errors={errors} name="base_price" />
+          </div>
+          <div>
+            <label className={labelClass}>Valor ingresso extra (R$)</label>
+            <input
+              type="number"
+              step="0.01"
+              className={inputClass}
+              value={form.extra_ticket_price}
+              onChange={(e) => set("extra_ticket_price", e.target.value)}
+            />
+            <FieldError errors={errors} name="extra_ticket_price" />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className={labelClass}>Grupos / afiliações</label>
+          {form.groups.map((g, i) => (
+            <div key={i}>
+              <div className="flex items-center gap-2">
+                <input
+                  className={inputClass}
+                  placeholder="Ex.: IASD Campolim"
+                  value={g.label}
+                  onChange={(e) => updateGroup(i, { label: e.target.value })}
+                />
+                <label className="flex items-center gap-1 whitespace-nowrap text-xs text-zinc-400">
+                  <input
+                    type="checkbox"
+                    checked={g.requires_invite_code}
+                    onChange={(e) => updateGroup(i, { requires_invite_code: e.target.checked })}
+                  />
+                  exige código
+                </label>
+                <button type="button" onClick={() => removeGroup(i)} className="px-2 text-red-400">
+                  ✕
+                </button>
+              </div>
+              <FieldError errors={errors} name={`registration_group_options.${i}.label`} />
+            </div>
+          ))}
+          <button type="button" onClick={addGroup} className="text-xs text-emerald-400">
+            + adicionar grupo
+          </button>
+        </div>
       </section>
 
       <div className="flex gap-3">

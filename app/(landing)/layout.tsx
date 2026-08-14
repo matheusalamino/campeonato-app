@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getOpenRegistrationChampionship } from "@/services/public-registration";
 import LandingShell from "./LandingShell";
 import type { ReactNode } from "react";
 
@@ -23,5 +24,11 @@ export default async function LandingLayout({ children }: { children: ReactNode 
     liveChampionshipId = phase?.championship_id ?? null;
   }
 
-  return <LandingShell liveChampionshipId={liveChampionshipId}>{children}</LandingShell>;
+  const open = await getOpenRegistrationChampionship();
+
+  return (
+    <LandingShell liveChampionshipId={liveChampionshipId} registerSlug={open?.slug ?? null}>
+      {children}
+    </LandingShell>
+  );
 }

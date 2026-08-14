@@ -9,6 +9,7 @@ import {
   statusChangeSchema,
 } from "@/features/championships/schema";
 import { reconcileChampionshipCapacity } from "@/services/championship-capacity";
+import { slugify } from "@/lib/slug";
 
 export type ActionResult =
   | { ok: true }
@@ -35,6 +36,10 @@ function toRow(values: {
   max_players?: number;
   max_waitlist_players: number;
   status: string;
+  registration_image_url?: string;
+  base_price?: number;
+  extra_ticket_price?: number;
+  registration_group_options?: { label: string; requires_invite_code: boolean }[];
 }) {
   const iso = (d?: Date) => (d ? d.toISOString() : null);
   return {
@@ -48,6 +53,10 @@ function toRow(values: {
     max_players: values.max_players ?? null,
     max_waitlist_players: values.max_waitlist_players,
     status: values.status,
+    registration_image_url: values.registration_image_url ?? null,
+    base_price: values.base_price ?? null,
+    extra_ticket_price: values.extra_ticket_price ?? null,
+    registration_group_options: values.registration_group_options ?? [],
   };
 }
 
@@ -58,7 +67,12 @@ export async function createChampionship(input: unknown): Promise<ActionResult> 
     if (!parsed.success) {
       return { ok: false, error: "Dados inválidos", fieldErrors: zodToFieldErrors(parsed.error) };
     }
-    const { error } = await supabase.from("championships").insert(toRow(parsed.data));
+    const slug = slugify(
+      parsed.data.season ? `${parsed.data.name}-${parsed.data.season}` : parsed.data.name
+    );
+    const { error } = await supabase
+      .from("championships")
+      .insert({ ...toRow(parsed.data), slug });
     if (error) return { ok: false, error: error.message };
     revalidatePath("/championships");
     return { ok: true };
@@ -76,9 +90,24 @@ export async function updateChampionship(input: unknown): Promise<ActionResult> 
       return { ok: false, error: "Dados inválidos", fieldErrors: zodToFieldErrors(parsed.error) };
     }
     const { id, ...values } = parsed.data;
+    const row = toRow(values);
+
+    // Assign a slug on edit when the row lacks one (legacy championships created
+    // before slugs). Never overwrites an existing slug, keeping shared
+    // /inscrever/[slug] links stable.
+    const { data: current } = await supabase
+      .from("championships")
+      .select("slug")
+      .eq("id", id)
+      .maybeSingle();
+    const rowToWrite =
+      current && !current.slug
+        ? { ...row, slug: slugify(values.season ? `${values.name}-${values.season}` : values.name) }
+        : row;
+
     const { error } = await supabase
       .from("championships")
-      .update(toRow(values))
+      .update(rowToWrite)
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
     revalidatePath("/championships");
@@ -97,9 +126,26 @@ export async function changeChampionshipStatus(input: unknown): Promise<ActionRe
       return { ok: false, error: "Transição de status inválida" };
     }
     const { id, from, to } = parsed.data;
+
+    // Backfill a slug when the championship lacks one (legacy rows created before
+    // slugs existed). Without a slug it can never surface for public registration
+    // or resolve at /inscrever/[slug]. Only sets it when missing — never rewrites
+    // an existing slug, so shared links stay stable.
+    const updatePayload: { status: string; slug?: string } = { status: to };
+    const { data: current } = await supabase
+      .from("championships")
+      .select("name, season, slug")
+      .eq("id", id)
+      .maybeSingle();
+    if (current && !current.slug) {
+      updatePayload.slug = slugify(
+        current.season ? `${current.name}-${current.season}` : current.name,
+      );
+    }
+
     const { data, error } = await supabase
       .from("championships")
-      .update({ status: to })
+      .update(updatePayload)
       .eq("id", id)
       .eq("status", from)
       .is("deleted_at", null)

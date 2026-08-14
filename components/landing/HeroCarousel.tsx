@@ -7,9 +7,11 @@ const TOTAL = 2;
 
 interface HeroCarouselProps {
   recentChampions: Champion[];
+  registerSlug?: string | null;
 }
 
-export default function HeroCarousel({ recentChampions }: HeroCarouselProps) {
+export default function HeroCarousel({ recentChampions, registerSlug }: HeroCarouselProps) {
+  const isOpen = Boolean(registerSlug);
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(false);
 
@@ -141,12 +143,12 @@ export default function HeroCarousel({ recentChampions }: HeroCarouselProps) {
             <span
               className="inline-flex items-center gap-2 rounded-full px-5 py-1.5 text-[10px] font-black uppercase tracking-[4px]"
               style={{
-                background: "rgba(212,160,23,0.12)",
-                border: "1px solid var(--gala-gold-2)",
-                color: "var(--gala-gold-2)",
+                background: isOpen ? "rgba(52,211,153,0.12)" : "rgba(212,160,23,0.12)",
+                border: `1px solid ${isOpen ? "#34d399" : "var(--gala-gold-2)"}`,
+                color: isOpen ? "#34d399" : "var(--gala-gold-2)",
               }}
             >
-              ⏳ Em Breve
+              {isOpen ? "🟢 Inscrições Abertas" : "⏳ Em Breve"}
             </span>
             <p className="text-[11px] font-black uppercase tracking-[4px] text-[var(--gala-gold-2)]">
               LIFAS · Sorocaba
@@ -163,12 +165,23 @@ export default function HeroCarousel({ recentChampions }: HeroCarouselProps) {
               Champions League<br />Sorocaba 2026
             </h2>
             <p className="mt-2 max-w-md text-sm leading-relaxed text-[var(--gala-ink-dim)]">
-              A maior competição do futebol adventista de Sorocaba está chegando. Fique ligado para as novidades.
+              {isOpen
+                ? "As inscrições para a maior competição do futebol adventista de Sorocaba estão abertas. Garanta a sua vaga!"
+                : "A maior competição do futebol adventista de Sorocaba está chegando. Fique ligado para as novidades."}
             </p>
+            {isOpen && (
+              <a
+                href={`/inscrever/${registerSlug}`}
+                className="mt-4 inline-block rounded-lg px-8 py-3 text-sm font-black uppercase tracking-widest text-[#050507] transition-opacity hover:opacity-90"
+                style={{ background: "linear-gradient(135deg, var(--gala-gold-3), var(--gala-gold-2))" }}
+              >
+                Inscreva-se →
+              </a>
+            )}
             <div className="mt-2 flex flex-wrap justify-center gap-6 text-[10px] font-bold uppercase tracking-widest text-[var(--gala-ink-dim)]">
               <span>🏟️ Sorocaba, SP</span>
               <span>📅 2026</span>
-              <span>⚽ Em breve</span>
+              <span>{isOpen ? "⚽ Inscrições abertas" : "⚽ Em breve"}</span>
             </div>
           </div>
           {[...Array(10)].map((_, i) => (

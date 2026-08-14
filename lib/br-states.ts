@@ -1,0 +1,8 @@
+/** Siglas (UF) of all Brazilian states + Distrito Federal, in alphabetical order. */
+export const BR_STATES = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
+  "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN",
+  "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+] as const;
+
+export type BrState = (typeof BR_STATES)[number];
