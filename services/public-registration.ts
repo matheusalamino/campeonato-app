@@ -1,7 +1,10 @@
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeCpf } from "@/lib/cpf";
+import { shouldPersistPlayerIdentity } from "@/features/registration/player-identity";
+import { storagePathFromRef, type RegistrationBucket } from "@/features/registration/storage-ref";
 import { makeRegistrationSchema } from "@/features/registration/schema";
 import { computeTicketsTotal } from "@/features/registration/pricing";
 import { deriveIsWaitlist } from "@/features/registration/waitlist";
@@ -66,26 +69,56 @@ export async function lookupPlayerByCpf(
   };
 }
 
+/** Colunas de `championship_registrations` que apontam para um arquivo. */
+const FILE_COLUMNS = [
+  "profile_photo_link",
+  "payment_receipt_link",
+  "legal_authorization_link",
+] as const;
+
 /**
- * Remove a previously uploaded registration file. Accepts either a public URL
- * (registration-photos) or a "bucket/path" reference (registration-docs).
- * Uses the service-role client so it works regardless of anon storage policies.
+ * Diz se a referencia ja pertence a alguma inscricao. `null` quando a consulta
+ * falha — quem chama trata como "nao sei" e nao apaga nada.
+ *
+ * Usa um `.eq()` por coluna em vez de montar um `.or()`: a referencia vem do
+ * cliente e nao pode ser concatenada dentro da sintaxe de filtro do PostgREST.
+ */
+async function refIsInUse(supabase: SupabaseClient, ref: string): Promise<boolean | null> {
+  for (const column of FILE_COLUMNS) {
+    const { data, error } = await supabase
+      .from("championship_registrations")
+      .select("id")
+      .eq(column, ref)
+      .limit(1)
+      .maybeSingle();
+    if (error) return null;
+    if (data) return true;
+  }
+  return false;
+}
+
+/**
+ * Remove um arquivo de inscricao que ainda nao foi vinculado a ninguem.
+ *
+ * Roda a partir de uma Server Action publica e usa o client service-role, que
+ * ignora RLS — entao nao pode aceitar um caminho qualquer. Sem a checagem
+ * abaixo, quem listasse o bucket publico de fotos apagaria a foto de qualquer
+ * inscrito. O unico uso legitimo e a troca de arquivo no wizard, antes do
+ * envio, quando o arquivo anterior ainda nao foi referenciado por nenhuma
+ * inscricao.
  */
 export async function deleteRegistrationFile(
   ref: string,
-  bucket: "registration-photos" | "registration-docs",
+  bucket: RegistrationBucket,
 ): Promise<void> {
-  if (!ref) return;
-  const supabase = createAdminClient();
-  let path = ref;
-  const marker = `/object/public/${bucket}/`;
-  const idx = ref.indexOf(marker);
-  if (idx !== -1) {
-    path = ref.slice(idx + marker.length);
-  } else if (ref.startsWith(`${bucket}/`)) {
-    path = ref.slice(bucket.length + 1);
-  }
+  const path = storagePathFromRef(ref, bucket);
   if (!path) return;
+
+  const supabase = createAdminClient();
+
+  // Falha fechada: so apaga o que conseguiu provar que esta livre.
+  if ((await refIsInUse(supabase, ref)) !== false) return;
+
   await supabase.storage.from(bucket).remove([path]);
 }
 
@@ -211,26 +244,45 @@ export async function submitRegistration(
     }
   }
 
-  // Upsert player by CPF.
-  const playerRow = {
-    cpf,
-    name: data.name,
-    shirt_name: data.shirt_name,
-    email: data.email,
-    whatsapp: data.whatsapp,
-    birth_date: data.birth_date,
-    birth_state: data.birth_state,
-    instagram: data.instagram || null,
-    preferred_position: data.preferred_position,
-    height: data.height,
-    weight: data.weight,
-  };
-  const { data: player, error: playerErr } = await supabase
-    .from("players")
-    .upsert(playerRow, { onConflict: "cpf" })
-    .select("id")
-    .single();
-  if (playerErr || !player) return { ok: false, error: "Não foi possível salvar o jogador." };
+  // Grava a identidade apenas para um CPF novo — ver shouldPersistPlayerIdentity.
+  // Um upsert aqui deixaria qualquer pessoa que digitasse o CPF de outra
+  // reescrever nome, e-mail, WhatsApp e data de nascimento dela.
+  let playerId: string;
+  if (shouldPersistPlayerIdentity(existingPlayer?.id ?? null)) {
+    const playerRow = {
+      cpf,
+      name: data.name,
+      shirt_name: data.shirt_name,
+      email: data.email,
+      whatsapp: data.whatsapp,
+      birth_date: data.birth_date,
+      birth_state: data.birth_state,
+      instagram: data.instagram || null,
+      preferred_position: data.preferred_position,
+      height: data.height,
+      weight: data.weight,
+    };
+    const { data: created, error: playerErr } = await supabase
+      .from("players")
+      .insert(playerRow)
+      .select("id")
+      .single();
+    // Uma submissao concorrente com o mesmo CPF perde no UNIQUE de players.cpf;
+    // nesse caso o jogador ja existe e seguimos com o registro dele.
+    if (playerErr || !created) {
+      const { data: raced } = await supabase
+        .from("players")
+        .select("id")
+        .eq("cpf", cpf)
+        .maybeSingle();
+      if (!raced) return { ok: false, error: "Não foi possível salvar o jogador." };
+      playerId = raced.id;
+    } else {
+      playerId = created.id;
+    }
+  } else {
+    playerId = existingPlayer!.id;
+  }
 
   // Derive waitlist from the live count against main capacity.
   const { count, error: countError } = await supabase
@@ -250,7 +302,7 @@ export async function submitRegistration(
     .from("championship_registrations")
     .insert({
       championship_id: champ.id,
-      player_id: player.id,
+      player_id: playerId,
       is_waitlist: isWaitlist,
       group_affiliation: data.group_affiliation,
       invite_code: data.invite_code || null,
