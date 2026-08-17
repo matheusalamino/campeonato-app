@@ -32,6 +32,7 @@ const stats = (over: Partial<PublicPlayerStats>): PublicPlayerStats => ({
   penaltySaves: 0,
   fouls: 0,
   matchesPlayed: 1,
+  minutesPlayed: 14,
   ...over,
 });
 

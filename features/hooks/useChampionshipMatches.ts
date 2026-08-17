@@ -401,7 +401,7 @@ async function fetchChampionshipMatchGroups(
 
 export function useChampionshipMatches(championshipId: string | null) {
   const [groups, setGroups] = useState<ChampionshipMatchPhaseGroup[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!!championshipId);
 
   async function load() {
     if (!championshipId) {

@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, ArrowUpDown, Hand, Shield, ShieldCheck, Clock, CheckCircle2, ChevronRight,
-  Plus, Trash2, Target, AlertCircle, Square, Star, ArrowUpRight,
+  Plus, Trash2, Target, AlertCircle, Square, Star, ArrowUpRight, Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -769,7 +769,11 @@ function AddEventSheet({ detail, elapsed, onClose, onSaved }: {
 }
 
 // ─── EVENT LIST ──────────────────────────────────────────────────────────────
-function EventList({ detail, readonly }: { detail: MatchDetail; readonly: boolean }) {
+function EventList({ detail, readonly, onEdit }: {
+  detail: MatchDetail;
+  readonly: boolean;
+  onEdit: (ev: MatchEventItem) => void;
+}) {
   async function deleteEvent(ev: MatchEventItem) {
     if (!confirm("Remover este evento?")) return;
     try {
@@ -841,12 +845,21 @@ function EventList({ detail, readonly }: { detail: MatchDetail; readonly: boolea
                 )}
               </div>
             </div>
-            {!readonly && (
-              <button onClick={() => void deleteEvent(ev)}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-600 hover:bg-red-500/10 hover:text-red-500 transition-colors self-center">
-                <Trash2 className="h-4 w-4" />
+            <div className="flex items-center gap-0.5 self-center">
+              <button
+                onClick={() => onEdit(ev)}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-600 hover:bg-blue-500/10 hover:text-blue-400 transition-colors"
+                title="Editar evento"
+              >
+                <Pencil className="h-3.5 w-3.5" />
               </button>
-            )}
+              {!readonly && (
+                <button onClick={() => void deleteEvent(ev)}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-600 hover:bg-red-500/10 hover:text-red-500 transition-colors">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </div>
         );
       })}
@@ -931,6 +944,269 @@ function Scoreboard({ detail, elapsed }: { detail: MatchDetail; elapsed: number 
   );
 }
 
+// ─── EDIT EVENT MODAL ────────────────────────────────────────────────────────
+function EditEventModal({ event, detail, onClose, onSaved }: {
+  event: MatchEventItem;
+  detail: MatchDetail;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const allPlayers = [...detail.homePlayers, ...detail.awayPlayers];
+  const findPlayer = (id: string | null) =>
+    id ? allPlayers.find(p => p.registrationId === id) ?? null : null;
+
+  const [eventType, setEventType] = useState(event.eventType);
+  const [teamId] = useState(event.teamId); // team is not editable
+  const [player, setPlayer] = useState<MatchPlayer | null>(findPlayer(event.playerId));
+  const [assistPlayer, setAssistPlayer] = useState<MatchPlayer | null>(findPlayer(event.assistPlayerId));
+  const [playerIn, setPlayerIn] = useState<MatchPlayer | null>(findPlayer(event.playerInId));
+  const [step, setStep] = useState<number>(4);
+  const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const teamPlayers = teamId === detail.homeTeam.championshipTeamId
+    ? detail.homePlayers
+    : detail.awayPlayers;
+
+  const filteredTeam = teamPlayers.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase())
+  );
+  const filteredSecondary = teamPlayers.filter(p =>
+    p.registrationId !== player?.registrationId &&
+    p.name.toLowerCase().includes(search.toLowerCase())
+  );
+  const filteredBench = teamPlayers.filter(p =>
+    p.registrationId !== player?.registrationId &&
+    p.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  async function save() {
+    setSaving(true);
+    try {
+      await removeMatchEvent({
+        eventId: event.id,
+        knockoutMatchId: detail.match.id,
+        registrationId: event.playerId,
+        eventType: event.eventType,
+      });
+      await addMatchEvent({
+        knockoutMatchId: detail.match.id,
+        teamId,
+        registrationId: player?.registrationId ?? null,
+        eventType,
+        eventTimeS: event.eventTimeS,
+        period: event.period,
+        assistPlayerId: assistPlayer?.registrationId ?? null,
+        playerInId: playerIn?.registrationId ?? null,
+        championshipId: detail.match.championship_id ?? "",
+      });
+      const isGoalRelated = ["GOAL", "OWN_GOAL", "PENALTY_GOAL"].includes(eventType) ||
+        ["GOAL", "OWN_GOAL", "PENALTY_GOAL"].includes(event.eventType);
+      if (isGoalRelated) {
+        await resyncScore(detail.match.id, detail.homeTeam.championshipTeamId, detail.awayTeam.championshipTeamId);
+      }
+      toast.success("Evento atualizado");
+      onSaved();
+      onClose();
+    } catch {
+      toast.error("Erro ao atualizar evento");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-t-2xl md:rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl">
+        <div className="flex justify-center pt-3 pb-1 md:hidden">
+          <div className="h-1 w-10 rounded-full bg-zinc-700" />
+        </div>
+        <div className="p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Editar Evento</h3>
+            <span className="font-mono text-zinc-400">{formatTime(event.eventTimeS)}</span>
+          </div>
+
+          {/* Step 1: Event type */}
+          {step === 1 && (
+            <div>
+              <p className="mb-3 text-sm font-semibold text-zinc-300">Tipo de evento</p>
+              <div className="grid grid-cols-3 gap-2">
+                {EVENT_TYPES.map((e) => (
+                  <button key={e.type} onClick={() => { setEventType(e.type); setSearch(""); setStep(3); }}
+                    className={cn("flex flex-col items-center gap-1.5 rounded-xl border p-3 text-xs transition-all active:scale-95",
+                      eventType === e.type
+                        ? "border-blue-500 bg-zinc-700"
+                        : "border-zinc-700 bg-zinc-800 hover:border-blue-500 hover:bg-zinc-700"
+                    )}>
+                    <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900", EVENT_META[e.type].color)}>
+                      <EventIconByType type={e.type} className="h-5 w-5" />
+                    </span>
+                    <span className="text-zinc-300 font-medium">{e.label}</span>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => { setSearch(""); setStep(4); }} className="mt-4 text-xs font-bold text-zinc-500 hover:text-zinc-300 uppercase tracking-wider">← Voltar</button>
+            </div>
+          )}
+
+          {/* Step 3: Player picker */}
+          {step === 3 && (
+            <div>
+              <p className="mb-3 text-sm font-semibold text-zinc-300">
+                {eventType === "SUBSTITUTION" ? "Jogador saindo" : "Jogador principal"}
+              </p>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Buscar jogador..." className="mb-3 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none focus:border-blue-500" />
+              <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+                {filteredTeam.map(p => (
+                  <button key={p.registrationId} onClick={() => {
+                    setPlayer(p); setSearch("");
+                    if (eventType === "GOAL") setStep(3.5);
+                    else if (eventType === "SUBSTITUTION") setStep(3.6);
+                    else setStep(4);
+                  }}
+                    className={cn("flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-zinc-800 transition-all text-left group",
+                      player?.registrationId === p.registrationId && "bg-zinc-800/70"
+                    )}>
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden group-hover:border-blue-500/50">
+                      {p.photoUrl ? <img src={p.photoUrl} alt={p.name} className="h-full w-full object-cover" /> : <span className="text-xs font-bold text-zinc-500">{p.number ?? "?"}</span>}
+                    </div>
+                    <span className="font-bold text-white group-hover:text-blue-400 transition-colors">{p.name}</span>
+                  </button>
+                ))}
+                {filteredTeam.length === 0 && <p className="py-4 text-center text-sm text-zinc-500">Nenhum jogador encontrado.</p>}
+              </div>
+              <button onClick={() => { setSearch(""); setStep(1); }} className="mt-4 text-xs font-bold text-zinc-500 hover:text-zinc-300 uppercase tracking-wider">← Voltar</button>
+            </div>
+          )}
+
+          {/* Step 3.5: Assist prompt */}
+          {step === 3.5 && (
+            <div>
+              <p className="mb-4 text-sm font-semibold text-zinc-300 text-center">Houve assistência no gol?</p>
+              <div className="flex gap-3 mb-3">
+                <button onClick={() => { setAssistPlayer(null); setStep(4); }}
+                  className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 py-3 text-sm font-bold text-zinc-300 hover:border-zinc-500 transition-all">
+                  Não
+                </button>
+                <button onClick={() => { setSearch(""); setStep(3.51); }}
+                  className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white hover:bg-blue-500 transition-all">
+                  Sim
+                </button>
+              </div>
+              <button onClick={() => { setSearch(""); setStep(3); }} className="mt-2 text-xs font-bold text-zinc-500 hover:text-zinc-300 uppercase tracking-wider">← Voltar</button>
+            </div>
+          )}
+
+          {/* Step 3.51: Assist player picker */}
+          {step === 3.51 && (
+            <div>
+              <p className="mb-3 text-sm font-semibold text-zinc-300">Quem deu a assistência?</p>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Buscar assistente..." className="mb-3 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none focus:border-blue-500" />
+              <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+                {filteredSecondary.map(p => (
+                  <button key={p.registrationId} onClick={() => { setAssistPlayer(p); setSearch(""); setStep(4); }}
+                    className={cn("flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-zinc-800 transition-all text-left group",
+                      assistPlayer?.registrationId === p.registrationId && "bg-zinc-800/70"
+                    )}>
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden group-hover:border-blue-500/50">
+                      {p.photoUrl ? <img src={p.photoUrl} alt={p.name} className="h-full w-full object-cover" /> : <span className="text-xs font-bold text-zinc-500">{p.number ?? "?"}</span>}
+                    </div>
+                    <span className="font-bold text-white group-hover:text-blue-400 transition-colors">{p.name}</span>
+                  </button>
+                ))}
+                {filteredSecondary.length === 0 && <p className="py-4 text-center text-sm text-zinc-500">Nenhum jogador encontrado.</p>}
+              </div>
+              <button onClick={() => { setSearch(""); setStep(3.5); }} className="mt-4 text-xs font-bold text-zinc-500 hover:text-zinc-300 uppercase tracking-wider">← Voltar</button>
+            </div>
+          )}
+
+          {/* Step 3.6: Substitution player-in */}
+          {step === 3.6 && (
+            <div>
+              <p className="mb-3 text-sm font-semibold text-zinc-300">Quem está entrando?</p>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Buscar jogador..." className="mb-3 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none focus:border-blue-500" />
+              <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+                {filteredBench.map(p => (
+                  <button key={p.registrationId} onClick={() => { setPlayerIn(p); setSearch(""); setStep(4); }}
+                    className={cn("flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-zinc-800 transition-all text-left group",
+                      playerIn?.registrationId === p.registrationId && "bg-zinc-800/70"
+                    )}>
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden group-hover:border-blue-500/50">
+                      {p.photoUrl ? <img src={p.photoUrl} alt={p.name} className="h-full w-full object-cover" /> : <span className="text-xs font-bold text-zinc-500">{p.number ?? "?"}</span>}
+                    </div>
+                    <span className="font-bold text-white group-hover:text-blue-400 transition-colors">{p.name}</span>
+                  </button>
+                ))}
+                {filteredBench.length === 0 && <p className="py-4 text-center text-sm text-zinc-500">Nenhum jogador encontrado.</p>}
+              </div>
+              <button onClick={() => { setSearch(""); setStep(3); }} className="mt-4 text-xs font-bold text-zinc-500 hover:text-zinc-300 uppercase tracking-wider">← Voltar</button>
+            </div>
+          )}
+
+          {/* Step 4: Confirm */}
+          {step === 4 && (
+            <div>
+              <p className="mb-4 text-sm font-semibold text-zinc-300">Confirmar edição</p>
+              <div className="rounded-2xl border border-zinc-700 bg-zinc-800/50 p-4 space-y-3 text-sm">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                  <span className="text-zinc-400">Tipo</span>
+                  <span className="inline-flex items-center gap-1.5 font-bold text-white">
+                    <span className={cn(EVENT_META[eventType]?.color ?? "text-zinc-400")}>
+                      <EventIconByType type={eventType} className="h-4 w-4" />
+                    </span>
+                    {EVENT_META[eventType]?.label ?? eventType}
+                  </span>
+                </div>
+                {eventType === "SUBSTITUTION" ? (
+                  <>
+                    <div className="flex justify-between"><span className="text-zinc-400">Saiu</span><span className="font-bold text-red-400">{player?.name ?? "—"}</span></div>
+                    <div className="flex justify-between"><span className="text-zinc-400">Entrou</span><span className="font-bold text-emerald-400">{playerIn?.name ?? "—"}</span></div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between"><span className="text-zinc-400">Jogador</span><span className="font-bold text-white">{player?.name ?? "—"}</span></div>
+                    {eventType === "GOAL" && (
+                      <div className="flex justify-between"><span className="text-zinc-400">Assistência</span><span className="font-bold text-zinc-300">{assistPlayer?.name ?? "Sem assistência"}</span></div>
+                    )}
+                  </>
+                )}
+                <div className="flex justify-between border-t border-zinc-800 pt-2">
+                  <span className="text-zinc-400">Tempo</span>
+                  <span className="font-mono font-bold text-blue-400">{formatTime(event.eventTimeS)}</span>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-zinc-500">
+                <button onClick={() => { setSearch(""); setStep(1); }} className="hover:text-zinc-300 underline">Mudar tipo</button>
+                <span>·</span>
+                <button onClick={() => { setSearch(""); setStep(3); }} className="hover:text-zinc-300 underline">Mudar jogador</button>
+                {eventType === "GOAL" && (
+                  <>
+                    <span>·</span>
+                    <button onClick={() => { setSearch(""); setStep(3.5); }} className="hover:text-zinc-300 underline">Mudar assistência</button>
+                  </>
+                )}
+              </div>
+
+              <div className="mt-5 flex gap-3">
+                <button onClick={onClose} className="flex-1 rounded-xl border border-zinc-700 py-3 text-sm font-bold text-zinc-400 hover:bg-zinc-800 transition-all uppercase tracking-wider">
+                  Cancelar
+                </button>
+                <button onClick={save} disabled={saving}
+                  className="flex-[2] rounded-xl bg-amber-600 py-3 text-sm font-black text-white hover:bg-amber-500 transition-all disabled:opacity-50 uppercase tracking-wider shadow-lg shadow-amber-900/20">
+                  {saving ? "Salvando..." : "✏️ Salvar Edição"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── PAGE ────────────────────────────────────────────────────────────────────
 export default function MatchPage() {
   const { id } = useParams<{ id: string }>();
@@ -938,6 +1214,7 @@ export default function MatchPage() {
   const { detail, loading, elapsed, reload } = useMatchDetail(id);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showVoteModal, setShowVoteModal] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<MatchEventItem | null>(null);
   const [existingVotes, setExistingVotes] = useState<ExistingVote[]>([]);
   const [existingManagerVote, setExistingManagerVote] = useState<string | null>(null);
 
@@ -1098,7 +1375,7 @@ export default function MatchPage() {
       {!isCompleted && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
           <PeriodControls detail={detail} elapsed={elapsed} reload={reload} />
-          {isInProgress && detail.match.current_period !== "penalties" && (
+          {!isCompleted && detail.match.current_period !== "penalties" && (
             <button onClick={() => setShowAddEvent(true)}
               className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow hover:bg-blue-500 transition-all">
               <Plus className="h-4 w-4" /> Evento
@@ -1126,7 +1403,11 @@ export default function MatchPage() {
             <span className="ml-auto text-xs text-zinc-600">{detail.events.length} registros</span>
           </div>
           <div className="p-2">
-            <EventList detail={detail} readonly={isCompleted} />
+            <EventList
+              detail={detail}
+              readonly={isCompleted}
+              onEdit={(ev) => setEditingEvent(ev)}
+            />
           </div>
         </div>
       )}
@@ -1193,19 +1474,13 @@ export default function MatchPage() {
           onSaved={() => { void fetchExistingVotes(); void loadSaves(); }}
         />
       )}
-      {showVoteModal && detail && (
-        <BestPlayerVoteModal
-          matchId={detail.match.id}
-          championshipId={detail.match.championship_id ?? ""}
-          homeTeam={detail.homeTeam}
-          awayTeam={detail.awayTeam}
-          homePlayers={detail.homePlayers}
-          awayPlayers={detail.awayPlayers}
-          voteWeight={detail.voteWeight}
-          existingVotes={existingVotes}
-          existingManagerVote={existingManagerVote}
-          onClose={() => setShowVoteModal(false)}
-          onSaved={() => { void fetchExistingVotes(); }}
+
+      {editingEvent && detail && (
+        <EditEventModal
+          event={editingEvent}
+          detail={detail}
+          onClose={() => setEditingEvent(null)}
+          onSaved={() => { setEditingEvent(null); void reload(); }}
         />
       )}
     </div>

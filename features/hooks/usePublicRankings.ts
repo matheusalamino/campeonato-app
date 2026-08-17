@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { PublicPlayer, PublicPlayerStats, RankingEntry } from "@/lib/public/types";
+import { normalizePosition } from "@/lib/public/types";
 import {
   sumVotePoints,
   buildStatRanking,
@@ -32,6 +33,11 @@ type RevelationRow = {
   final_overall: number;
 };
 
+type PrizeOverrideRow = {
+  prize_key: string;
+  override_value: string;
+};
+
 export type PublicRankings = {
   players: PublicPlayer[];
   stats: PublicPlayerStats[];
@@ -56,7 +62,7 @@ function mapPlayer(r: any): PublicPlayer {
     championshipId: r.championship_id,
     playerName: r.player_name,
     officialName: r.official_name,
-    position: r.position,
+    position: normalizePosition(r.position),
     photoUrl: r.photo_url,
     finalOverall: r.final_overall === null ? null : Number(r.final_overall),
     championshipTeamId: r.championship_team_id,
@@ -65,13 +71,14 @@ function mapPlayer(r: any): PublicPlayer {
   };
 }
 
-function mapStats(r: any): PublicPlayerStats {
+function mapStats(r: any, minutesPerMatch: number): PublicPlayerStats {
   return {
     registrationId: r.registration_id,
     goals: r.goals, assists: r.assists,
     yellowCards: r.yellow_cards, redCards: r.red_cards,
     decisiveSaves: r.decisive_saves, penaltySaves: r.penalty_saves,
     fouls: r.fouls, matchesPlayed: r.matches_played,
+    minutesPlayed: (r.matches_played ?? 0) * minutesPerMatch,
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -88,7 +95,7 @@ export function usePublicRankings(championshipId: string | null, topN = 3) {
     if (!championshipId) { setRankings(EMPTY); setLoading(false); return; }
     setLoading(true);
     try {
-      const [playersRes, statsRes, votesRes, iogRes, revRes, managerVotesRes] = await Promise.all([
+      const [playersRes, statsRes, votesRes, iogRes, revRes, managerVotesRes, champRes, overridesRes] = await Promise.all([
         supabase.from("public_players").select("*").eq("championship_id", championshipId),
         supabase.from("public_player_stats").select("*").eq("championship_id", championshipId),
         supabase.from("best_player_votes").select("registration_id, points").eq("championship_id", championshipId),
@@ -98,10 +105,13 @@ export function usePublicRankings(championshipId: string | null, topN = 3) {
           .from("public_best_manager_votes")
           .select("championship_team_id, team_name, team_logo_url, manager_name, manager_photo, points")
           .eq("championship_id", championshipId),
+        supabase.from("championships").select("period_duration, periods_count").eq("id", championshipId).maybeSingle(),
+        supabase.from("championship_prize_overrides").select("prize_key, override_value").eq("championship_id", championshipId),
       ]);
+      const minutesPerMatch = ((champRes.data?.period_duration ?? 7) * (champRes.data?.periods_count ?? 2));
 
       const players = (playersRes.data ?? []).map(mapPlayer);
-      const stats = (statsRes.data ?? []).map(mapStats);
+      const stats = (statsRes.data ?? []).map((r) => mapStats(r, minutesPerMatch));
       const byId = new Map(players.map((p) => [p.registrationId, p]));
       const voteTotals = sumVotePoints(votesRes.data ?? []);
 
@@ -131,15 +141,47 @@ export function usePublicRankings(championshipId: string | null, topN = 3) {
           };
         });
 
-      const managers = buildManagerRanking((managerVotesRes.data ?? []) as ManagerVoteRow[], topN);
+      const managers = buildManagerRanking((managerVotesRes.data ?? []) as ManagerVoteRow[], Infinity);
+
+      const overrideMap = new Map<string, string>(
+        ((overridesRes.data ?? []) as PrizeOverrideRow[]).map(r => [r.prize_key, r.override_value])
+      );
+
+      function applyPlayerOverride(prizeKey: string, entries: RankingEntry[]): RankingEntry[] {
+        const overrideId = overrideMap.get(prizeKey);
+        if (!overrideId) return entries;
+        const p = byId.get(overrideId);
+        if (!p) return entries;
+        const overrideEntry: RankingEntry = {
+          registrationId: p.registrationId,
+          playerName: p.playerName,
+          teamName: p.teamName,
+          teamLogoUrl: p.teamLogoUrl,
+          photoUrl: p.photoUrl,
+          position: p.position,
+          value: 0,
+          isOverride: true,
+        };
+        return [overrideEntry, ...entries.filter(e => e.registrationId !== overrideId)];
+      }
+
+      function applyTeamOverride(prizeKey: string, entries: RankingEntry[]): RankingEntry[] {
+        const overrideTeamId = overrideMap.get(prizeKey);
+        if (!overrideTeamId) return entries;
+        const existing = entries.find(e => e.registrationId === overrideTeamId);
+        if (!existing) return entries;
+        return [{ ...existing, isOverride: true }, ...entries.filter(e => e.registrationId !== overrideTeamId)];
+      }
 
       setRankings({
         players, stats,
         topScorers: buildStatRanking(stats, players, (s) => s.goals, topN),
         topAssists: buildStatRanking(stats, players, (s) => s.assists, topN),
-        craque: buildVoteRanking(voteTotals, players, topN),
+        craque: applyPlayerOverride('craque', buildVoteRanking(voteTotals, players, topN)),
         craqueByPosition: groupRankingByPosition(voteTotals, players, topN),
-        goalkeepers, revelations, managers,
+        goalkeepers: applyPlayerOverride('goleiro', goalkeepers),
+        revelations: applyPlayerOverride('revelacao', revelations),
+        managers: applyTeamOverride('tecnico', managers),
       });
     } finally {
       setLoading(false);

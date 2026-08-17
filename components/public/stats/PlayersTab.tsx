@@ -16,7 +16,7 @@ type SkillRow = { registration_id: string; skill: string; rating: number };
 
 const EMPTY_STATS: Omit<PublicPlayerStats, "registrationId"> = {
   goals: 0, assists: 0, yellowCards: 0, redCards: 0,
-  decisiveSaves: 0, penaltySaves: 0, fouls: 0, matchesPlayed: 0,
+  decisiveSaves: 0, penaltySaves: 0, fouls: 0, matchesPlayed: 0, minutesPlayed: 0,
 };
 
 function normalize(s: string) {

@@ -188,7 +188,7 @@ export default function LiveScreenPage() {
   };
 
   return (
-    <main className={cursorHidden ? "cursor-none" : ""}>
+    <main className={`overflow-x-hidden w-full${cursorHidden ? " cursor-none" : ""}`}>
       <LiveCarousel renderCard={renderCard} emptyCardIds={emptyCardIds} cards={carouselCards} handleRef={carouselRef} />
     </main>
   );

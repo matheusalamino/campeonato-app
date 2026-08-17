@@ -6,10 +6,14 @@ import { createClient } from "@/lib/supabase/client";
 import { useState, useEffect } from "react";
 import { useChampionship } from "./ChampionshipContext";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChampionshipCombobox } from "./ChampionshipCombobox";
+import type { Championship as ChampionshipModel } from "@/types/championship";
 
 type Championship = {
   id: string;
   name: string;
+  season: string | null;
+  created_at: string | null;
   champion_team_id: string | null;
 };
 
@@ -17,7 +21,6 @@ export function Sidebar({ role }: { role: string | null }) {
   const router = useRouter();
   const pathname = usePathname();
   const supabase = createClient();
-  void role;
 
   const [open, setOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(() =>
@@ -32,8 +35,9 @@ export function Sidebar({ role }: { role: string | null }) {
     async function loadChampionships() {
       const { data } = await supabase
         .from("championships")
-        .select("id, name, champion_team_id")
-        .order("name");
+        .select("id, name, season, created_at, champion_team_id")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
 
       setChampionships(data || []);
 
@@ -51,7 +55,7 @@ export function Sidebar({ role }: { role: string | null }) {
   // 🚪 Logout
   async function handleLogout() {
     await supabase.auth.signOut();
-    router.push("/login");
+    router.push("/");
     router.refresh();
   }
 
@@ -99,29 +103,17 @@ export function Sidebar({ role }: { role: string | null }) {
           </div>
 
           {/* SELECT CAMPEONATO */}
-          <select
-            value={championship?.id || ""}
-            onChange={(e) => {
-              const selected = championships.find(
-                (c) => c.id === e.target.value,
-              );
-
-              setChampionship(selected || null);
-
-              if (selected) {
-                localStorage.setItem("championshipId", selected.id);
-              }
+          <ChampionshipCombobox
+            items={championships}
+            value={championship?.id ?? ""}
+            onSelect={(id) => {
+              const selected = championships.find((c) => c.id === id) ?? null;
+              // Local row carries season/created_at as `string | null`; the context
+              // Championship types them as optional strings, so cast at the boundary.
+              setChampionship(selected as ChampionshipModel | null);
+              if (selected) localStorage.setItem("championshipId", selected.id);
             }}
-            className="bg-zinc-800 p-2 rounded w-full text-sm"
-          >
-            <option value="">Selecionar campeonato</option>
-
-            {championships.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          />
         </div>
 
         {/* MENU */}
@@ -131,9 +123,9 @@ export function Sidebar({ role }: { role: string | null }) {
 
           {/* DASHBOARD */}
           <Link
-            href="/"
+            href="/dashboard"
             className={`px-4 py-2 rounded-lg ${
-              isActive("/") ? "bg-blue-600 text-white" : "text-zinc-400"
+              isActive("/dashboard") ? "bg-blue-600 text-white" : "text-zinc-400"
             }`}
           >
             Dashboard
@@ -238,6 +230,15 @@ export function Sidebar({ role }: { role: string | null }) {
           >
             Cartolas
           </Link>
+
+          {role === "admin" && (
+            <Link
+              href="/championships"
+              className="px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-800 rounded"
+            >
+              Campeonatos
+            </Link>
+          )}
         </nav>
 
         {/* FOOTER */}
