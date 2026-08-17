@@ -52,7 +52,13 @@ O `local:setup` faz:
 
 ### Rodar o app apontando para staging
 
-Use um arquivo ignorado, por exemplo `.env.staging.local`, e copie temporariamente para `.env.local` quando precisar validar no front.
+```bash
+cp .secrets/staging.app.env.example .secrets/staging.app.env
+# preencha as chaves em Settings > API do projeto de staging
+npm run dev:staging
+```
+
+O comando exporta as variaveis no proprio processo antes de subir o Next. O `.env.local` nao e tocado: `npm run dev` continua indo para o Supabase local, e voce sempre sabe para onde esta apontando pelo banner impresso na subida.
 
 Nunca desenvolva no dia a dia apontando para staging.
 
@@ -94,6 +100,18 @@ Esse fluxo:
 - recria o admin local conhecido
 
 ## Producao
+
+### Rodar o app apontando para producao
+
+```bash
+cp .secrets/production.app.env.example .secrets/production.app.env
+# preencha as chaves em Settings > API do projeto de producao
+npm run dev:production
+```
+
+O comando pede confirmacao digitada antes de subir. A service-role ignora RLS, e a inscricao publica grava jogador e inscricao reais — uma submissao de teste apontada para producao cria dado de verdade e pode fechar as inscricoes de um campeonato. Use apenas em caso controlado.
+
+Para encadear sem o prompt, exporte `CONFIRM_PRODUCTION=1`.
 
 ### Clonar dados de producao para o ambiente local
 
