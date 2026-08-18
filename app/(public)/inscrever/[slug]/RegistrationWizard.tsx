@@ -13,7 +13,7 @@ import { buildPixPayload, makePixTxid } from "@/lib/pix";
 import { isMinor } from "@/features/registration/minor";
 import { makeRegistrationSchema } from "@/features/registration/schema";
 import { fieldErrorsFrom } from "@/features/registration/field-errors";
-import { errorsForStep, firstStepWithError, stepNumber, AUTHORIZATION_STEP } from "@/features/registration/field-steps";
+import { errorsForStep, firstStepWithError, stepNumber, AUTHORIZATION_STEP, UNIFORM_STEP } from "@/features/registration/field-steps";
 import { summarizeErrors } from "@/features/registration/error-summary";
 import { SHIRT_SIZES, CUSTOM_SHIRT_SIZE } from "@/features/registration/shirt-sizes";
 import { radarDataFrom, hasAnyRating } from "@/features/registration/radar";
@@ -371,6 +371,35 @@ export default function RegistrationWizard({
               {err("weight")}
             </div>
           </div>
+          {/* Preso abaixo do header (que e sticky top-0 z-50) enquanto as
+              estrelas rolam por baixo. Estatico, o radar sairia da tela na
+              terceira habilidade e o "ao vivo" se perderia onde mais importa.
+              O fundo repete a mesma tinta dourada do StepShell sobre o fundo da
+              pagina, para a banda opaca nao destoar do passo. */}
+          {hasAnyRating(form.skills, form.preferred_position) && (
+            <div className="sticky top-14 z-10 -mx-4 px-4 py-2"
+                 style={{ background: "linear-gradient(rgba(230,180,34,.06), rgba(230,180,34,.06)), var(--gala-bg-0)" }}>
+              <PlayerRadar
+                data={radarDataFrom(form.skills, form.preferred_position)}
+                heightClass="h-[200px]"
+              />
+            </div>
+          )}
+          {activeSkills.map((s) => (
+            <div key={s} className="flex items-center justify-between py-1 border-b border-white/5">
+              <span className="text-sm text-[var(--gala-ink)]">{SKILL_LABELS[s]}</span>
+              <SkillStars label={SKILL_LABELS[s]} value={form.skills[s] ?? 0} onChange={(v) => setSkill(s, v)} />
+            </div>
+          ))}
+          {activeSkills.some((s) => errors[`skills.${s}`]) && (
+            <p className="text-xs" style={{ color: "#fca5a5" }}>Avalie todas as habilidades para continuar.</p>
+          )}
+          <button onClick={() => advance(4)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
+                  style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>Continuar</button>
+        </StepShell>
+
+        <StepShell index={stepNumber(UNIFORM_STEP, minor)} title="Uniforme"
+                   open={step === UNIFORM_STEP} done={!!done[UNIFORM_STEP]} onToggle={() => open(UNIFORM_STEP)}>
           <input {...fieldProps("shirt_name")} placeholder="Nome da camisa" aria-label="Nome da camisa"
                  value={form.shirt_name} onChange={(e) => set("shirt_name", e.target.value)} />
           {err("shirt_name")}
@@ -399,34 +428,11 @@ export default function RegistrationWizard({
             </div>
           )}
 
-          {/* Preso abaixo do header (que e sticky top-0 z-50) enquanto as
-              estrelas rolam por baixo. Estatico, o radar sairia da tela na
-              terceira habilidade e o "ao vivo" se perderia onde mais importa.
-              O fundo repete a mesma tinta dourada do StepShell sobre o fundo da
-              pagina, para a banda opaca nao destoar do passo. */}
-          {hasAnyRating(form.skills, form.preferred_position) && (
-            <div className="sticky top-14 z-10 -mx-4 px-4 py-2"
-                 style={{ background: "linear-gradient(rgba(230,180,34,.06), rgba(230,180,34,.06)), var(--gala-bg-0)" }}>
-              <PlayerRadar
-                data={radarDataFrom(form.skills, form.preferred_position)}
-                heightClass="h-[200px]"
-              />
-            </div>
-          )}
-          {activeSkills.map((s) => (
-            <div key={s} className="flex items-center justify-between py-1 border-b border-white/5">
-              <span className="text-sm text-[var(--gala-ink)]">{SKILL_LABELS[s]}</span>
-              <SkillStars label={SKILL_LABELS[s]} value={form.skills[s] ?? 0} onChange={(v) => setSkill(s, v)} />
-            </div>
-          ))}
-          {activeSkills.some((s) => errors[`skills.${s}`]) && (
-            <p className="text-xs" style={{ color: "#fca5a5" }}>Avalie todas as habilidades para continuar.</p>
-          )}
-          <button onClick={() => advance(4)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
+          <button onClick={() => advance(UNIFORM_STEP)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
                   style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>Continuar</button>
         </StepShell>
 
-        <StepShell index={stepNumber(5, minor)} title="Ingressos & pagamento" open={step === 5} done={!!done[5]} onToggle={() => open(5)}>
+        <StepShell index={stepNumber(6, minor)} title="Ingressos & pagamento" open={step === 6} done={!!done[6]} onToggle={() => open(6)}>
           <div className="rounded-2xl px-3 py-3 text-xs leading-relaxed"
                style={{ background: "rgba(230,180,34,.08)", border: "1px solid rgba(230,180,34,.25)", color: "var(--gala-ink)" }}>
             Sua inscrição já inclui <b>2 ingressos</b> para a Noite de Gala: o seu e o de um
@@ -455,11 +461,11 @@ export default function RegistrationWizard({
                         value={form.payment_receipt_link} onChange={(u) => set("payment_receipt_link", u)} />
           )}
           {err("payment_receipt_link")}
-          <button onClick={() => advance(5)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
+          <button onClick={() => advance(6)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
                   style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>Revisar</button>
         </StepShell>
 
-        <StepShell index={stepNumber(6, minor)} title="Revisão & envio" open={step === 6} done={false} onToggle={() => open(6)}>
+        <StepShell index={stepNumber(7, minor)} title="Revisão & envio" open={step === 7} done={false} onToggle={() => open(7)}>
           <div className="text-sm text-[var(--gala-ink-dim)] space-y-1">
             <div><b className="text-[var(--gala-ink)]">{form.name || "—"}</b> · {form.preferred_position}</div>
             <div>{form.group_affiliation || "—"}</div>
