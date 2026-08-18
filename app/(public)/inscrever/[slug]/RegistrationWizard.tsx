@@ -20,6 +20,7 @@ import StepShell from "./steps/StepShell";
 import SkillStars from "./steps/SkillStars";
 import UploadCard from "./steps/UploadCard";
 import PixPayment from "./steps/PixPayment";
+import { INSTAGRAM_HANDLE, INSTAGRAM_URL } from "@/lib/social";
 
 export type WizardChampionship = {
   id: string; name: string; slug: string;
@@ -235,6 +236,10 @@ export default function RegistrationWizard({
             ? "Você entrou na LISTA DE ESPERA. Avisaremos se uma vaga abrir."
             : "Sua inscrição foi registrada com sucesso. Nos vemos em campo!"}
         </p>
+        <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer"
+           className="text-sm font-bold text-[var(--gala-gold-2)] underline underline-offset-4">
+          Siga {INSTAGRAM_HANDLE}
+        </a>
         <p className="text-xs text-[var(--gala-ink-dim)]">Redirecionando para o início…</p>
       </div>
     );
@@ -374,6 +379,11 @@ export default function RegistrationWizard({
         </StepShell>
 
         <StepShell index={stepNumber(5, minor)} title="Ingressos & pagamento" open={step === 5} done={!!done[5]} onToggle={() => open(5)}>
+          <div className="rounded-2xl px-3 py-3 text-xs leading-relaxed"
+               style={{ background: "rgba(230,180,34,.08)", border: "1px solid rgba(230,180,34,.25)", color: "var(--gala-ink)" }}>
+            Sua inscrição já inclui <b>2 ingressos</b> para a Noite de Gala: o seu e o de um
+            acompanhante. Precisa de mais? Cada ingresso adicional é cobrado à parte abaixo.
+          </div>
           <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3">
             <span className="text-sm">Ingressos extras (Noite de Gala)</span>
             <div className="flex items-center gap-3">

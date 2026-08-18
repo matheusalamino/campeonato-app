@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { INSTAGRAM_HANDLE, INSTAGRAM_URL } from "@/lib/social";
 import { usePathname } from "next/navigation";
 
 interface LandingHeaderProps {
@@ -74,6 +75,17 @@ export default function LandingHeader({ liveChampionshipId, onLoginClick, regist
         </nav>
 
         <div className="flex items-center gap-3">
+          <a
+            href={INSTAGRAM_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Instagram do campeonato, ${INSTAGRAM_HANDLE}`}
+            title={INSTAGRAM_HANDLE}
+            className="hidden sm:inline-flex items-center rounded-lg px-3 py-2 text-lg leading-none transition-opacity hover:opacity-80 shrink-0"
+            style={{ border: "1px solid var(--gala-line)", color: "var(--gala-gold-2)" }}
+          >
+            ⌾
+          </a>
           {registerSlug && (
             <Link
               href={`/inscrever/${registerSlug}`}

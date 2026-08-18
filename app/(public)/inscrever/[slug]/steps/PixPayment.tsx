@@ -10,7 +10,7 @@ import { toast } from "sonner";
  * preenchido. Copiar so a chave devolveria ao jogador a tarefa de somar
  * ingressos extras a mao — justo o que este codigo existe para evitar.
  *
- * O QR aparece a partir de tela media: no celular ele nao serve, porque a
+ * O QR aparece a partir de 769px: no celular ele nao serve, porque a
  * pessoa esta no mesmo aparelho em que vai abrir o banco.
  */
 export default function PixPayment({ payload, amount }: { payload: string; amount: number }) {
@@ -40,7 +40,7 @@ export default function PixPayment({ payload, amount }: { payload: string; amoun
       </div>
 
       {svg && (
-        <div className="hidden sm:flex justify-center">
+        <div className="hidden min-[769px]:flex justify-center">
           <div
             className="rounded-xl bg-white p-2"
             aria-label="QR Code para pagamento via PIX"
@@ -50,8 +50,8 @@ export default function PixPayment({ payload, amount }: { payload: string; amoun
       )}
 
       <p className="text-xs text-[var(--gala-ink-dim)]">
-        <span className="hidden sm:inline">Escaneie o QR Code com o app do seu banco, ou use o </span>
-        <span className="sm:hidden">Use o </span>
+        <span className="hidden min-[769px]:inline">Escaneie o QR Code com o app do seu banco, ou use o </span>
+        <span className="min-[769px]:hidden">Use o </span>
         código copia e cola abaixo. O valor já vai preenchido.
       </p>
 
