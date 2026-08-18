@@ -43,9 +43,6 @@ export const AUTHORIZATION_STEP = 3;
 /** Passo do uniforme: nome na camisa e tamanho. */
 export const UNIFORM_STEP = 5;
 
-/** Ultimo passo, de revisao e envio. */
-export const REVIEW_STEP = 7;
-
 /**
  * Numero exibido de um passo.
  *
