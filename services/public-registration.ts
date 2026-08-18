@@ -49,9 +49,12 @@ export async function lookupPlayerByCpf(
 
   const { id, ...prefill } = data as PlayerPrefill & { id: string };
 
-  // Carry over the group and profile photo from the player's most recent
-  // registration so returning players don't re-pick their group and can see
-  // (and optionally replace) their existing photo.
+  // Carry over the group, shirt size, and profile photo from the player's
+  // most recent registration so returning players don't re-pick their group
+  // and can see (and optionally replace) their existing photo. Shirt size is
+  // deliberately not on `players`: shirts are ordered per championship
+  // edition, so storing only the player's current size would make a past
+  // edition's order lie as soon as the player's size changed.
   const { data: lastReg } = await supabase
     .from("championship_registrations")
     .select("group_affiliation, profile_photo_link, shirt_size")
