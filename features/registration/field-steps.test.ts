@@ -11,6 +11,11 @@ describe("stepOfField", () => {
     expect(stepOfField("profile_photo_link")).toBe(5);
   });
 
+  it("mantem os dois campos de camiseta juntos, no passo do perfil de jogo", () => {
+    expect(stepOfField("shirt_name")).toBe(4);
+    expect(stepOfField("shirt_size")).toBe(4);
+  });
+
   it("resolve o caminho aninhado das skills pela raiz", () => {
     expect(stepOfField("skills.visao")).toBe(4);
     expect(stepOfField("skills.reflexo")).toBe(4);

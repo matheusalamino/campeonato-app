@@ -9,7 +9,6 @@ export const FIELD_STEP: Readonly<Record<string, number>> = {
   cpf: 1,
 
   name: 2,
-  shirt_name: 2,
   email: 2,
   whatsapp: 2,
   birth_date: 2,
@@ -25,6 +24,10 @@ export const FIELD_STEP: Readonly<Record<string, number>> = {
   preferred_position: 4,
   height: 4,
   weight: 4,
+  // Os dois campos de camiseta andam juntos: escolher o tamanho e escrever o
+  // nome que vai nas costas sao a mesma decisao para o jogador.
+  shirt_name: 4,
+  shirt_size: 4,
   skills: 4,
 
   extra_tickets_count: 5,
