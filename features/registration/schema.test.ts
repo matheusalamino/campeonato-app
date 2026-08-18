@@ -12,6 +12,7 @@ function base(overrides: Record<string, unknown> = {}) {
     cpf: "529.982.247-25",
     name: "Fulano de Tal",
     shirt_name: "Fulano",
+    shirt_size: "M",
     email: "a@b.com",
     whatsapp: "15999999999",
     birth_date: "1990-05-30",
@@ -96,5 +97,23 @@ describe("makeRegistrationSchema", () => {
     const r = schema.safeParse(base({ weight: "abc" }));
     expect(r.success).toBe(false);
     if (!r.success) expect(r.error.issues.some((i) => i.path[0] === "weight")).toBe(true);
+  });
+
+  it("exige o tamanho da camiseta", () => {
+    const semTamanho = base();
+    delete (semTamanho as Record<string, unknown>).shirt_size;
+    expect(schema.safeParse(semTamanho).success).toBe(false);
+  });
+
+  it("reprova um tamanho fora da grade, apontando o campo", () => {
+    const r = schema.safeParse(base({ shirt_size: "XG" }));
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues.some((i) => i.path[0] === "shirt_size")).toBe(true);
+  });
+
+  it("aceita cada um dos tamanhos oferecidos", () => {
+    for (const tamanho of ["P", "M", "G", "GG", "Personalizado"]) {
+      expect(schema.safeParse(base({ shirt_size: tamanho })).success).toBe(true);
+    }
   });
 });
