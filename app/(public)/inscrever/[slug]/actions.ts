@@ -6,6 +6,7 @@ import {
   submitRegistration,
   checkLookupRateLimit,
   deleteRegistrationFile,
+  reserveSlot,
 } from "@/services/public-registration";
 
 export async function lookupCpfAction(cpf: string) {
@@ -20,6 +21,10 @@ export async function lookupCpfAction(cpf: string) {
 
 export async function submitRegistrationAction(input: unknown) {
   return submitRegistration(input);
+}
+
+export async function reserveSlotAction(championshipId: string, cpf: string) {
+  return reserveSlot(championshipId, cpf);
 }
 
 export async function deleteRegistrationFileAction(

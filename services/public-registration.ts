@@ -7,11 +7,10 @@ import { shouldPersistPlayerIdentity } from "@/features/registration/player-iden
 import { storagePathFromRef, type RegistrationBucket } from "@/features/registration/storage-ref";
 import { makeRegistrationSchema } from "@/features/registration/schema";
 import { computeTicketsTotal } from "@/features/registration/pricing";
-import { deriveIsWaitlist } from "@/features/registration/waitlist";
 import { skillsFor } from "@/features/registration/skills";
 import { fieldErrorsFrom } from "@/features/registration/field-errors";
-import { shouldCloseForCapacity } from "@/features/championships/capacity";
-import type { GroupOption, ChampionshipStatus } from "@/types/championship";
+import type { SlotReservation } from "@/features/registration/slot";
+import type { GroupOption } from "@/types/championship";
 
 export type PlayerPrefill = {
   name?: string;
@@ -149,6 +148,45 @@ export async function checkLookupRateLimit(ip: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Reserva a vaga do jogador enquanto ele preenche.
+ *
+ * A decisao de principal ou espera acontece dentro da funcao do banco, sob lock
+ * da linha do campeonato — e a unica forma de contar e classificar sem que
+ * outra transacao insira no meio.
+ */
+export async function reserveSlot(
+  championshipId: string,
+  cpf: string,
+): Promise<SlotReservation> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.rpc("reserve_registration_slot", {
+    p_championship_id: championshipId,
+    p_cpf: normalizeCpf(cpf),
+  });
+
+  if (error || !data) return { ok: false, reason: "not_found" };
+
+  const result = data as {
+    success: boolean;
+    reason?: string;
+    is_waitlist?: boolean;
+    expires_at?: string;
+    retry_at?: string | null;
+  };
+
+  if (result.success) {
+    return { ok: true, isWaitlist: !!result.is_waitlist, expiresAt: result.expires_at! };
+  }
+  if (result.reason === "all_reserved") {
+    return { ok: false, reason: "all_reserved", retryAt: result.retry_at ?? null };
+  }
+  return {
+    ok: false,
+    reason: (result.reason as "not_found" | "not_open" | "already_registered" | "full") ?? "not_found",
+  };
+}
+
 export async function getOpenRegistrationChampionship(): Promise<{ slug: string; name: string } | null> {
   // Reads public championship data (anon-readable) for the landing header, so it
   // uses the anon server client — NOT the service-role admin client. This keeps
@@ -280,66 +318,55 @@ export async function submitRegistration(
     playerId = existingPlayer!.id;
   }
 
-  // Derive waitlist from the live count against main capacity.
-  const { count, error: countError } = await supabase
-    .from("championship_registrations")
-    .select("id", { count: "exact", head: true })
-    .eq("championship_id", champ.id);
-  if (countError) {
-    return { ok: false, error: "Não foi possível concluir a inscrição. Tente novamente." };
-  }
-  const isWaitlist = deriveIsWaitlist({
-    registrationCount: count ?? 0,
-    maxPlayers: champ.max_players,
-  });
+  // A gravacao inteira vai numa transacao do banco: inscricao, autoavaliacoes,
+  // consumo da reserva e fechamento por lotacao. Antes, as autoavaliacoes eram
+  // inseridas com o erro descartado, e a contagem de vagas era feita fora de
+  // qualquer lock.
+  const skillKeys = skillsFor(data.preferred_position);
+  const skills: Record<string, number> = {};
+  for (const skill of skillKeys) skills[skill] = Number(data.skills[skill] ?? 1);
 
-  // Insert the registration.
-  const { data: registration, error: regErr } = await supabase
-    .from("championship_registrations")
-    .insert({
-      championship_id: champ.id,
-      player_id: playerId,
-      is_waitlist: isWaitlist,
+  const { data: committed, error: commitErr } = await supabase.rpc("commit_registration", {
+    p_championship_id: champ.id,
+    p_player_id: playerId,
+    p_cpf: cpf,
+    p_registration: {
       group_affiliation: data.group_affiliation,
       shirt_size: data.shirt_size,
-      invite_code: data.invite_code || null,
+      invite_code: data.invite_code,
       extra_tickets_count: data.extra_tickets_count,
       tickets_total: total,
       profile_photo_link: data.profile_photo_link,
-      payment_receipt_link: data.payment_receipt_link || null,
-      legal_authorization_link: data.legal_authorization_link || null,
-      pix_txid: data.pix_txid || null,
-    })
-    .select("id")
-    .single();
-  if (regErr || !registration) {
-    return { ok: false, error: "Não foi possível concluir a inscrição." };
+      payment_receipt_link: data.payment_receipt_link,
+      legal_authorization_link: data.legal_authorization_link,
+      pix_txid: data.pix_txid,
+    },
+    p_skills: skills,
+  });
+
+  if (commitErr || !committed) {
+    return { ok: false, error: "Não foi possível concluir a inscrição. Tente novamente." };
   }
 
-  // Persist self-evaluations for the position-appropriate skills.
-  const skillKeys = skillsFor(data.preferred_position);
-  const selfRows = skillKeys.map((skill) => ({
-    registration_id: registration.id,
-    skill,
-    rating: Number(data.skills[skill] ?? 1),
-  }));
-  await supabase.from("self_evaluations").insert(selfRows);
+  const result = committed as {
+    success: boolean;
+    reason?: string;
+    registration_id?: string;
+    is_waitlist?: boolean;
+  };
 
-  // Auto-close when players + waitlist capacity is reached.
-  const { count: newCount } = await supabase
-    .from("championship_registrations")
-    .select("id", { count: "exact", head: true })
-    .eq("championship_id", champ.id);
-  if (
-    shouldCloseForCapacity({
-      status: champ.status as ChampionshipStatus,
-      registrationCount: newCount ?? 0,
-      maxPlayers: champ.max_players,
-      maxWaitlist: champ.max_waitlist_players,
-    })
-  ) {
-    await supabase.from("championships").update({ status: "subscribed" }).eq("id", champ.id);
+  if (!result.success) {
+    if (result.reason === "already_registered") {
+      return { ok: false, error: "Você já está inscrito neste campeonato.", alreadyRegistered: true };
+    }
+    if (result.reason === "reservation_expired") {
+      return {
+        ok: false,
+        error: "Sua vaga expirou e as inscrições lotaram. Fale com a organização.",
+      };
+    }
+    return { ok: false, error: "As inscrições não estão abertas para este campeonato." };
   }
 
-  return { ok: true, registrationId: registration.id, isWaitlist };
+  return { ok: true, registrationId: result.registration_id!, isWaitlist: !!result.is_waitlist };
 }
