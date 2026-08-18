@@ -13,6 +13,7 @@ import { isMinor } from "@/features/registration/minor";
 import { makeRegistrationSchema } from "@/features/registration/schema";
 import { fieldErrorsFrom } from "@/features/registration/field-errors";
 import { errorsForStep, firstStepWithError, stepNumber, AUTHORIZATION_STEP } from "@/features/registration/field-steps";
+import { summarizeErrors } from "@/features/registration/error-summary";
 import { lookupCpfAction, submitRegistrationAction } from "./actions";
 import StepShell from "./steps/StepShell";
 import SkillStars from "./steps/SkillStars";
@@ -89,6 +90,9 @@ export default function RegistrationWizard({
     const found = stepErrors(from);
     if (Object.keys(found).length) {
       setErrors((prev) => ({ ...prev, ...found }));
+      // Sem o aviso, o botao parece nao responder quando o campo com erro esta
+      // fora da area visivel — o formulario e longo no celular.
+      toast.error(summarizeErrors(found));
       return;
     }
     setErrors((prev) => {
