@@ -57,6 +57,10 @@ export interface Championship {
   base_price?: number | null;
   extra_ticket_price?: number | null;
   registration_group_options?: GroupOption[] | null;
+  /** Dados do recebedor usados para montar o BR Code do PIX. */
+  pix_key?: string | null;
+  pix_merchant_name?: string | null;
+  pix_merchant_city?: string | null;
 
   // ── Configurações globais de pontuação (Módulo 1) ──────────────────────────
   /** Pontos por vitória. Default: 3 */

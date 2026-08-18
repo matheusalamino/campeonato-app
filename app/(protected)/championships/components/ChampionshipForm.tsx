@@ -51,6 +51,9 @@ export function ChampionshipForm({
     registration_image_url: initial?.registration_image_url ?? "",
     base_price: initial?.base_price != null ? String(initial.base_price) : "",
     extra_ticket_price: initial?.extra_ticket_price != null ? String(initial.extra_ticket_price) : "",
+    pix_key: initial?.pix_key ?? "",
+    pix_merchant_name: initial?.pix_merchant_name ?? "",
+    pix_merchant_city: initial?.pix_merchant_city ?? "",
     groups: (initial?.registration_group_options ?? []) as { label: string; requires_invite_code: boolean }[],
   });
 
@@ -74,6 +77,9 @@ export function ChampionshipForm({
       registration_image_url: emptyToUndef(form.registration_image_url),
       base_price: emptyToUndef(form.base_price),
       extra_ticket_price: emptyToUndef(form.extra_ticket_price),
+      pix_key: emptyToUndef(form.pix_key),
+      pix_merchant_name: emptyToUndef(form.pix_merchant_name),
+      pix_merchant_city: emptyToUndef(form.pix_merchant_city),
       registration_group_options: form.groups,
     };
   }
@@ -265,6 +271,47 @@ export function ChampionshipForm({
             onChange={(e) => set("registration_image_url", e.target.value)}
           />
           <FieldError errors={errors} name="registration_image_url" />
+        </div>
+
+        <div>
+          <label className={labelClass}>Chave PIX do recebedor</label>
+          <input
+            className={inputClass}
+            placeholder="e-mail, CPF, telefone ou chave aleatória"
+            value={form.pix_key}
+            onChange={(e) => set("pix_key", e.target.value)}
+          />
+          <p className="mt-1 text-xs text-zinc-500">
+            Usada para montar o QR Code do PIX na inscrição, já com o valor total calculado.
+          </p>
+          <FieldError errors={errors} name="pix_key" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className={labelClass}>Nome do recebedor</label>
+            <input
+              className={inputClass}
+              maxLength={25}
+              placeholder="como aparece no PIX"
+              value={form.pix_merchant_name}
+              onChange={(e) => set("pix_merchant_name", e.target.value)}
+            />
+            <p className="mt-1 text-xs text-zinc-500">Máximo de 25 caracteres.</p>
+            <FieldError errors={errors} name="pix_merchant_name" />
+          </div>
+          <div>
+            <label className={labelClass}>Cidade do recebedor</label>
+            <input
+              className={inputClass}
+              maxLength={15}
+              placeholder="Sorocaba"
+              value={form.pix_merchant_city}
+              onChange={(e) => set("pix_merchant_city", e.target.value)}
+            />
+            <p className="mt-1 text-xs text-zinc-500">Máximo de 15 caracteres.</p>
+            <FieldError errors={errors} name="pix_merchant_city" />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

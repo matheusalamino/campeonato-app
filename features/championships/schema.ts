@@ -19,6 +19,9 @@ const baseChampionshipObject = z.object({
   registration_image_url: z.string().trim().url().optional().or(z.literal("")).transform((v) => v || undefined),
   base_price: z.coerce.number().min(0).optional(),
   extra_ticket_price: z.coerce.number().min(0).optional(),
+  pix_key: z.string().trim().optional().or(z.literal("")).transform((v) => v || undefined),
+  pix_merchant_name: z.string().trim().max(25, "Máximo de 25 caracteres").optional().or(z.literal("")).transform((v) => v || undefined),
+  pix_merchant_city: z.string().trim().max(15, "Máximo de 15 caracteres").optional().or(z.literal("")).transform((v) => v || undefined),
   registration_group_options: z
     .array(z.object({ label: z.string().trim().min(1), requires_invite_code: z.boolean() }))
     .default([]),
