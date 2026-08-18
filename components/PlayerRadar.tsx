@@ -19,6 +19,10 @@ type Evaluation = {
  * `heightClass` existe para o radar da inscricao, que fica preso no topo do
  * passo enquanto as estrelas rolam por baixo e precisa ser mais baixo. O
  * default repete o valor antigo, entao quem ja usava o componente nao muda.
+ *
+ * O valor precisa ser um literal Tailwind completo, como "h-[200px]": o
+ * Tailwind so gera a classe se o texto aparecer inteiro no codigo-fonte, entao
+ * montar a string em runtime deixaria o radar com altura zero, sem erro nenhum.
  */
 export default function PlayerRadar({
   data,
