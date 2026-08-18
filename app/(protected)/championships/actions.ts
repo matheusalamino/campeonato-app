@@ -39,6 +39,9 @@ function toRow(values: {
   registration_image_url?: string;
   base_price?: number;
   extra_ticket_price?: number;
+  pix_key?: string;
+  pix_merchant_name?: string;
+  pix_merchant_city?: string;
   registration_group_options?: { label: string; requires_invite_code: boolean }[];
 }) {
   const iso = (d?: Date) => (d ? d.toISOString() : null);
@@ -56,6 +59,9 @@ function toRow(values: {
     registration_image_url: values.registration_image_url ?? null,
     base_price: values.base_price ?? null,
     extra_ticket_price: values.extra_ticket_price ?? null,
+    pix_key: values.pix_key ?? null,
+    pix_merchant_name: values.pix_merchant_name ?? null,
+    pix_merchant_city: values.pix_merchant_city ?? null,
     registration_group_options: values.registration_group_options ?? [],
   };
 }

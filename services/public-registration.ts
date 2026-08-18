@@ -9,9 +9,9 @@ import { makeRegistrationSchema } from "@/features/registration/schema";
 import { computeTicketsTotal } from "@/features/registration/pricing";
 import { deriveIsWaitlist } from "@/features/registration/waitlist";
 import { skillsFor } from "@/features/registration/skills";
+import { fieldErrorsFrom } from "@/features/registration/field-errors";
 import { shouldCloseForCapacity } from "@/features/championships/capacity";
 import type { GroupOption, ChampionshipStatus } from "@/types/championship";
-import type { z } from "zod";
 
 export type PlayerPrefill = {
   name?: string;
@@ -167,15 +167,6 @@ export async function getOpenRegistrationChampionship(): Promise<{ slug: string;
   }
 }
 
-function fieldErrorsFrom(error: z.ZodError): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const issue of error.issues) {
-    const key = issue.path.join(".") || "form";
-    if (!out[key]) out[key] = issue.message;
-  }
-  return out;
-}
-
 export async function submitRegistration(
   input: unknown,
 ): Promise<
@@ -311,6 +302,7 @@ export async function submitRegistration(
       profile_photo_link: data.profile_photo_link,
       payment_receipt_link: data.payment_receipt_link || null,
       legal_authorization_link: data.legal_authorization_link || null,
+      pix_txid: data.pix_txid || null,
     })
     .select("id")
     .single();
