@@ -5,7 +5,9 @@ export default function RestOverlay({
 }: { championship: WizardChampionship; liveCount: number }) {
   return (
     <div className="relative min-h-screen">
-      <div aria-hidden className="pointer-events-none select-none blur-[4px] opacity-50">
+      {/* `inert` alem de aria-hidden: pointer-events-none barra o mouse, mas o Tab
+          continuaria entrando num conteudo anunciado como inexistente. */}
+      <div inert aria-hidden className="pointer-events-none select-none blur-[4px] opacity-50">
         <RegistrationWizard championship={championship} liveCount={liveCount} />
       </div>
       <div className="fixed inset-0 flex items-center justify-center px-6" style={{ background: "rgba(4,4,7,.55)" }}>

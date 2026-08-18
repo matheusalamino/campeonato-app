@@ -1,7 +1,9 @@
+import { requiresLegalAuthorization } from "./age-policy";
+
+/**
+ * Mantido como apelido de `requiresLegalAuthorization` para nao quebrar quem ja
+ * importa daqui. A regra de idade vive em `age-policy.ts`.
+ */
 export function isMinor(birthDate: string | Date, asOf: Date = new Date()): boolean {
-  const b = typeof birthDate === "string" ? new Date(birthDate) : birthDate;
-  let age = asOf.getFullYear() - b.getFullYear();
-  const m = asOf.getMonth() - b.getMonth();
-  if (m < 0 || (m === 0 && asOf.getDate() < b.getDate())) age--;
-  return age < 18;
+  return requiresLegalAuthorization(birthDate, asOf);
 }

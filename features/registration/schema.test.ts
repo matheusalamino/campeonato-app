@@ -77,4 +77,24 @@ describe("makeRegistrationSchema", () => {
     // base() supplies line skills, not keeper skills, so a goalkeeper payload must fail
     expect(r.success).toBe(false);
   });
+
+  it("aceita altura e peso com virgula, como vem do teclado brasileiro", () => {
+    const r = schema.safeParse(base({ height: "1,80", weight: "70,5" }));
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.height).toBe(1.8);
+      expect(r.data.weight).toBe(70.5);
+    }
+  });
+
+  it("aceita altura e peso com ponto", () => {
+    const r = schema.safeParse(base({ height: "1.80", weight: "70.5" }));
+    expect(r.success).toBe(true);
+  });
+
+  it("reprova peso que nao e numero, apontando o campo", () => {
+    const r = schema.safeParse(base({ weight: "abc" }));
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues.some((i) => i.path[0] === "weight")).toBe(true);
+  });
 });

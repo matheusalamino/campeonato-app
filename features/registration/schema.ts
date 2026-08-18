@@ -1,11 +1,26 @@
 import { z } from "zod";
 import { isValidCpf } from "@/lib/cpf";
+import { parseDecimalBR } from "@/lib/decimal-br";
 import { isMinor } from "./minor";
+import { MIN_AGE, isBelowMinimumAge } from "./age-policy";
 import { groupRequiresInviteCode } from "./groups";
 import { skillsFor } from "./skills";
 import type { GroupOption } from "@/types/championship";
 
 const rating = z.coerce.number().int().min(1).max(5);
+
+/**
+ * Numero decimal tolerante ao formato brasileiro.
+ *
+ * O input usa `inputMode="decimal"` e o teclado brasileiro oferece virgula, entao
+ * "70,5" chega ate aqui. Normalizar no schema — e nao so no cliente — mantem a
+ * regra valida para qualquer origem da submissao.
+ */
+const decimalBR = (message: string) =>
+  z.preprocess(
+    (value) => parseDecimalBR(value) ?? Number.NaN,
+    z.number({ message }).positive(message),
+  );
 
 export function makeRegistrationSchema(groupOptions: GroupOption[]) {
   return z
@@ -20,8 +35,8 @@ export function makeRegistrationSchema(groupOptions: GroupOption[]) {
       birth_state: z.string().trim().min(1, "Estado é obrigatório"),
       instagram: z.string().trim().optional().default(""),
       preferred_position: z.enum(["Zagueiro", "Meia", "Atacante", "Goleiro"]),
-      height: z.coerce.number().positive("Altura inválida"),
-      weight: z.coerce.number().positive("Peso inválido"),
+      height: decimalBR("Altura inválida"),
+      weight: decimalBR("Peso inválido"),
       group_affiliation: z.string().trim().min(1, "Grupo é obrigatório"),
       invite_code: z.string().trim().optional().default(""),
       skills: z.record(z.string(), rating),
@@ -36,6 +51,13 @@ export function makeRegistrationSchema(groupOptions: GroupOption[]) {
           code: "custom",
           path: ["invite_code"],
           message: "Código de convite é obrigatório para este grupo",
+        });
+      }
+      if (data.birth_date && isBelowMinimumAge(data.birth_date)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["birth_date"],
+          message: `A inscrição é permitida a partir de ${MIN_AGE} anos`,
         });
       }
       if (data.birth_date && isMinor(data.birth_date) && !data.legal_authorization_link) {
