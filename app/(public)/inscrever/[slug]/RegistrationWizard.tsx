@@ -125,13 +125,24 @@ export default function RegistrationWizard({
   }
 
   /** Mensagem de erro sob o campo, quando houver. */
-  /** Classe, estado e ligacao com a mensagem — para o campo invalido se anunciar. */
-  function fieldProps(field: string) {
+  /**
+   * Classe, estado e ligacao com as mensagens — para o campo invalido se
+   * anunciar.
+   *
+   * `hintId` liga uma dica permanente ao campo. Sem ele, quem navega campo a
+   * campo com leitor de tela nao ouve o texto de apoio, so o rotulo — e no caso
+   * do tamanho da camiseta e a dica que avisa da opcao Personalizado. Quando ha
+   * erro, os dois ids vao juntos, na ordem em que devem ser lidos.
+   */
+  function fieldProps(field: string, hintId?: string) {
     const invalid = !!errors[field];
+    const describedBy = [hintId, invalid ? `${field}-error` : null]
+      .filter(Boolean)
+      .join(" ");
     return {
       className: `${inputBase} ${invalid ? inputError : inputOk}`,
       "aria-invalid": invalid || undefined,
-      "aria-describedby": invalid ? `${field}-error` : undefined,
+      "aria-describedby": describedBy || undefined,
     };
   }
 
@@ -404,7 +415,7 @@ export default function RegistrationWizard({
                  value={form.shirt_name} onChange={(e) => set("shirt_name", e.target.value)} />
           {err("shirt_name")}
 
-          <select {...fieldProps("shirt_size")} aria-label="Tamanho da camiseta"
+          <select {...fieldProps("shirt_size", "shirt_size-hint")} aria-label="Tamanho da camiseta"
                   value={form.shirt_size} onChange={(e) => set("shirt_size", e.target.value)}>
             <option value="">Tamanho da camiseta…</option>
             {SHIRT_SIZES.map((size) => (
@@ -416,7 +427,7 @@ export default function RegistrationWizard({
           {/* Sempre visivel, e nao so depois de escolher: quem esta em duvida se
               o GG serve precisa saber que Personalizado e caminho previsto antes
               de chutar um tamanho — senao a camiseta chega errada. */}
-          <p className="text-xs text-[var(--gala-ink-dim)] -mt-1">
+          <p id="shirt_size-hint" className="text-xs text-[var(--gala-ink-dim)] -mt-1">
             A modelagem varia de marca pra marca. Não achou o seu? Escolha Personalizado.
           </p>
 
