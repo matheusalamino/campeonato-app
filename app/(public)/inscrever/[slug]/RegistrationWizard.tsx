@@ -124,7 +124,6 @@ export default function RegistrationWizard({
     setStep(next);
   }
 
-  /** Mensagem de erro sob o campo, quando houver. */
   /**
    * Classe, estado e ligacao com as mensagens — para o campo invalido se
    * anunciar.
@@ -146,6 +145,7 @@ export default function RegistrationWizard({
     };
   }
 
+  /** Mensagem de erro sob o campo, quando houver. */
   function err(field: string) {
     if (!errors[field]) return null;
     return (
