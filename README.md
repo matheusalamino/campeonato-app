@@ -67,6 +67,13 @@ Comandos principais:
 - Apagar o stack local sem backup: `npm run local:purge`
 - Ver status do Supabase local: `npm run local:status`
 
+## Rodar local apontando para um ambiente remoto
+
+- Contra staging: `npm run dev:staging`
+- Contra producao: `npm run dev:production` (pede confirmacao digitada)
+
+Os dois leem `.secrets/<ambiente>.app.env`, criado a partir do `.example` correspondente. As variaveis vao para o processo, entao o `.env.local` nao e alterado e o `npm run dev` continua indo para o Supabase local. Detalhes e avisos em [ENVIRONMENTS.md](ENVIRONMENTS.md).
+
 Se quiser conectar com `psql`:
 
 ```bash

@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:staging": "sh scripts/run-with-env.sh staging",
+    "dev:production": "sh scripts/run-with-env.sh production",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
