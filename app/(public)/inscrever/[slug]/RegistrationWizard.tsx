@@ -377,7 +377,7 @@ export default function RegistrationWizard({
           {activeSkills.some((s) => errors[`skills.${s}`]) && (
             <p className="text-xs" style={{ color: "#fca5a5" }}>Avalie todas as habilidades para continuar.</p>
           )}
-          <button onClick={() => advance(5)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
+          <button onClick={() => advance(4)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
                   style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>Continuar</button>
         </StepShell>
 
@@ -410,7 +410,7 @@ export default function RegistrationWizard({
                         value={form.payment_receipt_link} onChange={(u) => set("payment_receipt_link", u)} />
           )}
           {err("payment_receipt_link")}
-          <button onClick={() => advance(4)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
+          <button onClick={() => advance(5)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
                   style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>Revisar</button>
         </StepShell>
 
