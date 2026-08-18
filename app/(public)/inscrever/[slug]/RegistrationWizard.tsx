@@ -15,11 +15,14 @@ import { makeRegistrationSchema } from "@/features/registration/schema";
 import { fieldErrorsFrom } from "@/features/registration/field-errors";
 import { errorsForStep, firstStepWithError, stepNumber, AUTHORIZATION_STEP } from "@/features/registration/field-steps";
 import { summarizeErrors } from "@/features/registration/error-summary";
+import { SHIRT_SIZES, CUSTOM_SHIRT_SIZE } from "@/features/registration/shirt-sizes";
+import { radarDataFrom, hasAnyRating } from "@/features/registration/radar";
 import { lookupCpfAction, submitRegistrationAction } from "./actions";
 import StepShell from "./steps/StepShell";
 import SkillStars from "./steps/SkillStars";
 import UploadCard from "./steps/UploadCard";
 import PixPayment from "./steps/PixPayment";
+import PlayerRadar from "@/components/PlayerRadar";
 import { INSTAGRAM_HANDLE, INSTAGRAM_URL } from "@/lib/social";
 
 export type WizardChampionship = {
@@ -33,7 +36,7 @@ export type WizardChampionship = {
 };
 
 const EMPTY = {
-  cpf: "", name: "", shirt_name: "", email: "", whatsapp: "", birth_date: "",
+  cpf: "", name: "", shirt_name: "", shirt_size: "", email: "", whatsapp: "", birth_date: "",
   birth_state: "", instagram: "", preferred_position: "Meia",
   height: "", weight: "", group_affiliation: "", invite_code: "",
   extra_tickets_count: 0,
@@ -74,6 +77,7 @@ export default function RegistrationWizard({
     return {
       championship_slug: championship.slug,
       cpf: form.cpf, name: form.name, shirt_name: form.shirt_name,
+      shirt_size: form.shirt_size,
       email: form.email, whatsapp: form.whatsapp, birth_date: form.birth_date,
       birth_state: form.birth_state, instagram: form.instagram,
       preferred_position: form.preferred_position,
@@ -153,7 +157,8 @@ export default function RegistrationWizard({
         const p = res.player;
         setForm((prev) => ({
           ...prev,
-          name: p.name ?? "", shirt_name: p.shirt_name ?? "", email: p.email ?? "",
+          name: p.name ?? "", shirt_name: p.shirt_name ?? "", shirt_size: p.shirt_size ?? "",
+          email: p.email ?? "",
           whatsapp: p.whatsapp ? formatPhoneBR(p.whatsapp) : "", birth_date: (p.birth_date ?? "").slice(0, 10),
           birth_state: p.birth_state ?? "", instagram: p.instagram ?? "",
           preferred_position: p.preferred_position ?? "Meia",
@@ -293,8 +298,6 @@ export default function RegistrationWizard({
         <StepShell index={stepNumber(2, minor)} title="Dados pessoais" open={step === 2} done={!!done[2]} onToggle={() => open(2)}>
           <input {...fieldProps("name")} placeholder="Nome completo" aria-label="Nome completo" value={form.name} onChange={(e) => set("name", e.target.value)} />
           {err("name")}
-          <input {...fieldProps("shirt_name")} placeholder="Nome da camisa" aria-label="Nome da camisa" value={form.shirt_name} onChange={(e) => set("shirt_name", e.target.value)} />
-          {err("shirt_name")}
           <input {...fieldProps("email")} placeholder="E-mail" aria-label="E-mail" value={form.email} onChange={(e) => set("email", e.target.value)} />
           {err("email")}
           <input {...fieldProps("whatsapp")} type="tel" inputMode="numeric" placeholder="WhatsApp — (11) 99999-9999" aria-label="WhatsApp"
@@ -368,6 +371,48 @@ export default function RegistrationWizard({
               {err("weight")}
             </div>
           </div>
+          <input {...fieldProps("shirt_name")} placeholder="Nome da camisa" aria-label="Nome da camisa"
+                 value={form.shirt_name} onChange={(e) => set("shirt_name", e.target.value)} />
+          {err("shirt_name")}
+
+          <select {...fieldProps("shirt_size")} aria-label="Tamanho da camiseta"
+                  value={form.shirt_size} onChange={(e) => set("shirt_size", e.target.value)}>
+            <option value="">Tamanho da camiseta…</option>
+            {SHIRT_SIZES.map((size) => (
+              <option key={size} value={size}>{size}</option>
+            ))}
+          </select>
+          {err("shirt_size")}
+
+          {/* Sempre visivel, e nao so depois de escolher: quem esta em duvida se
+              o GG serve precisa saber que Personalizado e caminho previsto antes
+              de chutar um tamanho — senao a camiseta chega errada. */}
+          <p className="text-xs text-[var(--gala-ink-dim)] -mt-1">
+            A modelagem varia de marca pra marca. Não achou o seu? Escolha Personalizado.
+          </p>
+
+          {form.shirt_size === CUSTOM_SHIRT_SIZE && (
+            <div className="rounded-2xl px-3 py-3 text-xs leading-relaxed"
+                 style={{ background: "rgba(230,180,34,.08)", border: "1px solid rgba(230,180,34,.25)", color: "var(--gala-ink)" }}>
+              Combinado! Antes de mandar produzir, a gente fala com você no WhatsApp
+              pra acertar as medidas da sua camiseta.
+            </div>
+          )}
+
+          {/* Preso abaixo do header (que e sticky top-0 z-50) enquanto as
+              estrelas rolam por baixo. Estatico, o radar sairia da tela na
+              terceira habilidade e o "ao vivo" se perderia onde mais importa.
+              O fundo repete a mesma tinta dourada do StepShell sobre o fundo da
+              pagina, para a banda opaca nao destoar do passo. */}
+          {hasAnyRating(form.skills, form.preferred_position) && (
+            <div className="sticky top-14 z-10 -mx-4 px-4 py-2"
+                 style={{ background: "linear-gradient(rgba(230,180,34,.06), rgba(230,180,34,.06)), var(--gala-bg-0)" }}>
+              <PlayerRadar
+                data={radarDataFrom(form.skills, form.preferred_position)}
+                heightClass="h-[200px]"
+              />
+            </div>
+          )}
           {activeSkills.map((s) => (
             <div key={s} className="flex items-center justify-between py-1 border-b border-white/5">
               <span className="text-sm text-[var(--gala-ink)]">{SKILL_LABELS[s]}</span>
