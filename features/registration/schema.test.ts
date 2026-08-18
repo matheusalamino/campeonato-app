@@ -33,7 +33,7 @@ function base(overrides: Record<string, unknown> = {}) {
 }
 
 describe("makeRegistrationSchema", () => {
-  const schema = makeRegistrationSchema(groups);
+  const schema = makeRegistrationSchema(groups, 4);
 
   it("accepts a valid adult line-player payload", () => {
     expect(schema.safeParse(base()).success).toBe(true);
@@ -115,5 +115,19 @@ describe("makeRegistrationSchema", () => {
     for (const tamanho of ["P", "M", "G", "GG", "Personalizado"]) {
       expect(schema.safeParse(base({ shirt_size: tamanho })).success).toBe(true);
     }
+  });
+
+  it("aceita ingressos extras ate o teto", () => {
+    expect(schema.safeParse(base({ extra_tickets_count: 4 })).success).toBe(true);
+  });
+
+  it("reprova acima do teto, apontando o campo", () => {
+    const r = schema.safeParse(base({ extra_tickets_count: 5 }));
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues.some((i) => i.path[0] === "extra_tickets_count")).toBe(true);
+  });
+
+  it("aceita zero ingressos extras", () => {
+    expect(schema.safeParse(base({ extra_tickets_count: 0 })).success).toBe(true);
   });
 });

@@ -226,7 +226,7 @@ export async function submitRegistration(
 
   const { data: champ } = await supabase
     .from("championships")
-    .select("id, status, max_players, max_waitlist_players, base_price, extra_ticket_price, registration_group_options")
+    .select("id, status, max_players, max_waitlist_players, base_price, extra_ticket_price, registration_group_options, max_extra_tickets")
     .eq("slug", slug)
     .is("deleted_at", null)
     .maybeSingle();
@@ -237,7 +237,7 @@ export async function submitRegistration(
   }
 
   const groupOptions = (champ.registration_group_options ?? []) as GroupOption[];
-  const parsed = makeRegistrationSchema(groupOptions).safeParse(input);
+  const parsed = makeRegistrationSchema(groupOptions, champ.max_extra_tickets).safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "Dados inválidos", fieldErrors: fieldErrorsFrom(parsed.error) };
   }

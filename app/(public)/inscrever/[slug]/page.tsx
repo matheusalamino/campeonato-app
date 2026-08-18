@@ -55,7 +55,7 @@ export default async function InscreverPage({ params }: { params: Promise<{ slug
 
   const { data: champ } = await supabase
     .from("championships")
-    .select("id, name, slug, status, max_players, max_waitlist_players, base_price, extra_ticket_price, registration_group_options, registration_image_url, pix_key, pix_merchant_name, pix_merchant_city")
+    .select("id, name, slug, status, max_players, max_waitlist_players, base_price, extra_ticket_price, registration_group_options, registration_image_url, pix_key, pix_merchant_name, pix_merchant_city, max_extra_tickets")
     .eq("slug", slug)
     .is("deleted_at", null)
     .maybeSingle();
