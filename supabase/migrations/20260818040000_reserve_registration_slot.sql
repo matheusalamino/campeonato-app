@@ -122,4 +122,31 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+-- O schema public concede EXECUTE a anon/authenticated por default privileges
+-- no momento da criacao da funcao -- REVOKE FROM PUBLIC sozinho nao basta,
+-- porque isso so remove o grant via a pseudo-role PUBLIC, nao os grants
+-- explicitos que anon/authenticated ja recebem. So o cliente service-role
+-- (createAdminClient() em services/public-registration.ts) deve chamar isto;
+-- sem o revoke por nome, qualquer um na internet forja CPFs via PostgREST e
+-- esgota max_players/max_waitlist com reservas falsas.
+REVOKE ALL ON FUNCTION public.reserve_registration_slot(uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.reserve_registration_slot(uuid, text) FROM anon, authenticated;
+
+COMMENT ON FUNCTION public.reserve_registration_slot(uuid, text) IS
+'Reserva a vaga do jogador (por CPF) sob lock da linha do campeonato. So o
+cliente service-role deve chamar -- anon/authenticated nao tem EXECUTE.
+
+Retorno tem cinco formatos:
+  success=true -> {success, is_waitlist, expires_at}: vaga reservada ou
+    renovada (principal ou espera).
+  success=false, reason=not_found: campeonato inexistente ou apagado.
+  success=false, reason=not_open: campeonato fora do status subscribing.
+  success=false, reason=already_registered: CPF ja tem inscricao gravada;
+    checado antes da poda e da contagem, para nao gastar vaga a toa.
+  success=false, reason=full: lotacao real -- principal e espera cheios por
+    inscricoes confirmadas. Nao adianta tentar de novo.
+  success=false, reason=all_reserved, retry_at=<timestamptz|null>: vagas
+    seguradas por reservas vivas, que vencem. Vale tentar de novo a partir
+    de retry_at.';
+
 COMMIT;
