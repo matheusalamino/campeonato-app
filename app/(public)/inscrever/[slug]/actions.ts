@@ -1,5 +1,6 @@
 "use server";
 import { headers } from "next/headers";
+import { clientIpFrom } from "@/lib/client-ip";
 import {
   lookupPlayerByCpf,
   submitRegistration,
@@ -9,10 +10,9 @@ import {
 
 export async function lookupCpfAction(cpf: string) {
   const h = await headers();
-  const ip =
-    h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    h.get("x-real-ip") ||
-    "unknown";
+  // Nunca o primeiro elemento de x-forwarded-for: e o valor que o proprio
+  // cliente enviou, e usa-lo como chave torna o rate limit decorativo.
+  const ip = clientIpFrom((name) => h.get(name)) ?? "unknown";
   const allowed = await checkLookupRateLimit(ip);
   if (!allowed) return { throttled: true as const };
   return lookupPlayerByCpf(cpf);
