@@ -44,6 +44,7 @@ export function makeRegistrationSchema(groupOptions: GroupOption[]) {
       profile_photo_link: z.string().url("Foto de perfil é obrigatória"),
       payment_receipt_link: z.string().trim().optional().default(""),
       legal_authorization_link: z.string().trim().optional().default(""),
+      pix_txid: z.string().trim().max(25).optional().default(""),
     })
     .superRefine((data, ctx) => {
       if (groupRequiresInviteCode(groupOptions, data.group_affiliation) && !data.invite_code) {

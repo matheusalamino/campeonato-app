@@ -81,3 +81,18 @@ export function buildPixPayload({
   const withCrcTag = `${payload}6304`;
   return withCrcTag + crc16(withCrcTag);
 }
+
+/**
+ * Identificador de transacao para uma inscricao.
+ *
+ * O padrao aceita ate 25 caracteres alfanumericos no campo 05. Prefixo legivel
+ * mais aleatoriedade: da para reconhecer a origem olhando o extrato, e o txid
+ * e o que permite casar o recebimento com a inscricao depois.
+ */
+export function makePixTxid(prefix = "CMS"): string {
+  const random = Array.from(crypto.getRandomValues(new Uint8Array(11)))
+    .map((byte) => byte.toString(36).padStart(2, "0"))
+    .join("")
+    .replace(/[^a-z0-9]/g, "");
+  return `${prefix}${random}`.slice(0, 25).toUpperCase();
+}

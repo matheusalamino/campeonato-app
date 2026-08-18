@@ -9,6 +9,7 @@ import { BR_STATES } from "@/lib/br-states";
 import { groupRequiresInviteCode } from "@/features/registration/groups";
 import { skillsFor, SKILL_LABELS } from "@/features/registration/skills";
 import { computeTicketsTotal } from "@/features/registration/pricing";
+import { buildPixPayload, makePixTxid } from "@/lib/pix";
 import { isMinor } from "@/features/registration/minor";
 import { makeRegistrationSchema } from "@/features/registration/schema";
 import { fieldErrorsFrom } from "@/features/registration/field-errors";
@@ -18,12 +19,16 @@ import { lookupCpfAction, submitRegistrationAction } from "./actions";
 import StepShell from "./steps/StepShell";
 import SkillStars from "./steps/SkillStars";
 import UploadCard from "./steps/UploadCard";
+import PixPayment from "./steps/PixPayment";
 
 export type WizardChampionship = {
   id: string; name: string; slug: string;
   base_price: number | null; extra_ticket_price: number | null;
   max_players: number | null; registration_image_url: string | null;
   registration_group_options: GroupOption[];
+  pix_key: string | null;
+  pix_merchant_name: string | null;
+  pix_merchant_city: string | null;
 };
 
 const EMPTY = {
@@ -59,6 +64,11 @@ export default function RegistrationWizard({
 
   const minor = form.birth_date ? isMinor(form.birth_date) : false;
 
+
+  // Um txid por inscricao, estavel enquanto o formulario estiver aberto: e ele
+  // que permitira casar o recebimento com esta inscricao no extrato depois.
+  const [pixTxid] = useState(makePixTxid);
+
   function buildPayload() {
     return {
       championship_slug: championship.slug,
@@ -78,6 +88,7 @@ export default function RegistrationWizard({
       profile_photo_link: form.profile_photo_link,
       payment_receipt_link: form.payment_receipt_link,
       legal_authorization_link: form.legal_authorization_link,
+      pix_txid: pixTxid,
     };
   }
 
@@ -176,6 +187,18 @@ export default function RegistrationWizard({
     extraTicketPrice: championship.extra_ticket_price,
     extraTicketsCount: form.extra_tickets_count,
   });
+  // Sem chave configurada no admin nao ha o que cobrar por aqui.
+  const pixPayload =
+    championship.pix_key && total > 0
+      ? buildPixPayload({
+          key: championship.pix_key,
+          merchantName: championship.pix_merchant_name || championship.name,
+          merchantCity: championship.pix_merchant_city || "Brasil",
+          description: `Inscricao ${championship.name}`.slice(0, 30),
+          amount: total,
+          txid: pixTxid,
+        })
+      : null;
   function setSkill(skill: string, v: number) {
     setForm((p) => ({ ...p, skills: { ...p.skills, [skill]: v } }));
   }
@@ -368,6 +391,7 @@ export default function RegistrationWizard({
           <UploadCard icon="📷" label="Foto de perfil (3x4)" hint="Toque para enviar" required bucket="registration-photos"
                       value={form.profile_photo_link} onChange={(u) => set("profile_photo_link", u)} />
           {err("profile_photo_link")}
+          {pixPayload && <PixPayment payload={pixPayload} amount={total} />}
           {total > 0 && (
             <UploadCard icon="🧾" label="Comprovante de pagamento" hint="PIX / transferência" required bucket="registration-docs"
                         value={form.payment_receipt_link} onChange={(u) => set("payment_receipt_link", u)} />

@@ -71,3 +71,23 @@ describe("buildPixPayload", () => {
     expect(buildPixPayload({ ...RECEBEDOR, description: "X" })).toContain("62070503***");
   });
 });
+
+describe("makePixTxid", () => {
+  it("gera identificador dentro do limite do padrao", async () => {
+    const { makePixTxid } = await import("./pix");
+    const txid = makePixTxid();
+    expect(txid.length).toBeGreaterThan(0);
+    expect(txid.length).toBeLessThanOrEqual(25);
+  });
+
+  it("usa apenas caracteres aceitos no campo txid", async () => {
+    const { makePixTxid } = await import("./pix");
+    for (let i = 0; i < 50; i++) expect(makePixTxid()).toMatch(/^[A-Za-z0-9]+$/);
+  });
+
+  it("nao repete entre inscricoes", async () => {
+    const { makePixTxid } = await import("./pix");
+    const gerados = new Set(Array.from({ length: 200 }, () => makePixTxid()));
+    expect(gerados.size).toBe(200);
+  });
+});

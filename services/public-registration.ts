@@ -250,6 +250,7 @@ export async function submitRegistration(
       profile_photo_link: data.profile_photo_link,
       payment_receipt_link: data.payment_receipt_link || null,
       legal_authorization_link: data.legal_authorization_link || null,
+      pix_txid: data.pix_txid || null,
     })
     .select("id")
     .single();
