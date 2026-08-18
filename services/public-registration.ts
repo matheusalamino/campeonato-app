@@ -25,6 +25,7 @@ export type PlayerPrefill = {
   height?: number;
   weight?: number;
   group_affiliation?: string;
+  shirt_size?: string;
   profile_photo_link?: string;
 };
 
@@ -53,7 +54,7 @@ export async function lookupPlayerByCpf(
   // (and optionally replace) their existing photo.
   const { data: lastReg } = await supabase
     .from("championship_registrations")
-    .select("group_affiliation, profile_photo_link")
+    .select("group_affiliation, profile_photo_link, shirt_size")
     .eq("player_id", id)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -64,6 +65,7 @@ export async function lookupPlayerByCpf(
     player: {
       ...prefill,
       group_affiliation: lastReg?.group_affiliation ?? undefined,
+      shirt_size: lastReg?.shirt_size ?? undefined,
       profile_photo_link: lastReg?.profile_photo_link ?? undefined,
     },
   };
@@ -296,6 +298,7 @@ export async function submitRegistration(
       player_id: playerId,
       is_waitlist: isWaitlist,
       group_affiliation: data.group_affiliation,
+      shirt_size: data.shirt_size,
       invite_code: data.invite_code || null,
       extra_tickets_count: data.extra_tickets_count,
       tickets_total: total,
