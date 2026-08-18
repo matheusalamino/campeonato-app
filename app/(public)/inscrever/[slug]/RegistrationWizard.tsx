@@ -35,8 +35,10 @@ const EMPTY = {
   profile_photo_link: "", payment_receipt_link: "", legal_authorization_link: "",
 };
 
-const input =
-  "w-full rounded-xl px-3 py-3 text-base bg-white/5 border border-white/10 text-[var(--gala-ink)] outline-none focus:border-[var(--gala-gold-2)]";
+const inputBase =
+  "w-full rounded-xl px-3 py-3 text-base bg-white/5 border text-[var(--gala-ink)] outline-none";
+const inputOk = "border-white/10 focus:border-[var(--gala-gold-2)]";
+const inputError = "border-red-400/70 focus:border-red-400";
 
 export default function RegistrationWizard({
   championship, liveCount,
@@ -107,9 +109,23 @@ export default function RegistrationWizard({
   }
 
   /** Mensagem de erro sob o campo, quando houver. */
+  /** Classe, estado e ligacao com a mensagem — para o campo invalido se anunciar. */
+  function fieldProps(field: string) {
+    const invalid = !!errors[field];
+    return {
+      className: `${inputBase} ${invalid ? inputError : inputOk}`,
+      "aria-invalid": invalid || undefined,
+      "aria-describedby": invalid ? `${field}-error` : undefined,
+    };
+  }
+
   function err(field: string) {
     if (!errors[field]) return null;
-    return <p className="text-xs -mt-1" style={{ color: "#fca5a5" }}>{errors[field]}</p>;
+    return (
+      <p id={`${field}-error`} className="text-xs -mt-1" style={{ color: "#fca5a5" }}>
+        {errors[field]}
+      </p>
+    );
   }
 
   async function onCpfContinue() {
@@ -233,7 +249,7 @@ export default function RegistrationWizard({
 
       <div className="space-y-3">
         <StepShell index={stepNumber(1, minor)} title="CPF" open={step === 1} done={!!done[1]} onToggle={() => open(1)}>
-          <input className={input} inputMode="numeric" placeholder="000.000.000-00" aria-label="CPF"
+          <input {...fieldProps("cpf")} inputMode="numeric" placeholder="000.000.000-00" aria-label="CPF"
                  value={form.cpf} onChange={(e) => set("cpf", formatCpf(e.target.value))} />
           {err("cpf")}
           <button onClick={onCpfContinue} disabled={looking}
@@ -244,28 +260,28 @@ export default function RegistrationWizard({
         </StepShell>
 
         <StepShell index={stepNumber(2, minor)} title="Dados pessoais" open={step === 2} done={!!done[2]} onToggle={() => open(2)}>
-          <input className={input} placeholder="Nome completo" aria-label="Nome completo" value={form.name} onChange={(e) => set("name", e.target.value)} />
+          <input {...fieldProps("name")} placeholder="Nome completo" aria-label="Nome completo" value={form.name} onChange={(e) => set("name", e.target.value)} />
           {err("name")}
-          <input className={input} placeholder="Nome da camisa" aria-label="Nome da camisa" value={form.shirt_name} onChange={(e) => set("shirt_name", e.target.value)} />
+          <input {...fieldProps("shirt_name")} placeholder="Nome da camisa" aria-label="Nome da camisa" value={form.shirt_name} onChange={(e) => set("shirt_name", e.target.value)} />
           {err("shirt_name")}
-          <input className={input} placeholder="E-mail" aria-label="E-mail" value={form.email} onChange={(e) => set("email", e.target.value)} />
+          <input {...fieldProps("email")} placeholder="E-mail" aria-label="E-mail" value={form.email} onChange={(e) => set("email", e.target.value)} />
           {err("email")}
-          <input className={input} type="tel" inputMode="numeric" placeholder="WhatsApp — (11) 99999-9999" aria-label="WhatsApp"
+          <input {...fieldProps("whatsapp")} type="tel" inputMode="numeric" placeholder="WhatsApp — (11) 99999-9999" aria-label="WhatsApp"
                  value={form.whatsapp} onChange={(e) => set("whatsapp", formatPhoneBR(e.target.value))} />
           {err("whatsapp")}
-          <input className={input} type="date" aria-label="Data de nascimento" value={form.birth_date} onChange={(e) => set("birth_date", e.target.value)} />
+          <input {...fieldProps("birth_date")} type="date" aria-label="Data de nascimento" value={form.birth_date} onChange={(e) => set("birth_date", e.target.value)} />
           {err("birth_date")}
-          <select className={input} aria-label="Estado de nascimento" value={form.birth_state} onChange={(e) => set("birth_state", e.target.value)}>
+          <select {...fieldProps("birth_state")} aria-label="Estado de nascimento" value={form.birth_state} onChange={(e) => set("birth_state", e.target.value)}>
             <option value="">Estado de nascimento…</option>
             {BR_STATES.map((uf) => (
               <option key={uf} value={uf}>{uf}</option>
             ))}
           </select>
           {err("birth_state")}
-          <input className={input} placeholder="Instagram (opcional)" aria-label="Instagram (opcional)" value={form.instagram} onChange={(e) => set("instagram", e.target.value)} />
+          <input {...fieldProps("instagram")} placeholder="Instagram (opcional)" aria-label="Instagram (opcional)" value={form.instagram} onChange={(e) => set("instagram", e.target.value)} />
           {/* Sempre visivel: o grupo do jogador muda entre edicoes, e esconder o
               seletor quando veio do preenchimento automatico o prendia ao anterior. */}
-          <select className={input} aria-label="Grupo" value={form.group_affiliation} onChange={(e) => set("group_affiliation", e.target.value)}>
+          <select {...fieldProps("group_affiliation")} aria-label="Grupo" value={form.group_affiliation} onChange={(e) => set("group_affiliation", e.target.value)}>
             <option value="">Selecione seu grupo…</option>
             {championship.registration_group_options.map((g) => (
               <option key={g.label} value={g.label}>{g.label}</option>
@@ -274,7 +290,7 @@ export default function RegistrationWizard({
           {err("group_affiliation")}
           {needsInvite && (
             <>
-              <input className={input} placeholder="Código de convite" aria-label="Código de convite" value={form.invite_code} onChange={(e) => set("invite_code", e.target.value)} />
+              <input {...fieldProps("invite_code")} placeholder="Código de convite" aria-label="Código de convite" value={form.invite_code} onChange={(e) => set("invite_code", e.target.value)} />
               {err("invite_code")}
             </>
           )}
@@ -308,16 +324,16 @@ export default function RegistrationWizard({
         )}
 
         <StepShell index={stepNumber(4, minor)} title="Perfil de jogo" open={step === 4} done={!!done[4]} onToggle={() => open(4)}>
-          <select className={input} aria-label="Posição preferida" value={form.preferred_position} onChange={(e) => set("preferred_position", e.target.value)}>
+          <select {...fieldProps("preferred_position")} aria-label="Posição preferida" value={form.preferred_position} onChange={(e) => set("preferred_position", e.target.value)}>
             <option>Zagueiro</option><option>Meia</option><option>Atacante</option><option>Goleiro</option>
           </select>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <input className={input} inputMode="numeric" placeholder="Altura — 1,80 m" aria-label="Altura em metros" value={form.height} onChange={(e) => set("height", formatHeightM(e.target.value))} />
+              <input {...fieldProps("height")} inputMode="numeric" placeholder="Altura — 1,80 m" aria-label="Altura em metros" value={form.height} onChange={(e) => set("height", formatHeightM(e.target.value))} />
               {err("height")}
             </div>
             <div>
-              <input className={input} inputMode="decimal" placeholder="Peso (kg)" aria-label="Peso em quilos" value={form.weight} onChange={(e) => set("weight", e.target.value)} />
+              <input {...fieldProps("weight")} inputMode="decimal" placeholder="Peso (kg)" aria-label="Peso em quilos" value={form.weight} onChange={(e) => set("weight", e.target.value)} />
               {err("weight")}
             </div>
           </div>
