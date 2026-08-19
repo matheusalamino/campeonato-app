@@ -77,6 +77,28 @@ done
 r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000199')::text;")
 checar "max_players nulo sempre da principal" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
 
+echo "== janela de inscricao =="
+preparar
+$DB -c "UPDATE championships SET registration_start_date = now() + interval '1 day' WHERE id='$CHAMP';" > /dev/null
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000401')::text;")
+checar "antes da abertura recusa" "not_open" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+$DB -c "UPDATE championships SET registration_start_date = now() - interval '1 day',
+                                 registration_end_date = now() + interval '1 day' WHERE id='$CHAMP';" > /dev/null
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000402')::text;")
+checar "dentro da janela reserva normalmente" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+$DB -c "UPDATE championships SET registration_end_date = now() - interval '1 minute' WHERE id='$CHAMP';" > /dev/null
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000403')::text;")
+checar "depois do prazo recusa" "not_open" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+# Campeonato sem data configurada tem que se comportar como antes do A5: nulo
+# nao e prazo vencido, e trancaria todo mundo do lado de fora.
+$DB -c "UPDATE championships SET registration_start_date = NULL,
+                                 registration_end_date = NULL WHERE id='$CHAMP';" > /dev/null
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000404')::text;")
+checar "data nula nao fecha nada" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
 echo "== concorrencia: duas transacoes disputando a ultima vaga =="
 preparar
 $DB -c "UPDATE championships SET max_players = 1, max_waitlist_players = 0 WHERE id='$CHAMP';" > /dev/null
