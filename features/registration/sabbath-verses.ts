@@ -57,8 +57,10 @@ const DAY_MS = 86_400_000;
  * as 00h30 de sabado tem que ver o mesmo versiculo. Contando as semanas a
  * partir de uma SEXTA, os dois instantes caem na mesma semana por construcao.
  *
- * Trocar esta data por um dia de semana diferente e o unico jeito de quebrar
- * isso — o teste da virada da meia-noite existe para pegar exatamente isso.
+ * Contar as semanas a partir da epoch daria o mesmo resultado hoje, mas por
+ * acidente: 01/01/1970 caiu numa quinta. Com a referencia implicita num dia
+ * que nao a sexta, sexta e sabado ficam na mesma semana sem que nada no codigo
+ * diga por que — e o teste da virada da meia-noite passa a nao poder falhar.
  */
 const REFERENCE_FRIDAY = Date.parse("2026-01-02T00:00:00Z");
 
