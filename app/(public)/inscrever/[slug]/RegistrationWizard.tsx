@@ -65,6 +65,11 @@ export default function RegistrationWizard({
   const [slot, setSlot] = useState<SlotReservation | null>(null);
 
   const isFull = championship.max_players != null && liveCount >= championship.max_players;
+  // Mesma fonte de verdade da faixa. `isFull` soma principal + espera e por isso
+  // prometia lista de espera a quem tinha vaga principal garantida; a reserva
+  // sabe qual das duas e este CPF. Antes do CPF nao ha reserva, e o aviso geral
+  // do campeonato ainda e o melhor palpite disponivel.
+  const waitlisted = slot ? slot.ok && slot.isWaitlist : isFull;
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((p) => ({ ...p, [k]: v }));
@@ -131,7 +136,11 @@ export default function RegistrationWizard({
     setStep(next);
     // Renova a reserva a cada passo: quinze minutos contam a partir da ultima
     // acao, nao do inicio. Sem isso, quem preenche com calma perde a vaga.
-    if (slot?.ok) void reserveSlotAction(championship.id, form.cpf).then(setSlot);
+    // Falha de rede mantem o estado anterior de proposito — a reserva que ja
+    // esta na tela continua valendo, e o proximo passo tenta de novo.
+    if (slot?.ok) {
+      void reserveSlotAction(championship.id, form.cpf).then(setSlot, () => {});
+    }
   }
 
   /**
@@ -506,7 +515,7 @@ export default function RegistrationWizard({
           <div className="text-sm text-[var(--gala-ink-dim)] space-y-1">
             <div><b className="text-[var(--gala-ink)]">{form.name || "—"}</b> · {form.preferred_position}</div>
             <div>{form.group_affiliation || "—"}</div>
-            <div>Total: R$ {total.toFixed(2)}{isFull ? " · Lista de espera" : ""}</div>
+            <div>Total: R$ {total.toFixed(2)}{waitlisted ? " · Lista de espera" : ""}</div>
           </div>
           <button onClick={onSubmit} disabled={submitting}
                   className="w-full rounded-xl py-3 font-black uppercase tracking-wide text-[#050507]"

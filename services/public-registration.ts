@@ -165,7 +165,10 @@ export async function reserveSlot(
     p_cpf: normalizeCpf(cpf),
   });
 
-  if (error || !data) return { ok: false, reason: "not_found" };
+  // A chamada nao completou: nada aqui diz se ha vaga. Devolver `not_found`,
+  // como era antes, transformava PostgREST fora do ar em "campeonato esgotado"
+  // na tela do jogador.
+  if (error || !data) return { ok: false, reason: "error" };
 
   const result = data as {
     success: boolean;
