@@ -210,6 +210,9 @@ export function ChampionshipForm({
             <FieldError errors={errors} name="tournament_start_date" />
           </div>
         </div>
+        <p className="mt-1 text-xs text-zinc-500">
+          Horário de Brasília. A hora conta: para encerrar no fim do dia, use 23:59.
+        </p>
       </section>
 
       {/* Capacity */}
