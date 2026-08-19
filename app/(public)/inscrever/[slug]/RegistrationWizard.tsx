@@ -689,16 +689,26 @@ export default function RegistrationWizard({
             Sua inscrição já inclui <b>2 ingressos</b> para a Noite de Gala: o seu e o de um
             acompanhante. Precisa de mais? Cada ingresso adicional é cobrado à parte abaixo.
           </div>
-          <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3">
+          <div className="rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3 space-y-2">
             <span className="text-sm">Ingressos extras (Noite de Gala)</span>
-            <div className="flex items-center gap-3">
-              <button type="button" onClick={() => set("extra_tickets_count", Math.max(0, form.extra_tickets_count - 1))}
-                      className="w-8 h-8 rounded-lg font-bold text-[#050507]" style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>–</button>
-              <b>{form.extra_tickets_count}</b>
-              <button type="button"
-                      onClick={() => set("extra_tickets_count",
-                        Math.min(extraTicketsCap(championship.max_extra_tickets), form.extra_tickets_count + 1))}
-                      className="w-8 h-8 rounded-lg font-bold text-[#050507]" style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>+</button>
+            <div className="flex items-center">
+              {/* So aparece quando o campeonato realmente cobra por ingresso extra —
+                  nulo ou zero e "nao ha o que cobrar", e "R$ 0,00 cada" enganaria mais
+                  do que ajudaria. */}
+              {championship.extra_ticket_price != null && championship.extra_ticket_price > 0 && (
+                <span className="text-xs text-[var(--gala-ink-dim)]">
+                  R$ {championship.extra_ticket_price.toFixed(2)} cada
+                </span>
+              )}
+              <div className="flex items-center gap-3 ml-auto">
+                <button type="button" onClick={() => set("extra_tickets_count", Math.max(0, form.extra_tickets_count - 1))}
+                        className="w-8 h-8 rounded-lg font-bold text-[#050507]" style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>–</button>
+                <b>{form.extra_tickets_count}</b>
+                <button type="button"
+                        onClick={() => set("extra_tickets_count",
+                          Math.min(extraTicketsCap(championship.max_extra_tickets), form.extra_tickets_count + 1))}
+                        className="w-8 h-8 rounded-lg font-bold text-[#050507]" style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>+</button>
+              </div>
             </div>
           </div>
           <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3">
