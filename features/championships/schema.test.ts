@@ -144,6 +144,51 @@ describe("championshipFormSchema: pix_key", () => {
   });
 });
 
+describe("id vindo do banco (nao segue a RFC 4122 de versao/variante)", () => {
+  // O id da coluna uuid do Postgres pode ter sido fabricado a mao, migrado
+  // de outro sistema ou vir de seed — nada disso garante versao 1-8 no
+  // terceiro grupo. A validacao so precisa pegar chamada malformada da
+  // propria aplicacao, nao atestar conformidade com a RFC.
+  const idForaDaRfc = "10000000-0000-0000-0000-000000000001";
+  const idV4 = "550e8400-e29b-41d4-a716-446655440000";
+
+  it("updateChampionshipSchema aceita id fora da RFC (versao zero)", () => {
+    const r = updateChampionshipSchema.safeParse({ ...validDraft, id: idForaDaRfc });
+    expect(r.success).toBe(true);
+  });
+
+  it("statusChangeSchema aceita id fora da RFC (versao zero)", () => {
+    const r = statusChangeSchema.safeParse({
+      id: idForaDaRfc,
+      from: "subscribing",
+      to: "rest",
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("continua aceitando um uuid v4 normal", () => {
+    const r = updateChampionshipSchema.safeParse({ ...validDraft, id: idV4 });
+    expect(r.success).toBe(true);
+  });
+
+  it.each([
+    ["abc"],
+    ["nao-e-uuid"],
+    ["10000000-0000-0000-0000-00000000000"], // ultimo grupo com 11 digitos
+  ])("continua rejeitando texto que nao e uuid: %s", (invalid) => {
+    const r = updateChampionshipSchema.safeParse({ ...validDraft, id: invalid });
+    expect(r.success).toBe(false);
+  });
+
+  it("aponta o erro no campo id, nao na raiz do formulario", () => {
+    const r = updateChampionshipSchema.safeParse({ ...validDraft, id: "nao-e-uuid" });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(r.error.issues.some((issue) => issue.path[0] === "id")).toBe(true);
+    }
+  });
+});
+
 describe("statusChangeSchema", () => {
   it("rejects changing to the same status", () => {
     const r = statusChangeSchema.safeParse({
