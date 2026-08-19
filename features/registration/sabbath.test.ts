@@ -103,9 +103,12 @@ describe("sabbathEndsAt", () => {
       .toBe("2026-08-22T23:30:00.000Z");
   });
 
-  it("sem janela, numa sexta que vira o mes, nao inventa o dia 32", () => {
-    // 31/07/2026 e uma sexta. `addDays` anda pelo UTC de propriedade: somar 1
-    // no texto daria "2026-07-32" e `brasiliaAt` recusaria.
+  it("sem janela, numa sexta que vira o mes, aponta o sabado do mes seguinte", () => {
+    // 31/07/2026 e uma sexta. Isto prende a SAIDA da virada de mes, nao a
+    // implementacao: trocar `addDays` por aritmetica de texto passaria aqui,
+    // porque "2026-07-32" NAO e recusado — o regex de `brasiliaInputToIso`
+    // aceita \d{2} e o `Date.UTC` normaliza para 1o de agosto. Verificado; nao
+    // conte com uma recusa que nao existe.
     expect(sabbathEndsAt(em("2026-07-31T20:30:00.000Z"), null))
       .toBe("2026-08-01T23:30:00.000Z");
   });
@@ -123,6 +126,33 @@ describe("sabbathStartsAt", () => {
 
   it("sem janela, fora da sexta, devolve null — nao ha o que avisar", () => {
     expect(sabbathStartsAt(em("2026-08-19T13:00:00.000Z"), null)).toBeNull();
+  });
+});
+
+describe("janela ilegivel — cai na regra conservadora, nunca em 'nao e sabado'", () => {
+  const PODRE: SabbathWindow = { startsAt: "banana", endsAt: "banana" };
+  /** So a ponta final podrida: prende a guarda em `||`, que um `&&` afrouxaria. */
+  const MEIO_PODRE: SabbathWindow = { startsAt: JANELA.startsAt, endsAt: "banana" };
+  const SABADO_2H = "2026-08-22T05:00:00.000Z";
+
+  it("pausa num sabado, em vez de abrir a inscricao", () => {
+    // Comparar com NaN e sempre falso, entao sem a guarda `t >= NaN && t <= NaN`
+    // da false — "nao e sabado" — e a inscricao ABRIRIA no sabado. E a unica
+    // direcao que esta feature nao pode errar.
+    expect(sabbathState(em(SABADO_2H), PODRE)).toBe(true);
+  });
+
+  it("pausa tambem quando so uma das pontas esta podre", () => {
+    expect(sabbathState(em(SABADO_2H), MEIO_PODRE)).toBe(true);
+  });
+
+  it("sabbathEndsAt nao entrega a string podre para a tela", () => {
+    expect(sabbathEndsAt(em(SABADO_2H), PODRE)).toBe("2026-08-22T23:30:00.000Z");
+  });
+
+  it("sabbathStartsAt nao entrega a string podre para a tela", () => {
+    expect(sabbathStartsAt(em("2026-08-21T13:00:00.000Z"), PODRE))
+      .toBe("2026-08-21T20:00:00.000Z");
   });
 });
 

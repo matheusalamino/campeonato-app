@@ -62,6 +62,28 @@ function hhmmToMinutes(hhmm: string): number {
   return Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
 }
 
+type ParsedWindow = { startsAt: string; endsAt: string; start: number; end: number };
+
+/**
+ * A janela lida como par de instantes, ou `null` se vier ilegivel.
+ *
+ * Qualquer comparacao com `NaN` e falsa, entao uma janela corrompida faria
+ * `sabbathState` responder `false` — "nao e sabado" — e ABRIR a inscricao no
+ * sabado. E a unica direcao que esta feature nao pode errar. Ilegivel vira
+ * `null` e cai na regra conservadora, junto com "a tabela nao alcanca".
+ *
+ * As colunas sao `timestamptz NOT NULL`, entao o caminho realista nao produz
+ * isso. A guarda mora aqui, e nao em cada funcao, porque as tres leem a mesma
+ * janela e nenhuma delas deveria decidir sozinha o que fazer com dado podre.
+ */
+function parseWindow(window: SabbathWindow | null): ParsedWindow | null {
+  if (!window) return null;
+  const start = Date.parse(window.startsAt);
+  const end = Date.parse(window.endsAt);
+  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  return { startsAt: window.startsAt, endsAt: window.endsAt, start, end };
+}
+
 /**
  * A inscricao esta pausada neste instante?
  *
@@ -69,14 +91,25 @@ function hhmmToMinutes(hhmm: string): number {
  * ha como testar as bordas, que sao o unico lugar onde esta regra pode errar.
  *
  * Bordas inclusivas, coerentes com o resto da feature.
+ *
+ * Precondicoes que este modulo NAO garante, e que quem chama precisa manter:
+ *
+ * - `now` valido. Um `Date` invalido lanca no ramo conservador e devolve
+ *   `false` no ramo da janela. Sem guarda porque nenhum chamador consegue
+ *   produzir isso hoje — quem chama passa `new Date()`.
+ * - `window` vinda da consulta atual-ou-proxima. Uma janela ja VENCIDA devolve
+ *   `false` sem cair no fallback: daqui nao da para distinguir "ja passou" de
+ *   "ainda nao chegou" sem reabrir a decisao de qual janela e a certa. Manter
+ *   o `ends_at >= now()` na consulta e requisito, nao detalhe de implementacao.
  */
 export function sabbathState(now: Date, window: SabbathWindow | null): boolean {
-  if (window) {
+  const parsed = parseWindow(window);
+  if (parsed) {
     const t = now.getTime();
     // Janela futura devolve false, e NAO cai na regra conservadora: a tabela
     // esta funcionando. Sem esta distincao o site pausaria toda sexta as 17h em
     // vez do por do sol real, semana apos semana.
-    return t >= Date.parse(window.startsAt) && t <= Date.parse(window.endsAt);
+    return t >= parsed.start && t <= parsed.end;
   }
 
   const { dow, minutes } = brasiliaParts(now);
@@ -88,10 +121,14 @@ export function sabbathState(now: Date, window: SabbathWindow | null): boolean {
  * Quando a pausa vigente termina.
  *
  * So faz sentido chamar quando `sabbathState` disse `true` — e o que garante
- * que o ramo sem janela esta numa sexta ou num sabado.
+ * que o ramo sem janela esta numa sexta ou num sabado. Fora disso a resposta e
+ * sintaticamente valida e semanticamente lixo: numa terca devolve a quarta as
+ * 20h30, e com uma janela vencida devolve um instante no passado. Pergunte se
+ * esta pausada antes de perguntar quando termina.
  */
 export function sabbathEndsAt(now: Date, window: SabbathWindow | null): string {
-  if (window) return window.endsAt;
+  const parsed = parseWindow(window);
+  if (parsed) return parsed.endsAt;
   const { date, dow } = brasiliaParts(now);
   const saturday = dow === SATURDAY ? date : addDays(date, 1);
   return brasiliaAt(saturday, SABBATH_FALLBACK_END);
@@ -103,9 +140,16 @@ export function sabbathEndsAt(now: Date, window: SabbathWindow | null): string {
  * Com janela e sempre exato. Sem janela, a regra conservadora so conhece o
  * comeco do sabado corrente: em qualquer outro dia devolve `null`, e nao ha o
  * que avisar — a proxima pausa esta a mais de um dia.
+ *
+ * Atencao para quem for montar a tela: DURANTE a pausa os dois ramos discordam.
+ * Com janela devolve um inicio ja passado, e `sunsetAlert` le "cutoff"; sem
+ * janela, num sabado, devolve `null` e le "none". Nao e alcancavel enquanto a
+ * pagina passar `null` enquanto esta pausada — mas isso e escolha de quem
+ * chama, nao garantia deste modulo.
  */
 export function sabbathStartsAt(now: Date, window: SabbathWindow | null): string | null {
-  if (window) return window.startsAt;
+  const parsed = parseWindow(window);
+  if (parsed) return parsed.startsAt;
   const { date, dow } = brasiliaParts(now);
   if (dow !== FRIDAY) return null;
   return brasiliaAt(date, SABBATH_FALLBACK_START);
