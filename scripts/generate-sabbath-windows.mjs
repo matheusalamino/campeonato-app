@@ -27,6 +27,33 @@ export const SOROCABA = { latitude: -23.5015, longitude: -47.4526 };
 const DIA_MS = 86_400_000;
 
 /**
+ * Estoura se a data local nao for um "YYYY-MM-DD" que o Date entenda.
+ *
+ * Uma Invalid Date que passe daqui falha de tres jeitos calados, e nenhum deles
+ * aponta o culpado. Em `fromStr`, o laco que procura a primeira sexta testa
+ * `dia.getUTCDay() !== 5`, que numa Invalid Date e `NaN !== 5` — verdadeiro
+ * para sempre: o processo pendura sem mensagem nenhuma. Em `toStr` e pior,
+ * porque parece ter dado certo: `dia <= fim` e sempre falso, a funcao devolve
+ * lista vazia, e o CLI imprime nada e sai com codigo 0. E em `sunsetAt`, que e
+ * export publico, o getTimes devolveria sunset null e o erro falaria em por do
+ * sol quando o problema era a data digitada.
+ */
+function assertDateStr(dateStr, argumento) {
+  if (Number.isNaN(Date.parse(`${dateStr}T00:00:00Z`))) {
+    throw new Error(
+      `Data invalida em ${argumento}: ${JSON.stringify(dateStr)}. ` +
+        "Esperado o formato YYYY-MM-DD.",
+    );
+  }
+}
+
+/** Le "YYYY-MM-DD" como meia-noite UTC. */
+function midnightUtc(dateStr, argumento) {
+  assertDateStr(dateStr, argumento);
+  return new Date(`${dateStr}T00:00:00Z`);
+}
+
+/**
  * O por do sol em Sorocaba na data local informada ("YYYY-MM-DD").
  *
  * `sunset` do suncalc e o instante em que a borda superior do disco solar some
@@ -35,6 +62,9 @@ const DIA_MS = 86_400_000;
  * minutos antes.
  */
 export function sunsetAt(dateStr) {
+  // Valida antes de calcular: com lixo aqui o getTimes devolve sunset null, e a
+  // mensagem la embaixo culparia o por do sol por um erro de digitacao.
+  assertDateStr(dateStr, "dateStr");
   // 15:00Z fica perto do meio-dia solar de Sorocaba (~15:07Z), entao o suncalc
   // resolve o dia local certo sem risco de escorregar para o vizinho.
   const referencia = new Date(`${dateStr}T15:00:00Z`);
@@ -45,28 +75,6 @@ export function sunsetAt(dateStr) {
   // arredondamento, numa mensagem que nao diz qual data faltou.
   if (!sunset) throw new Error(`Sem por do sol calculado para ${dateStr} em Sorocaba`);
   return sunset;
-}
-
-/**
- * Le "YYYY-MM-DD" como meia-noite UTC, ou estoura dizendo qual argumento veio
- * ruim.
- *
- * Uma Invalid Date que passe daqui falha de dois jeitos calados, e nenhum deles
- * aponta o culpado. Em `fromStr`, o laco que procura a primeira sexta testa
- * `dia.getUTCDay() !== 5`, que numa Invalid Date e `NaN !== 5` — verdadeiro
- * para sempre: o processo pendura sem mensagem nenhuma. Em `toStr` e pior,
- * porque parece ter dado certo: `dia <= fim` e sempre falso, a funcao devolve
- * lista vazia, e o CLI imprime nada e sai com codigo 0.
- */
-function midnightUtc(dateStr, argumento) {
-  const dia = new Date(`${dateStr}T00:00:00Z`);
-  if (Number.isNaN(dia.getTime())) {
-    throw new Error(
-      `Data invalida em ${argumento}: ${JSON.stringify(dateStr)}. ` +
-        "Esperado o formato YYYY-MM-DD.",
-    );
-  }
-  return dia;
 }
 
 /** Todas as sextas entre duas datas locais, inclusive. */

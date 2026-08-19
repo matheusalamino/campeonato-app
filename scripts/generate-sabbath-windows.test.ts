@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { sabbathWindows, sunsetAt, fridaysBetween } from "./generate-sabbath-windows.mjs";
+import { getTimes } from "suncalc";
+import {
+  sabbathWindows, sunsetAt, fridaysBetween, toSqlRows, SOROCABA,
+} from "./generate-sabbath-windows.mjs";
 
 /** Hora local de Brasilia em minutos desde a meia-noite. */
 function brasiliaMinutes(d: Date): number {
@@ -19,11 +22,30 @@ function brasiliaDow(d: Date): number {
   return new Date(`${date}T00:00:00Z`).getUTCDay();
 }
 
+describe("SOROCABA", () => {
+  it("fica em Sorocaba, e nao em outra cidade qualquer", () => {
+    /*
+     * Change-detector de proposito. A constante nao e um detalhe de
+     * implementacao: ela codifica uma DECISAO DE DESENHO — o lugar e constante
+     * do projeto, e nao coluna configuravel, porque diferente das datas do
+     * campeonato a igreja e os jogos sao sempre no mesmo lugar.
+     *
+     * Sem este caso, trocar para Sao Paulo (~60 km, -3,4 min no por do sol)
+     * sobrevive a suite inteira: so morreria la pelo Rio. Quem vier editar
+     * estes numeros tem que sentir que esta mexendo numa decisao.
+     */
+    expect(SOROCABA.latitude).toBe(-23.5015);
+    expect(SOROCABA.longitude).toBe(-47.4526);
+  });
+});
+
 describe("sunsetAt", () => {
   /*
    * As duas ancoras existem para pegar erro SISTEMATICO, nao imprecisao de
    * minuto: fuso trocado (3h), estacao invertida (~1h20), dia errado. A faixa
-   * de 5 minutos e larga de proposito.
+   * e de +-5 minutos em torno do valor publicado, larga de proposito — a rede
+   * fina para a escolha da chave e para as coordenadas esta nos casos
+   * dedicados, nao aqui.
    *
    * Os dois valores foram conferidos em 19/08/2026 contra a tabela publicada em
    * https://www.timeanddate.com/sun/brazil/sorocaba, e batidos de novo contra a
@@ -33,15 +55,45 @@ describe("sunsetAt", () => {
   it("bate com o por do sol publicado de Sorocaba no inverno", () => {
     // 19/06/2026, sexta, perto do solsticio de inverno. Publicado: 17h31.
     const minutos = brasiliaMinutes(sunsetAt("2026-06-19"));
-    expect(minutos).toBeGreaterThanOrEqual(17 * 60 + 28);
-    expect(minutos).toBeLessThanOrEqual(17 * 60 + 38);
+    expect(minutos).toBeGreaterThanOrEqual(17 * 60 + 26);
+    expect(minutos).toBeLessThanOrEqual(17 * 60 + 36);
   });
 
   it("bate com o por do sol publicado de Sorocaba no verao", () => {
     // 18/12/2026, sexta, perto do solsticio de verao. Publicado: 18h54.
     const minutos = brasiliaMinutes(sunsetAt("2026-12-18"));
-    expect(minutos).toBeGreaterThanOrEqual(18 * 60 + 47);
-    expect(minutos).toBeLessThanOrEqual(18 * 60 + 57);
+    expect(minutos).toBeGreaterThanOrEqual(18 * 60 + 49);
+    expect(minutos).toBeLessThanOrEqual(18 * 60 + 59);
+  });
+
+  it("usa a chave `sunset` do suncalc, nunca `sunsetStart`", () => {
+    /*
+     * O requisito era explicito e nao tinha rede nenhuma: trocar a chave cabe
+     * folgado dentro das faixas acima, porque `sunsetStart` fica so ~2,6 min
+     * antes — com truncamento para o minuto isso chega a aparecer como 2.
+     *
+     * `sunsetStart` e quando a borda INFERIOR do disco toca o horizonte;
+     * `sunset` e quando a borda superior some, que e a definicao que a
+     * observancia usa.
+     *
+     * O dano da troca e ASSIMETRICO, e e por isso que este caso existe. Ela
+     * desliza a janela inteira ~2,6 min para tras: no inicio, o por do sol de
+     * sexta, isso ate pausa mais cedo — mais conservador. No FIM, o por do sol
+     * de sabado, encerraria a pausa ANTES de o sol se por de verdade, nas 178
+     * linhas de uma vez. E a regra de ouro invertida, e so essa ponta machuca.
+     */
+    const referencia = new Date("2026-06-19T15:00:00Z");
+    const { sunset, sunsetStart } = getTimes(
+      referencia, SOROCABA.latitude, SOROCABA.longitude,
+    );
+    const sunsetMs = Number(sunset?.getTime());
+    const sunsetStartMs = Number(sunsetStart?.getTime());
+    expect(Number.isNaN(sunsetMs)).toBe(false);
+    expect(Number.isNaN(sunsetStartMs)).toBe(false);
+
+    const calculado = sunsetAt("2026-06-19").getTime();
+    expect(calculado).toBe(sunsetMs);
+    expect(calculado).toBeGreaterThan(sunsetStartMs);
   });
 
   it("poe o sol mais cedo em junho que em dezembro", () => {
@@ -58,9 +110,25 @@ describe("fridaysBetween", () => {
     expect(fridaysBetween("2026-08-01", "2026-08-31")[0]).toBe("2026-08-07");
   });
 
+  it("inclui fromStr quando ela ja E uma sexta", () => {
+    // 07/08/2026 e sexta. O outro caso comeca num sabado, entao a borda
+    // inclusiva de baixo nunca rodava: trocar o `while` por `do/while` passava
+    // verde e comia a primeira janela.
+    expect(fridaysBetween("2026-08-07", "2026-08-28")[0]).toBe("2026-08-07");
+  });
+
   it("nao passa da data final", () => {
     const dias = fridaysBetween("2026-08-01", "2026-08-31");
     expect(dias[dias.length - 1]).toBe("2026-08-28");
+  });
+
+  it("inclui toStr quando ela ja E uma sexta", () => {
+    // Nenhum outro range termina numa sexta — 31/08/2026 e 31/12/2029 sao
+    // segundas —, entao afrouxar `dia <= fim` para `dia < fim` passava verde e
+    // derrubava calada a ultima janela da tabela.
+    const dias = fridaysBetween("2026-08-01", "2029-12-28");
+    expect(dias[dias.length - 1]).toBe("2029-12-28");
+    expect(dias.length).toBe(178);
   });
 
   it("devolve so sextas, de sete em sete dias", () => {
@@ -158,7 +226,7 @@ describe("sabbathWindows", () => {
     }
   });
 
-  it("arredonda o inicio para baixo e o fim para cima, no segundo", () => {
+  it("zera os milissegundos das duas pontas", () => {
     // Nao e capricho de formatacao: o erro de arredondamento passa a cair
     // sempre a favor da observancia, e o diff da migration fica sem
     // milissegundos para conferir.
@@ -195,5 +263,43 @@ describe("sabbathWindows", () => {
       expect(janelas[i].endsAt.getTime()).toBeGreaterThanOrEqual(fimReal);
       expect(janelas[i].endsAt.getTime() - fimReal).toBeLessThan(1000);
     });
+  });
+});
+
+describe("toSqlRows", () => {
+  /*
+   * Esta e a funcao que escreve a migration, e e nela que toda a justificativa
+   * de "auditavel no diff da PR" se apoia. Estava sem cobertura nenhuma:
+   * trocar as duas colunas de lugar passava verde, e a tabela nasceria com
+   * cada sabado comecando no por do sol de sabado e terminando no de sexta.
+   */
+  const JANELAS = [
+    {
+      startsAt: new Date("2026-08-07T20:50:18.000Z"),
+      endsAt: new Date("2026-08-08T20:50:43.000Z"),
+    },
+    {
+      startsAt: new Date("2029-12-28T21:58:44.000Z"),
+      endsAt: new Date("2029-12-29T21:59:06.000Z"),
+    },
+  ];
+
+  it("escreve uma linha por janela, starts_at antes de ends_at, em UTC", () => {
+    // A ordem das colunas e a metade que importa: casa com o
+    // `INSERT INTO sabbath_windows (starts_at, ends_at) VALUES` da migration.
+    expect(toSqlRows(JANELAS)).toBe(
+      "  ('2026-08-07T20:50:18.000Z', '2026-08-08T20:50:43.000Z'),\n" +
+        "  ('2029-12-28T21:58:44.000Z', '2029-12-29T21:59:06.000Z')",
+    );
+  });
+
+  it("nao deixa virgula sobrando na ultima linha", () => {
+    // O VALUES termina com `ON CONFLICT`; virgula a mais e erro de sintaxe que
+    // so aparece na hora de aplicar a migration.
+    expect(toSqlRows(JANELAS).endsWith(")")).toBe(true);
+  });
+
+  it("devolve texto vazio sem janela nenhuma", () => {
+    expect(toSqlRows([])).toBe("");
   });
 });
