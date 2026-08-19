@@ -253,9 +253,21 @@ BEGIN
     RETURN false;
   END IF;
 
-  -- A tabela acabou. Falha a favor da observancia: sexta 17h a sabado 19h,
+  -- A tabela acabou. Falha a favor da observancia: sexta 17h a sabado 19h30,
   -- horario de Brasilia. Errar pausando a mais custa algumas horas de
   -- inscricao; errar pausando a menos custa a observancia.
+  --
+  -- 19h30, e nao 19h: os proprios dados desta tabela mostram DEZ sabados de
+  -- janeiro com por do sol depois das 19h, o ultimo as 19:01:47. Com o corte em
+  -- 19h a regra "conservadora" encerraria a pausa ANTES do sol se por — errando
+  -- para o lado proibido, justo no ramo que existe para nao errar. A margem
+  -- agora espelha a da sexta: o por do sol mais cedo do ano e 17:30:40, ou seja
+  -- 30 minutos depois do inicio conservador.
+  --
+  -- Esticar mais para cobrir um horario de verao reinstituido nao ajudaria:
+  -- se o DST voltar, quem quebra primeiro e a tabela — os instantes gravados
+  -- encerrariam a pausa uma hora cedo — e nesse estado este ramo nem roda,
+  -- porque a tabela nao lapsou. DST e problema da regeracao, nota la em cima.
   --
   -- Espelha SABBATH_FALLBACK_* em features/registration/sabbath.ts. Mexeu aqui,
   -- mexa la — nada cobra os dois lados alem do teste de cada um.
@@ -264,7 +276,7 @@ BEGIN
   v_hora  := v_local::time;
 
   RETURN (v_dow = 5 AND v_hora >= time '17:00')
-      OR (v_dow = 6 AND v_hora <= time '19:00');
+      OR (v_dow = 6 AND v_hora <= time '19:30');
 END;
 $$ LANGUAGE plpgsql STABLE SET search_path = public;
 
@@ -278,7 +290,13 @@ REVOKE ALL ON FUNCTION public.is_sabbath(timestamptz) FROM anon, authenticated;
 COMMENT ON FUNCTION public.is_sabbath(timestamptz) IS
 'Diz se o instante cai dentro de uma janela de sabado (bordas inclusivas).
 Quando nenhuma linha de sabbath_windows alcanca p_at — a tabela acabou —
-aplica a regra conservadora de sexta 17h a sabado 19h, horario de Brasilia,
-que pausa mais do que o real e nunca menos.';
+aplica a regra conservadora de sexta 17h a sabado 19h30, horario de Brasilia,
+que pausa mais do que o real e nunca menos. O 19h30 vem dos dados: o por do sol
+mais tardio da tabela e 19:01:47 (sabado 13/01/2029), entao cortar em 19h
+encerraria a pausa antes do sol se por.
+
+Guarda a cauda, nao a cabeca: instante anterior a primeira linha devolve false
+em qualquer dia da semana, porque ainda existe janela alcancando p_at. A funcao
+responde sobre agora e daqui pra frente, e nao afirma nada sobre o passado.';
 
 COMMIT;
