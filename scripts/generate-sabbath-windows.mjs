@@ -128,11 +128,57 @@ export function sabbathWindows(fromStr, toStr) {
   }));
 }
 
+const DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
+
+/**
+ * O instante em horario de Brasilia, como "sex 17:50:18".
+ *
+ * Existe por causa da revisao: os literais do VALUES sao UTC, porque
+ * timestamptz se guarda como instante absoluto — mas as tabelas de por do sol
+ * publicadas de Sorocaba estao em horario de Brasilia. Sem esta traducao ao
+ * lado, quem for auditar o diff le `20:50:18`, entende noite alta, e conclui
+ * que o dado esta errado. A conferencia contra fonte publicada e a razao de as
+ * linhas serem literais; deixa-las ilegiveis desperdicaria a razao inteira.
+ *
+ * `timeZone` explicito no Intl, e nao offset fixo de -3: mantem a saida
+ * identica em qualquer maquina (o md5 nao muda sob TZ=UTC, Sao_Paulo, Tokyo ou
+ * New_York) e continua certa se o Brasil reinstituir o horario de verao.
+ */
+const FORMATO_BRASILIA = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Sao_Paulo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  // h23 e nao hour12:false: em algumas versoes do Node o segundo devolve "24"
+  // para a meia-noite. Nenhum por do sol cai la, mas o custo de blindar e zero.
+  hourCycle: "h23",
+});
+
+export function brasiliaLabel(instant) {
+  const p = Object.fromEntries(
+    FORMATO_BRASILIA.formatToParts(instant).map((x) => [x.type, x.value]),
+  );
+  // Dia da semana da data LOCAL, remontada como UTC so para usar getUTCDay.
+  const dow = new Date(`${p.year}-${p.month}-${p.day}T00:00:00Z`).getUTCDay();
+  return `${DIAS[dow]} ${p.hour}:${p.minute}:${p.second}`;
+}
+
 /** As linhas do VALUES da migration, uma por sabado. */
 export function toSqlRows(janelas) {
   return janelas
-    .map((j) => `  ('${j.startsAt.toISOString()}', '${j.endsAt.toISOString()}')`)
-    .join(",\n");
+    .map((j, i) => {
+      // A virgula vem antes do comentario: `-- ...` come o resto da linha, e
+      // uma virgula depois dele sumiria, quebrando o VALUES na hora de aplicar.
+      const virgula = i < janelas.length - 1 ? "," : "";
+      return (
+        `  ('${j.startsAt.toISOString()}', '${j.endsAt.toISOString()}')${virgula}` +
+        ` -- ${brasiliaLabel(j.startsAt)} -> ${brasiliaLabel(j.endsAt)}`
+      );
+    })
+    .join("\n");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

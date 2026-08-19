@@ -289,15 +289,44 @@ describe("toSqlRows", () => {
     // A ordem das colunas e a metade que importa: casa com o
     // `INSERT INTO sabbath_windows (starts_at, ends_at) VALUES` da migration.
     expect(toSqlRows(JANELAS)).toBe(
-      "  ('2026-08-07T20:50:18.000Z', '2026-08-08T20:50:43.000Z'),\n" +
-        "  ('2029-12-28T21:58:44.000Z', '2029-12-29T21:59:06.000Z')",
+      "  ('2026-08-07T20:50:18.000Z', '2026-08-08T20:50:43.000Z')," +
+        " -- sex 17:50:18 -> sab 17:50:43\n" +
+        "  ('2029-12-28T21:58:44.000Z', '2029-12-29T21:59:06.000Z')" +
+        " -- sex 18:58:44 -> sab 18:59:06",
     );
+  });
+
+  it("traduz cada linha para horario de Brasilia, ao lado do UTC", () => {
+    /*
+     * As linhas existem para serem auditadas contra tabela publicada, e as
+     * tabelas de Sorocaba estao em horario de Brasilia. Sem a traducao, quem
+     * revisa le `20:50:18` como noite alta e conclui que o dado esta errado.
+     * O -3 tem que aparecer: se o comentario repetisse o UTC, ele daria
+     * confianca sem dar informacao.
+     */
+    const [primeira] = toSqlRows(JANELAS).split("\n");
+    expect(primeira).toContain("'2026-08-07T20:50:18.000Z'");
+    expect(primeira).toContain("-- sex 17:50:18 -> sab 17:50:43");
   });
 
   it("nao deixa virgula sobrando na ultima linha", () => {
     // O VALUES termina com `ON CONFLICT`; virgula a mais e erro de sintaxe que
-    // so aparece na hora de aplicar a migration.
-    expect(toSqlRows(JANELAS).endsWith(")")).toBe(true);
+    // so aparece na hora de aplicar a migration. Agora a linha termina no
+    // comentario, entao o que se checa e o SQL antes dele.
+    const ultima = toSqlRows(JANELAS).split("\n").at(-1)!;
+    const sql = ultima.slice(0, ultima.indexOf(" --"));
+    expect(sql.endsWith(")")).toBe(true);
+    expect(sql.endsWith("),")).toBe(false);
+  });
+
+  it("poe a virgula antes do comentario, nunca depois", () => {
+    /*
+     * `--` come o resto da linha. Uma virgula depois do comentario sumiria para
+     * o Postgres, e o VALUES quebraria so na hora de aplicar a migration —
+     * longe daqui, com a mensagem apontando para a linha seguinte.
+     */
+    const [primeira] = toSqlRows(JANELAS).split("\n");
+    expect(primeira.indexOf("),")).toBeLessThan(primeira.indexOf(" --"));
   });
 
   it("devolve texto vazio sem janela nenhuma", () => {
