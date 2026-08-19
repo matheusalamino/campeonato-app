@@ -44,6 +44,16 @@ export const AUTHORIZATION_STEP = 3;
 export const UNIFORM_STEP = 5;
 
 /**
+ * Passo dos ingressos e do pagamento — o unico em que o jogador gasta dinheiro.
+ *
+ * Tem nome porque a guarda de navegacao precisa aponta-lo sem escrever o
+ * literal la: um passo novo no meio do formulario renumeraria os seguintes e
+ * deixaria a guarda protegendo o passo errado, calada. Foi assim que o bug
+ * bloqueador do A3 passou pelo typecheck e pela suite inteira.
+ */
+export const PAYMENT_STEP = 6;
+
+/**
  * Numero exibido de um passo.
  *
  * Os ids sao fixos para o mapa de erros nao depender de quem esta na tela; o

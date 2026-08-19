@@ -1,3 +1,5 @@
+import { PAYMENT_STEP } from "./field-steps";
+
 /**
  * Resultado de reservar a vaga do jogador.
  *
@@ -27,6 +29,14 @@ export type SlotReservation =
  * nenhuma. O passo da revisao nunca entra em `done`, entao o envio fica fora de
  * alcance por construcao.
  *
+ * O pagamento e a excecao aos concluidos, e nao por capricho: o schema do
+ * cliente nao exige o comprovante (so o servidor exige, e so quando ha o que
+ * cobrar), entao `advance` marca `done` para quem clicou em "Revisar" sem
+ * anexar nada. Sem a excecao, esse jogador — que ainda nao pagou — reabriria o
+ * passo depois da reserva ser recusada, pagaria o PIX ali e nao conseguiria
+ * enviar, porque a revisao segue fechada. Dinheiro gasto e inscricao travada: o
+ * dano que o A4 existe para evitar, so que por uma porta mais estreita.
+ *
  * `target` 0 e o accordion fechando o passo aberto: nao leva a passo nenhum.
  *
  * Sem reserva ainda (antes do CPF) nao ha veredito, e bloquear seria inventar.
@@ -37,5 +47,7 @@ export function canOpenStep(
   done: Record<number, boolean>,
 ): boolean {
   if (!reservation || reservation.ok) return true;
-  return target <= 1 || done[target] === true;
+  if (target <= 1) return true;
+  if (target === PAYMENT_STEP) return false;
+  return done[target] === true;
 }

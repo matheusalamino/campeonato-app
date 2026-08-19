@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { canOpenStep, type SlotReservation } from "./slot";
+import { PAYMENT_STEP, UNIFORM_STEP } from "./field-steps";
 
 const RESERVADA: SlotReservation = {
   ok: true,
@@ -23,14 +24,14 @@ describe("canOpenStep", () => {
   });
 
   it("com a reserva recusada, fecha o passo do pagamento", () => {
-    expect(canOpenStep(6, ESGOTOU, {})).toBe(false);
+    expect(canOpenStep(PAYMENT_STEP, ESGOTOU, {})).toBe(false);
   });
 
   it("com a reserva recusada, fecha tambem os passos do meio", () => {
     expect(canOpenStep(2, ESGOTOU, {})).toBe(false);
     expect(canOpenStep(3, ESGOTOU, {})).toBe(false);
     expect(canOpenStep(4, ESGOTOU, {})).toBe(false);
-    expect(canOpenStep(5, ESGOTOU, {})).toBe(false);
+    expect(canOpenStep(UNIFORM_STEP, ESGOTOU, {})).toBe(false);
   });
 
   it("mantem o passo do CPF aberto, senao a falha de rede prende para sempre", () => {
@@ -43,6 +44,28 @@ describe("canOpenStep", () => {
 
   it("deixa reler um passo ja concluido", () => {
     expect(canOpenStep(4, ESGOTOU, { 4: true })).toBe(true);
+    expect(canOpenStep(UNIFORM_STEP, ESGOTOU, { [UNIFORM_STEP]: true })).toBe(true);
+  });
+
+  it("nao reabre o pagamento nem depois de concluido", () => {
+    // `done` no pagamento nao prova que houve pagamento: o schema do cliente
+    // deixa o comprovante opcional, entao quem clicou em "Revisar" de maos
+    // vazias tambem chega aqui marcado. Reabrir levaria esse jogador a pagar o
+    // PIX sem vaga e depois esbarrar no envio, que segue fechado.
+    expect(canOpenStep(PAYMENT_STEP, ESGOTOU, { [PAYMENT_STEP]: true })).toBe(false);
+  });
+
+  it("a excecao do pagamento nao vira bloqueio geral", () => {
+    // A regra dos concluidos continua valendo em todos os outros passos.
+    expect(canOpenStep(2, ESGOTOU, TUDO_FEITO)).toBe(true);
+    expect(canOpenStep(4, ESGOTOU, TUDO_FEITO)).toBe(true);
+    expect(canOpenStep(UNIFORM_STEP, ESGOTOU, TUDO_FEITO)).toBe(true);
+    expect(canOpenStep(PAYMENT_STEP, ESGOTOU, TUDO_FEITO)).toBe(false);
+  });
+
+  it("com a vaga reservada, o pagamento concluido reabre normalmente", () => {
+    // A excecao e da reserva recusada; quem tem vaga navega como antes.
+    expect(canOpenStep(PAYMENT_STEP, RESERVADA, { [PAYMENT_STEP]: true })).toBe(true);
   });
 
   it("nunca libera o envio, mesmo com todos os passos concluidos", () => {
