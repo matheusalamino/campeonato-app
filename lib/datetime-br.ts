@@ -32,19 +32,28 @@ function zoneOffsetMinutes(instant: Date): number {
     Number(p.year), Number(p.month) - 1, Number(p.day),
     Number(p.hour) % 24, Number(p.minute), Number(p.second),
   );
-  return (asUtc - instant.setMilliseconds(0)) / 60000;
+  // Le os milissegundos em vez de zera-los com `setMilliseconds`, que mutaria
+  // o `Date` recebido — quem chama esta funcao nao deveria ter o argumento
+  // alterado por baixo dos panos.
+  const base = instant.getTime() - instant.getMilliseconds();
+  return (asUtc - base) / 60000;
 }
 
 /** "2026-08-12T00:00" (hora de Brasilia) -> instante ISO em UTC. */
 export function brasiliaInputToIso(input: string): string | undefined {
-  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(input ?? "");
+  // Ancorado nas duas pontas: sem o `$`, um ISO completo como
+  // "2026-08-12T03:00:00.000Z" casaria so pelo prefixo e devolveria um
+  // instante deslocado em vez de recusar a entrada — o caso da funcao
+  // chamada com o par trocado. Segundos sao aceitos e ignorados, porque um
+  // <input type="datetime-local" step="1"> emite "HH:MM:SS".
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2})?$/.exec(input ?? "");
   if (!m) return undefined;
   const [, y, mo, d, h, mi] = m;
   // Primeiro palpite: trata a hora escrita como se fosse UTC. Isso da um
   // instante errado, mas proximo o bastante para perguntar qual era o offset
   // naquela epoca do ano — e ai corrigir.
   const guess = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi)));
-  const offset = zoneOffsetMinutes(new Date(guess));
+  const offset = zoneOffsetMinutes(guess);
   return new Date(guess.getTime() - offset * 60000).toISOString();
 }
 

@@ -27,6 +27,17 @@ describe("brasiliaInputToIso", () => {
     // fixar zoneOffsetMinutes em -180 tambem passaria nelas.
     expect(brasiliaInputToIso("2018-01-15T00:00")).toBe("2018-01-15T02:00:00.000Z");
   });
+
+  it("aceita segundos e os ignora, porque step=\"1\" no input os emite", () => {
+    expect(brasiliaInputToIso("2026-08-12T00:00:30")).toBe("2026-08-12T03:00:00.000Z");
+  });
+
+  it("recusa um ISO completo em vez de casar so o prefixo", () => {
+    // Sem o `$` no regex, isto casaria "2026-08-12T03:00" e devolveria um
+    // instante deslocado 3h em vez de recusar — o caso de chamar esta
+    // funcao com o ISO que `isoToBrasiliaInput` deveria ter recebido.
+    expect(brasiliaInputToIso("2026-08-12T03:00:00.000Z")).toBeUndefined();
+  });
 });
 
 describe("isoToBrasiliaInput", () => {
@@ -53,9 +64,13 @@ describe("ida e volta", () => {
   });
 
   it("o fuso e o do campeonato, nao o da maquina que roda o teste", () => {
-    // Sentinela: se alguem trocar por `undefined` para "usar o fuso local", os
-    // testes acima passariam na maquina de um dev em Sao Paulo e quebrariam no
-    // servidor, que roda em UTC.
+    // Este assert sozinho so prende o valor da constante — nao pega alguem
+    // trocando `timeZone: CHAMPIONSHIP_TIME_ZONE` por `undefined` dentro de
+    // zoneOffsetMinutes, porque a constante em si continuaria intacta. Quem
+    // pega essa troca e o `TZ: "UTC"` fixado em vitest.config.ts: como UTC e
+    // America/Sao_Paulo tem offsets diferentes, "usar o fuso local" erra por
+    // 3h e os testes acima falham, em qualquer maquina que rode a suite —
+    // nao so na de quem mora fora de Sao Paulo.
     expect(CHAMPIONSHIP_TIME_ZONE).toBe("America/Sao_Paulo");
   });
 });
