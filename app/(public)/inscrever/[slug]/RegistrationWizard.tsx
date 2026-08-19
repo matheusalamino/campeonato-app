@@ -174,7 +174,11 @@ export default function RegistrationWizard({
     setStep(next);
     // Renova a reserva a cada passo: quinze minutos contam a partir da ultima
     // acao, nao do inicio. Sem isso, quem preenche com calma perde a vaga.
-    if (slot?.ok) {
+    // Le `reservation`, a mesma fonte da guarda logo acima: duas regras de
+    // leitura em doze linhas seriam armadilha para quem mexer aqui depois. No
+    // retry isso custa um RPC redundante sobre uma reserva recem-criada — o
+    // sequenciador ordena os dois, e o preco e menor que o da assimetria.
+    if (reservation?.ok) {
       void latestOnly(() => reserveSlotAction(championship.id, form.cpf)).then(
         (renovada) => {
           // `null` quando outra reserva foi disparada enquanto esta voltava:
@@ -299,6 +303,16 @@ export default function RegistrationWizard({
           txid: pixTxid,
         })
       : null;
+  /*
+   * Mesma primeira linha de `canOpenStep`: sem reserva ainda nao ha veredito, e
+   * com reserva ok nada muda. A guarda de navegacao atrasa exatamente uma
+   * transicao — a renovacao dispara depois do `setStep` —, entao o jogador
+   * aterrissa neste passo com a recusa ja na mao e o QR ainda no lugar. No
+   * celular e o QR que esta no campo de visao, nao a faixa: ele paga, e so o
+   * "Revisar" o para, com o dinheiro ja fora.
+   */
+  const slotAllowsPayment = !slot || slot.ok;
+
   function setSkill(skill: string, v: number) {
     setForm((p) => ({ ...p, skills: { ...p.skills, [skill]: v } }));
   }
@@ -559,10 +573,26 @@ export default function RegistrationWizard({
           <UploadCard icon="📷" label="Foto de perfil (3x4)" hint="Toque para enviar" required bucket="registration-photos"
                       value={form.profile_photo_link} onChange={(u) => set("profile_photo_link", u)} />
           {err("profile_photo_link")}
-          {pixPayload && <PixPayment payload={pixPayload} amount={total} />}
-          {total > 0 && (
-            <UploadCard icon="🧾" label="Comprovante de pagamento" hint="PIX / transferência" required bucket="registration-docs"
-                        value={form.payment_receipt_link} onChange={(u) => set("payment_receipt_link", u)} />
+          {/* Some junto com o QR: anexar comprovante sem vaga e tao inutil quanto
+              pagar sem vaga, e um upload aceito faz o pagamento parecer valido. */}
+          {slotAllowsPayment ? (
+            <>
+              {pixPayload && <PixPayment payload={pixPayload} amount={total} />}
+              {total > 0 && (
+                <UploadCard icon="🧾" label="Comprovante de pagamento" hint="PIX / transferência" required bucket="registration-docs"
+                            value={form.payment_receipt_link} onChange={(u) => set("payment_receipt_link", u)} />
+              )}
+            </>
+          ) : (
+            /* Sumir sem dizer nada leria como tela quebrada: a 375px a faixa do
+               topo esta fora do campo de visao — e por isso mesmo que o QR
+               precisou sair daqui. */
+            total > 0 && (
+              <div className="rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3 text-xs leading-relaxed text-[var(--gala-ink-dim)]">
+                O pagamento fica indisponível enquanto sua vaga não estiver confirmada.
+                O aviso no topo da página explica o motivo. Não pague nada até lá.
+              </div>
+            )
           )}
           {err("payment_receipt_link")}
           <button onClick={() => advance(6)} className="w-full rounded-xl py-3 font-bold text-[#050507]"

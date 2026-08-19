@@ -29,13 +29,23 @@ export type SlotReservation =
  * nenhuma. O passo da revisao nunca entra em `done`, entao o envio fica fora de
  * alcance por construcao.
  *
- * O pagamento e a excecao aos concluidos, e nao por capricho: o schema do
- * cliente nao exige o comprovante (so o servidor exige, e so quando ha o que
- * cobrar), entao `advance` marca `done` para quem clicou em "Revisar" sem
- * anexar nada. Sem a excecao, esse jogador — que ainda nao pagou — reabriria o
- * passo depois da reserva ser recusada, pagaria o PIX ali e nao conseguiria
- * enviar, porque a revisao segue fechada. Dinheiro gasto e inscricao travada: o
- * dano que o A4 existe para evitar, so que por uma porta mais estreita.
+ * O pagamento e a excecao aos concluidos, por dois motivos independentes.
+ *
+ * O primeiro sobrevive a qualquer conserto: `done` no pagamento significa
+ * "clicou em Revisar e passou na validacao do cliente", que e fato de
+ * navegacao, nao de pagamento. Mesmo com a validacao apertada ele diria no
+ * maximo "anexou um arquivo", nunca "pagou" — e reabrir o passo sem vaga nao
+ * traz vantagem nenhuma ao jogador em mundo nenhum.
+ *
+ * O segundo e a folga de hoje, que torna o primeiro urgente:
+ * `payment_receipt_link` e `optional()` em `features/registration/schema.ts`, e
+ * so o servidor o exige (e so quando ha o que cobrar), entao `advance` marca
+ * `done` para quem clicou em "Revisar" de maos vazias. Sem a excecao, esse
+ * jogador — que ainda nao pagou — reabriria o passo depois da reserva ser
+ * recusada, pagaria o PIX ali e nao conseguiria enviar, porque a revisao segue
+ * fechada. Dinheiro gasto e inscricao travada: o dano que o A4 existe para
+ * evitar, so que por uma porta mais estreita. Quando essa divida fechar, o
+ * primeiro motivo continua de pe — esta linha nao volta atras junto.
  *
  * `target` 0 e o accordion fechando o passo aberto: nao leva a passo nenhum.
  *
