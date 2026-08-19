@@ -7,7 +7,7 @@
  * ficam auditaveis no diff da PR.
  *
  * Uso:
- *   node scripts/generate-sabbath-windows.mjs 2026-08-01 2029-12-31
+ *   npm run gen:sabbath -- 2026-08-01 2029-12-31
  */
 // Import nomeado, e nao default: o suncalc 2.x e ESM puro e nao exporta
 // default. `import SunCalc from "suncalc"` — a forma da versao 1.x, que ainda
@@ -24,7 +24,7 @@ import { pathToFileURL } from "node:url";
  */
 export const SOROCABA = { latitude: -23.5015, longitude: -47.4526 };
 
-const DIA_MS = 86_400_000;
+const DAY_MS = 86_400_000;
 
 /**
  * Estoura se a data local nao for um "YYYY-MM-DD" que o Date entenda.
@@ -51,6 +51,13 @@ function assertDateStr(dateStr, argumento) {
 function midnightUtc(dateStr, argumento) {
   assertDateStr(dateStr, argumento);
   return new Date(`${dateStr}T00:00:00Z`);
+}
+
+/** O dia seguinte, ainda como "YYYY-MM-DD". */
+function nextDayStr(dateStr) {
+  return new Date(midnightUtc(dateStr, "dateStr").getTime() + DAY_MS)
+    .toISOString()
+    .slice(0, 10);
 }
 
 /**
@@ -82,20 +89,30 @@ export function fridaysBetween(fromStr, toStr) {
   // Na ordem dos argumentos, para o erro apontar o primeiro que veio ruim.
   let dia = midnightUtc(fromStr, "fromStr");
   const fim = midnightUtc(toStr, "toStr");
-  while (dia.getUTCDay() !== 5) dia = new Date(dia.getTime() + DIA_MS);
+  while (dia.getUTCDay() !== 5) dia = new Date(dia.getTime() + DAY_MS);
 
   const sextas = [];
   while (dia <= fim) {
     sextas.push(dia.toISOString().slice(0, 10));
-    dia = new Date(dia.getTime() + 7 * DIA_MS);
+    dia = new Date(dia.getTime() + 7 * DAY_MS);
   }
   return sextas;
 }
 
-/** Arredonda para o segundo, na direcao pedida. */
-function noSegundo(instante, direcao) {
-  const segundos = instante.getTime() / 1000;
-  return new Date((direcao === "baixo" ? Math.floor(segundos) : Math.ceil(segundos)) * 1000);
+/**
+ * Arredonda para o segundo, na direcao pedida.
+ *
+ * `if/else` explicito, e nao ternario com "cima" no ramo padrao: num .mjs sem
+ * tipos, um typo na direcao do `startsAt` arredondaria o inicio PARA CIMA —
+ * encurtando a pausa, que e a unica direcao que machuca. Num modulo cuja tese
+ * inteira e assimetria de seguranca, a forma tem que estourar em vez de
+ * escolher sozinha.
+ */
+function roundToSecond(instant, direction) {
+  const segundos = instant.getTime() / 1000;
+  if (direction === "floor") return new Date(Math.floor(segundos) * 1000);
+  if (direction === "ceil") return new Date(Math.ceil(segundos) * 1000);
+  throw new Error(`Direcao de arredondamento desconhecida: ${JSON.stringify(direction)}`);
 }
 
 /**
@@ -105,15 +122,10 @@ function noSegundo(instante, direcao) {
  * cai sempre a favor da observancia, nunca contra.
  */
 export function sabbathWindows(fromStr, toStr) {
-  return fridaysBetween(fromStr, toStr).map((sexta) => {
-    const sabado = new Date(Date.parse(`${sexta}T00:00:00Z`) + DIA_MS)
-      .toISOString()
-      .slice(0, 10);
-    return {
-      startsAt: noSegundo(sunsetAt(sexta), "baixo"),
-      endsAt: noSegundo(sunsetAt(sabado), "cima"),
-    };
-  });
+  return fridaysBetween(fromStr, toStr).map((sexta) => ({
+    startsAt: roundToSecond(sunsetAt(sexta), "floor"),
+    endsAt: roundToSecond(sunsetAt(nextDayStr(sexta)), "ceil"),
+  }));
 }
 
 /** As linhas do VALUES da migration, uma por sabado. */
@@ -126,8 +138,19 @@ export function toSqlRows(janelas) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [, , de, ate] = process.argv;
   if (!de || !ate) {
-    console.error("Uso: node scripts/generate-sabbath-windows.mjs <YYYY-MM-DD> <YYYY-MM-DD>");
+    console.error("Uso: npm run gen:sabbath -- <YYYY-MM-DD> <YYYY-MM-DD>");
     process.exit(1);
   }
-  console.log(toSqlRows(sabbathWindows(de, ate)));
+  const linhas = toSqlRows(sabbathWindows(de, ate));
+  // Vazio aqui nao e resposta, e engano: intervalo invertido, ou curto demais
+  // para conter uma sexta. Sair com 0 e sem nada e o desfecho que assertDateStr
+  // nasceu para matar, e que continuava alcancavel por estas duas portas — as
+  // duas, typo plausivel de quem regerar a tabela daqui a tres anos.
+  if (!linhas) {
+    console.error(
+      `Nenhuma sexta entre ${de} e ${ate}. Intervalo invertido ou curto demais.`,
+    );
+    process.exit(1);
+  }
+  console.log(linhas);
 }

@@ -23,7 +23,7 @@ function brasiliaDow(d: Date): number {
 }
 
 describe("SOROCABA", () => {
-  it("fica em Sorocaba, e nao em outra cidade qualquer", () => {
+  it("as coordenadas de Sorocaba sao decisao de projeto, nao configuracao", () => {
     /*
      * Change-detector de proposito. A constante nao e um detalhe de
      * implementacao: ela codifica uma DECISAO DE DESENHO — o lugar e constante
@@ -96,9 +96,18 @@ describe("sunsetAt", () => {
     expect(calculado).toBeGreaterThan(sunsetStartMs);
   });
 
+  it("recusa data invalida em vez de culpar a astronomia", () => {
+    // A irma das guardas de fridaysBetween, e a unica que faltava: os sete call
+    // sites internos passam data valida, entao so um teste cobre este caminho.
+    expect(() => sunsetAt("banana"))
+      .toThrow('Data invalida em dateStr: "banana". Esperado o formato YYYY-MM-DD.');
+  });
+
   it("poe o sol mais cedo em junho que em dezembro", () => {
-    // Hemisferio sul. Sem este caso, trocar a latitude de sinal passaria: as
-    // duas ancoras acima tem faixas largas e nao se comparam entre si.
+    // Hemisferio sul, afirmado numa linha e sem depender de tabela publicada
+    // nenhuma: e o unico caso que compara as duas datas ENTRE SI. (Nao e ele
+    // que segura a inversao de latitude — as ancoras acima matam isso com ~87
+    // min de folga: invertida, 19/06 daria 18h58 e 18/12, 17h27.)
     expect(brasiliaMinutes(sunsetAt("2026-06-19")))
       .toBeLessThan(brasiliaMinutes(sunsetAt("2026-12-18")));
   });
@@ -142,44 +151,33 @@ describe("fridaysBetween", () => {
       expect(atual - anterior).toBe(7 * 86_400_000);
     }
   });
-});
 
-describe("fridaysBetween com data invalida", () => {
-  /*
-   * Duas falhas, e nenhuma das duas grita.
-   *
-   * `fromStr` invalido pendura o processo: o laco que procura a primeira sexta
-   * roda `while (dia.getUTCDay() !== 5)`, e numa Invalid Date isso e
-   * `NaN !== 5` — sempre verdadeiro, para sempre. Quem digitou errado fica
-   * olhando um terminal parado, sem mensagem e sem saida.
-   *
-   * `toStr` invalido e pior, porque parece que funcionou: `dia <= Invalid Date`
-   * e sempre falso, entao a funcao devolve vazio calada, o CLI imprime nada e
-   * sai com codigo 0. Um VALUES sem linha nenhuma pode acabar colado numa
-   * migration.
-   *
-   * O timeout curto e proposital, mas nao e a rede de verdade: um laco infinito
-   * SINCRONO trava o event loop, e o timeout do vitest nunca chega a disparar.
-   * A rede e a guarda em si.
-   */
-  it("recusa fromStr invalido em vez de girar para sempre", { timeout: 3000 }, () => {
-    expect(() => fridaysBetween("banana", "2026-12-31")).toThrow(/fromStr/);
-  });
+  describe("com data invalida", () => {
+    // Cada ponta falha calada de um jeito diferente, e o porque de cada uma
+    // esta no JSDoc de `assertDateStr`, que e o dono da justificativa.
+    //
+    // Sem timeout de caso de proposito: laco infinito SINCRONO trava o event
+    // loop e o timer do vitest nunca dispara — conferido, a suite passava de
+    // 40s no vermelho. Um numero ali daria uma sensacao de rede que nao existe.
+    it("recusa fromStr invalido em vez de girar para sempre", () => {
+      expect(() => fridaysBetween("banana", "2026-12-31")).toThrow(/fromStr/);
+    });
 
-  it("recusa toStr invalido em vez de devolver vazio calado", { timeout: 3000 }, () => {
-    expect(() => fridaysBetween("2026-08-01", "banana")).toThrow(/toStr/);
-  });
+    it("recusa toStr invalido em vez de devolver vazio calado", () => {
+      expect(() => fridaysBetween("2026-08-01", "banana")).toThrow(/toStr/);
+    });
 
-  it("diz qual argumento veio ruim, o que veio e o que se esperava", { timeout: 3000 }, () => {
-    expect(() => fridaysBetween("01/08/2026", "2026-12-31"))
-      .toThrow('Data invalida em fromStr: "01/08/2026". Esperado o formato YYYY-MM-DD.');
+    it("diz qual argumento veio ruim, o que veio e o que se esperava", () => {
+      expect(() => fridaysBetween("01/08/2026", "2026-12-31"))
+        .toThrow('Data invalida em fromStr: "01/08/2026". Esperado o formato YYYY-MM-DD.');
+    });
   });
 });
 
 describe("sabbathWindows", () => {
   const janelas = sabbathWindows("2026-08-01", "2029-12-31");
 
-  it("gera o periodo inteiro do plano", () => {
+  it("gera 178 janelas no periodo do plano", () => {
     expect(janelas.length).toBe(178);
   });
 
@@ -248,6 +246,9 @@ describe("sabbathWindows", () => {
     const sextas = fridaysBetween("2026-08-01", "2029-12-31");
     expect(sextas.length).toBe(janelas.length);
 
+    // O dia seguinte e recalculado aqui de proposito, sem usar o helper do
+    // modulo: e a recomputacao INDEPENDENTE que faz este caso pegar erro na
+    // aritmetica de dia. "DRYar" com nextDayStr tiraria justamente isso.
     sextas.forEach((sexta, i) => {
       const sabado = new Date(Date.parse(`${sexta}T00:00:00Z`) + 86_400_000)
         .toISOString()
