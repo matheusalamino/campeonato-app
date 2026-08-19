@@ -18,7 +18,7 @@ export const SABBATH_VERSES: readonly SabbathVerse[] = [
   },
   {
     reference: "Isaías 58:13-14",
-    text: "Se desviares o teu pé do sábado, de fazer a tua vontade no meu santo dia, e se chamares ao sábado deleitoso […] então te deleitarás no Senhor.",
+    text: "Se desviares o teu pé do sábado, de fazer a tua vontade no meu santo dia, e se chamares ao sábado deleitoso [...] então te deleitarás no Senhor.",
   },
   {
     reference: "Levítico 23:3",
@@ -26,7 +26,7 @@ export const SABBATH_VERSES: readonly SabbathVerse[] = [
   },
   {
     reference: "Marcos 2:27-28",
-    text: "O sábado foi feito por causa do homem, e não o homem por causa do sábado. Assim, o Filho do Homem até do sábado é Senhor.",
+    text: "[...] O sábado foi feito por causa do homem, e não o homem por causa do sábado. Assim, o Filho do Homem até do sábado é Senhor.",
   },
   {
     reference: "Lucas 4:16",
@@ -38,7 +38,7 @@ export const SABBATH_VERSES: readonly SabbathVerse[] = [
   },
   {
     reference: "Lucas 23:56",
-    text: "E, voltando elas, prepararam especiarias e ungüentos e, no sábado, repousaram, conforme o mandamento.",
+    text: "E, voltando elas, prepararam especiarias e unguentos e, no sábado, repousaram, conforme o mandamento.",
   },
   {
     reference: "Atos 16:13",
@@ -84,9 +84,11 @@ export function verseForSabbath(now: Date): SabbathVerse {
   const { date } = brasiliaParts(now);
   const days = (Date.parse(`${date}T00:00:00Z`) - REFERENCE_FRIDAY) / DAY_MS;
   // Conta semanas inteiras antes do resto, em vez de tirar o resto do dia
-  // direto. Sobre o dia, o ciclo pelos dez so fecharia porque 7 e 10 nao tem
-  // divisor comum — e um decimo primeiro versiculo, ou um a menos, poderia
-  // derrubar a lista para dois ou tres versiculos em rodizio, sem barulho.
+  // direto. Assim sabados consecutivos andam de um em um, e o rodizio passa
+  // pela lista inteira seja qual for o tamanho dela. Sobre o dia, o passo
+  // seria de sete, e a lista so daria a volta enquanto o tamanho nao fosse
+  // multiplo de 7: com 7 versiculos a tela mostraria um so, com 14 mostraria
+  // dois.
   const weeks = Math.floor(days / 7);
   // `%` de negativo em JavaScript devolve negativo; o `+ length` cobre datas
   // anteriores a referencia sem obrigar quem le a pensar nisso.

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, it, expect } from "vitest";
 import { SABBATH_VERSES, verseForSabbath } from "./sabbath-verses";
 
@@ -12,6 +13,52 @@ describe("SABBATH_VERSES", () => {
     const refs = SABBATH_VERSES.map((v) => v.reference);
     expect(new Set(refs).size).toBe(10);
     for (const v of SABBATH_VERSES) expect(v.text.length).toBeGreaterThan(20);
+  });
+});
+
+describe("a integridade dos dez textos", () => {
+  /**
+   * Impressao digital do conteudo conferido com o usuario.
+   *
+   * Os dez vao para a tela de repouso de uma comunidade adventista, e nada mais
+   * na suite olha o que esta escrito neles: sem isto, um `sed` largo, um merge
+   * mal resolvido ou um "corrigir a acentuacao" bem-intencionado troca palavra
+   * de versiculo e passa verde.
+   *
+   * Hash, e nao uma copia dourada dos dez aqui no teste, por dois motivos: uma
+   * segunda copia dobraria a superficie de erro de transcricao, e um `sed` sobre
+   * `features/registration/*.ts` pegaria as duas — mas nao recalcula um hash.
+   *
+   * QUANDO QUEBRAR: nao atualize o numero primeiro. Confira se a mudanca foi de
+   * proposito, confira o texto novo contra a fonte com o usuario, e so entao
+   * recalcule.
+   */
+  const IMPRESSAO_DIGITAL = "c4a4fc981750ce6572a9e915ff0ae3f3ee1a453810e6719d737aacbb7c12d262";
+
+  it("bate com a impressao digital do conteudo conferido", () => {
+    const canonico = SABBATH_VERSES.map((v) => `${v.reference}\n${v.text}`).join("\n");
+    expect(createHash("sha256").update(canonico, "utf8").digest("hex")).toBe(IMPRESSAO_DIGITAL);
+  });
+
+  // As tres abaixo nao acrescentam garantia sobre o hash: existem para DIZER o
+  // que quebrou, porque um hash diferente sozinho nao aponta nada.
+
+  it("mantem toda referencia no formato Livro capitulo:versiculo", () => {
+    for (const v of SABBATH_VERSES) expect(v.reference).toMatch(/^\p{Lu}\p{L}+ \d+:\d+(-\d+)?$/u);
+  });
+
+  it("mantem a acentuacao dos cinco livros que a tem", () => {
+    // Exodo duas vezes, Genesis, Isaias e Levitico. Perder um acento aqui e o
+    // sintoma de alguem ter passado a lista por um normalizador de ASCII.
+    const acentuadas = SABBATH_VERSES.filter((v) => /[^\x20-\x7E]/.test(v.reference));
+    expect(acentuadas.map((v) => v.reference)).toHaveLength(5);
+  });
+
+  it("mantem a acentuacao e o corpo dos dez textos", () => {
+    for (const v of SABBATH_VERSES) {
+      expect(v.text).toMatch(/[áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ]/);
+      expect(v.text.length).toBeGreaterThanOrEqual(60);
+    }
   });
 });
 
@@ -42,6 +89,16 @@ describe("verseForSabbath", () => {
       vistos.add(verseForSabbath(quando).reference);
     }
     expect(vistos.size).toBe(10);
+  });
+
+  it("le o dia em Brasilia, e nao em UTC, na quinta a noite", () => {
+    // 27/08/2026, quinta, 22h em Brasilia — em UTC ja e sexta, 28/08. E a unica
+    // janela do calendario em que o fuso muda a resposta: as duas leituras caem
+    // em semanas diferentes. O `rest` e ligavel a mao num feriado, e ali a
+    // quinta a noite tem que continuar na semana do sabado que passou.
+    const quintaTarde = verseForSabbath(em("2026-08-28T01:00:00.000Z"));
+    expect(quintaTarde).toEqual(verseForSabbath(em("2026-08-22T20:50:00.000Z")));
+    expect(quintaTarde).not.toEqual(verseForSabbath(em("2026-08-28T21:00:00.000Z")));
   });
 
   it("de domingo a quinta, mostra o versiculo do sabado que passou", () => {
