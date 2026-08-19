@@ -1,7 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { SlotReservation } from "@/features/registration/slot";
+import { slotCountdown } from "@/features/registration/slot-keepalive";
 
 /** Hora local no formato 14h37, para o jogador saber quando voltar. */
 function formatLocalTime(iso: string): string {
@@ -28,8 +29,29 @@ const redTone = {
  * tambem impede seguir e mesmo assim e dourado, porque a noticia e boa. A
  * pergunta que classifica e "isso e ma noticia para o jogador?".
  */
-function noticeFor(slot: SlotReservation): { urgent: boolean; body: ReactNode } {
+function noticeFor(
+  slot: SlotReservation,
+  /** A reserva existe, mas o prazo dela ja passou. */
+  expired: boolean,
+): { urgent: boolean; body: ReactNode } {
   if (slot.ok) {
+    /*
+     * Dourado, e nao vermelho, apesar de ser noticia ruim: nao e veredito sobre
+     * lotacao — a vaga pode continuar ali, so a reserva que a segurava venceu.
+     * Afirmar que acabou seria inventar, e a verdade chega junto com o toque,
+     * que dispara uma reserva nova.
+     */
+    if (expired) {
+      return {
+        urgent: false,
+        body: (
+          <>
+            Sua reserva de vaga venceu enquanto a página ficou parada. Toque na tela para
+            reservar de novo — só então saberemos se a vaga continua disponível.
+          </>
+        ),
+      };
+    }
     return {
       urgent: false,
       body: slot.isWaitlist ? (
@@ -103,7 +125,25 @@ function noticeFor(slot: SlotReservation): { urgent: boolean; body: ReactNode } 
  * de pagar, se tem vaga e qual.
  */
 export default function SlotNotice({ slot }: { slot: SlotReservation | null }) {
-  const notice = slot ? noticeFor(slot) : null;
+  /*
+   * Relogio local, so para o contador. Meio minuto e resolucao de sobra para um
+   * rotulo em minutos, e o re-render fica preso aqui em vez de sacudir o
+   * formulario inteiro.
+   *
+   * Corre desde a montagem, e nao so quando a reserva chega: parado, ele ficaria
+   * marcando a hora em que a pagina abriu, e a primeira reserva — que nasce
+   * depois do CPF, as vezes muitos minutos depois — apareceria com mais tempo do
+   * que tem de verdade.
+   */
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  // `expires_at` atravessava a RPC e o servico sem ninguem ler. E o unico jeito
+  // de o jogador saber que a promessa da faixa tem prazo — e quanto falta dele.
+  const countdown = slot?.ok ? slotCountdown(slot.expiresAt, now) : null;
+  const notice = slot ? noticeFor(slot, countdown?.expired === true) : null;
 
   const box = notice ? (
     <div
@@ -130,6 +170,25 @@ export default function SlotNotice({ slot }: { slot: SlotReservation | null }) {
         {notice && !notice.urgent ? box : null}
       </div>
       <div role="alert">{notice?.urgent ? box : null}</div>
+      {/*
+       * Fora das duas regioes live de proposito: dentro, o `aria-atomic` faria
+       * o leitor de tela repetir a faixa inteira a cada minuto so porque o
+       * numero mudou. Aqui ele continua legivel para quem navegar ate ele, e
+       * nao anuncia sozinho — o unico estado que merece anuncio, o vencimento,
+       * e dito pela propria faixa.
+       *
+       * Dourado quando aperta, nunca vermelho: o vermelho desta tela e reservado
+       * para quem nao tem vaga, e um relogio vermelho ao lado do QR do PIX
+       * assusta quem ainda tem tempo de sobra.
+       */}
+      {countdown && !countdown.expired && (
+        <p
+          className="-mt-3 mb-4 text-right text-[11px] leading-none"
+          style={{ color: countdown.low ? "var(--gala-gold-2)" : "var(--gala-ink-dim)" }}
+        >
+          {countdown.label}
+        </p>
+      )}
     </>
   );
 }
