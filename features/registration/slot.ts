@@ -15,3 +15,27 @@ export type SlotReservation =
   | { ok: false; reason: "not_found" | "not_open" | "already_registered" | "full" }
   | { ok: false; reason: "all_reserved"; retryAt: string | null }
   | { ok: false; reason: "error" };
+
+/**
+ * Se a navegacao do wizard pode levar o jogador ao passo `target`.
+ *
+ * Enquanto a reserva existe e nao esta ok, o jogador nao tem vaga: deixa-lo
+ * abrir passos novos e exatamente o caminho que, no campeonato passado, levou
+ * gente a pagar o PIX e ser recusada no envio. Continuam abertos apenas o passo
+ * do CPF — unico jeito de tentar de novo, e o que salva a falha passageira de
+ * rede — e os passos ja concluidos, onde reler o que preencheu nao custa vaga
+ * nenhuma. O passo da revisao nunca entra em `done`, entao o envio fica fora de
+ * alcance por construcao.
+ *
+ * `target` 0 e o accordion fechando o passo aberto: nao leva a passo nenhum.
+ *
+ * Sem reserva ainda (antes do CPF) nao ha veredito, e bloquear seria inventar.
+ */
+export function canOpenStep(
+  target: number,
+  reservation: SlotReservation | null,
+  done: Record<number, boolean>,
+): boolean {
+  if (!reservation || reservation.ok) return true;
+  return target <= 1 || done[target] === true;
+}
