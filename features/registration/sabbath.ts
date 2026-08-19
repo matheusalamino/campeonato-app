@@ -7,35 +7,54 @@ import { brasiliaInputToIso, brasiliaParts } from "@/lib/datetime-br";
  * `ends_at >= now() ORDER BY starts_at LIMIT 1` devolve. `null` nao quer dizer
  * "hoje nao e sabado": quer dizer que a tabela nao alcanca este instante, e
  * so nesse caso a regra conservadora entra.
+ *
+ * Um VAO no meio da tabela e o modo de falha mais perigoso do par, e vale igual
+ * dos dois lados: as linhas depois do buraco ainda satisfazem `ends_at >= now()`,
+ * entao a consulta devolve uma janela FUTURA, este modulo responde "ainda nao e
+ * sabado" e a tela abre a inscricao em todo sabado dentro do vao — caladamente,
+ * sem nunca chegar na regra conservadora. Quem estender a tabela comeca pela
+ * ultima sexta ja gravada, nunca depois dela.
  */
 export type SabbathWindow = { startsAt: string; endsAt: string };
 
-/**
- * A regra conservadora: sexta 17h a sabado 20h30, horario de Brasilia.
+/*
+ * A REGRA CONSERVADORA — sexta 17h a sabado 20h30, horario de Brasilia.
  *
- * Pausa mais larga que a real, nunca menos — errar pausando a mais custa
- * algumas horas de inscricao, errar pausando a menos custa a observancia.
+ * So entra quando a tabela nao alcanca o instante. Pausa mais larga que a real,
+ * nunca menos: errar pausando a mais custa algumas horas de inscricao, errar
+ * pausando a menos custa a observancia.
+ *
+ * E o unico ramo do modulo que le hora de PAREDE, e por isso o unico que o
+ * horario de verao mexe — as janelas gravadas sao instantes absolutos, imunes.
+ *
+ * Espelha o TERCEIRO ramo de `public.is_sabbath` na migration
+ * 20260819030000_sabbath_windows.sql. Mexeu aqui, mexa la — nada cobra os dois
+ * lados alem do teste de cada um.
+ */
+
+/** Sexta. Folga de ~30 min: o por do sol mais cedo do ano e 17:30:40. */
+const SABBATH_FALLBACK_START = "17:00";
+
+/**
+ * Sabado.
  *
  * Nao e 19h: a tabela `sabbath_windows` tem DEZ sabados de janeiro com por do
  * sol depois das 19h, o ultimo as 19:01:47, e o corte ali encerraria a pausa
- * antes do sol se por.
+ * antes do sol se por — errando para o lado proibido justo onde existe para nao
+ * errar.
  *
  * E nao e 19h30 porque isto le hora de PAREDE. Sob horario de verao
- * reinstituido, aquele por do sol de 19:01:47 passa a marcar 20:01:47, e 19h30
- * recriaria o mesmo bug uma hora mais fundo. As janelas gravadas nao tem esse
- * problema: sao instantes absolutos, imunes ao DST. 20h30 cobre os dois
- * regimes com ~28 min de folga, a mesma margem da sexta (17:30:40).
+ * reinstituido, aquele mesmo por do sol de 19:01:47 passa a marcar 20:01:47, e
+ * 19h30 recriaria o bug uma hora mais fundo. 20h30 cobre os dois regimes com
+ * ~28 min de folga, a mesma margem da sexta.
  *
  * Considerado e recusado: ler a hora com offset fixo de -3 seria exato nos dois
  * regimes, mas custaria uma segunda nocao de "hora local" no codigo — e
  * `brasiliaParts`, que o versiculo vai usar, precisa da hora CIVIL. Este ramo e
  * rede de seguranca: obvio e generoso vale mais que exato e sutil.
- *
- * Espelha o bloco final de `public.is_sabbath` na migration
- * 20260819030000_sabbath_windows.sql. Mexeu aqui, mexa la.
  */
-const SABBATH_FALLBACK_START = "17:00";
 const SABBATH_FALLBACK_END = "20:30";
+
 const FRIDAY = 5;
 const SATURDAY = 6;
 
@@ -57,7 +76,17 @@ function addDays(date: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** "17:00" -> 1020. Le os minutos tambem: 17h30 nao pode virar 17h em silencio. */
+/**
+ * "17:00" -> 1020. Le os minutos tambem: 17h30 nao pode virar 17h em silencio.
+ *
+ * As constantes ficam como texto "HH:MM", e nao como minutos ja calculados,
+ * para lerem igual ao `time '17:00'` do SQL — o preco e esta conversao.
+ *
+ * UNICO ponto em que os dois lados nao sao a mesma regra: o SQL compara `time`
+ * COM SEGUNDOS e isto compara minuto-do-dia, jogando os segundos fora. Sabado
+ * 20:30:30 da `false` la e `true` aqui. No maximo 59s, e para o lado de pausar
+ * a mais; se algum dia precisar casar ao segundo, e aqui que mexe.
+ */
 function hhmmToMinutes(hhmm: string): number {
   return Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
 }
@@ -68,9 +97,15 @@ type ParsedWindow = { startsAt: string; endsAt: string; start: number; end: numb
  * A janela lida como par de instantes, ou `null` se vier ilegivel.
  *
  * Qualquer comparacao com `NaN` e falsa, entao uma janela corrompida faria
- * `sabbathState` responder `false` — "nao e sabado" — e ABRIR a inscricao no
+ * `isSabbath` responder `false` — "nao e sabado" — e ABRIR a inscricao no
  * sabado. E a unica direcao que esta feature nao pode errar. Ilegivel vira
  * `null` e cai na regra conservadora, junto com "a tabela nao alcanca".
+ *
+ * Janela INVERTIDA cai junto, pelo mesmo motivo: com `start > end` nenhum
+ * instante satisfaz `t >= start && t <= end`, e a resposta seria de novo "nao e
+ * sabado". O `CHECK (ends_at > starts_at)` fecha a origem no banco, mas a porta
+ * que sobra e o mapeamento manual de quem consome — `{ startsAt: row.starts_at,
+ * endsAt: row.ends_at }`, dois `string`, troca invisivel ao typecheck.
  *
  * As colunas sao `timestamptz NOT NULL`, entao o caminho realista nao produz
  * isso. A guarda mora aqui, e nao em cada funcao, porque as tres leem a mesma
@@ -81,6 +116,7 @@ function parseWindow(window: SabbathWindow | null): ParsedWindow | null {
   const start = Date.parse(window.startsAt);
   const end = Date.parse(window.endsAt);
   if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  if (end < start) return null;
   return { startsAt: window.startsAt, endsAt: window.endsAt, start, end };
 }
 
@@ -102,13 +138,20 @@ function parseWindow(window: SabbathWindow | null): ParsedWindow | null {
  *   "ainda nao chegou" sem reabrir a decisao de qual janela e a certa. Manter
  *   o `ends_at >= now()` na consulta e requisito, nao detalhe de implementacao.
  */
-export function sabbathState(now: Date, window: SabbathWindow | null): boolean {
+export function isSabbath(now: Date, window: SabbathWindow | null): boolean {
   const parsed = parseWindow(window);
   if (parsed) {
     const t = now.getTime();
     // Janela futura devolve false, e NAO cai na regra conservadora: a tabela
     // esta funcionando. Sem esta distincao o site pausaria toda sexta as 17h em
     // vez do por do sol real, semana apos semana.
+    //
+    // Bordas INCLUSIVAS nas duas pontas, e esta e a linha que decide 100% dos
+    // casos reais — a regra conservadora so roda depois de 2029. Espelha o
+    // PRIMEIRO ramo de `public.is_sabbath`, `WHERE p_at >= starts_at AND p_at
+    // <= ends_at`, na migration 20260819030000_sabbath_windows.sql. Se um dia
+    // alguem perguntar "o segundo exato do por do sol conta?", a resposta esta
+    // aqui e la, e as duas tem que mudar juntas.
     return t >= parsed.start && t <= parsed.end;
   }
 
@@ -120,7 +163,7 @@ export function sabbathState(now: Date, window: SabbathWindow | null): boolean {
 /**
  * Quando a pausa vigente termina.
  *
- * So faz sentido chamar quando `sabbathState` disse `true` — e o que garante
+ * So faz sentido chamar quando `isSabbath` disse `true` — e o que garante
  * que o ramo sem janela esta numa sexta ou num sabado. Fora disso a resposta e
  * sintaticamente valida e semanticamente lixo: numa terca devolve a quarta as
  * 20h30, e com uma janela vencida devolve um instante no passado. Pergunte se

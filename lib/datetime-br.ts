@@ -1,5 +1,10 @@
 /**
- * Conversao entre o texto de <input type="datetime-local"> e o instante gravado.
+ * As primitivas de fuso do campeonato.
+ *
+ * Comecou como a conversao entre o texto de <input type="datetime-local"> e o
+ * instante gravado, e hoje e tambem onde mora qualquer leitura de hora LOCAL —
+ * ver `brasiliaParts`. Um lugar so, porque a pergunta "de que fuso e esta
+ * hora?" tem uma resposta so neste projeto, e ela nao e a da maquina.
  *
  * O input nao carrega fuso: "2026-08-12T00:00" e so um texto. Alguem precisa
  * decidir de onde e aquela meia-noite, e a resposta e sempre Brasilia — o
@@ -81,6 +86,12 @@ export function isoToBrasiliaInput(iso?: string | null): string {
  * sabado e a escolha do versiculo precisam saber o dia da semana LOCAL, e
  * `getDay()` responderia com o fuso da maquina — que no servidor e UTC. Numa
  * sexta as 22h de Brasilia, UTC ja e sabado.
+ *
+ * DIFERENTE DAS IRMAS DESTE ARQUIVO: `brasiliaInputToIso` devolve `undefined` e
+ * `isoToBrasiliaInput` devolve `""` para entrada ruim; esta LANCA, porque
+ * `toISOString()` recusa `Date` invalido. Quem chamar com data de origem
+ * duvidosa valida antes — aqui nao ha valor de retorno que signifique "nao
+ * sei" sem inventar um.
  */
 export function brasiliaParts(instant: Date): { date: string; minutes: number; dow: number } {
   const text = isoToBrasiliaInput(instant.toISOString()); // "2026-08-21T17:00"

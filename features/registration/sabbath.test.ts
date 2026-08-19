@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  sabbathState, sabbathEndsAt, sabbathStartsAt, sunsetAlert,
+  isSabbath, sabbathEndsAt, sabbathStartsAt, sunsetAlert,
   type SabbathWindow,
 } from "./sabbath";
 
@@ -12,21 +12,21 @@ const JANELA: SabbathWindow = {
 
 const em = (iso: string) => new Date(iso);
 
-describe("sabbathState com a janela da tabela", () => {
+describe("isSabbath com a janela da tabela", () => {
   it("pausa no instante exato do inicio", () => {
-    expect(sabbathState(em(JANELA.startsAt), JANELA)).toBe(true);
+    expect(isSabbath(em(JANELA.startsAt), JANELA)).toBe(true);
   });
 
   it("nao pausa um milissegundo antes do inicio", () => {
-    expect(sabbathState(em("2026-08-21T20:49:59.999Z"), JANELA)).toBe(false);
+    expect(isSabbath(em("2026-08-21T20:49:59.999Z"), JANELA)).toBe(false);
   });
 
   it("ainda pausa no instante exato do fim", () => {
-    expect(sabbathState(em(JANELA.endsAt), JANELA)).toBe(true);
+    expect(isSabbath(em(JANELA.endsAt), JANELA)).toBe(true);
   });
 
   it("nao pausa um milissegundo depois do fim", () => {
-    expect(sabbathState(em("2026-08-22T20:51:00.001Z"), JANELA)).toBe(false);
+    expect(isSabbath(em("2026-08-22T20:51:00.001Z"), JANELA)).toBe(false);
   });
 
   it("NAO cai na regra conservadora quando a janela e futura", () => {
@@ -37,36 +37,36 @@ describe("sabbathState com a janela da tabela", () => {
      * na regra conservadora quando ela nao cobre pausaria TODA sexta as 17h,
      * para sempre, mesmo com a tabela perfeita.
      */
-    expect(sabbathState(em("2026-08-21T20:30:00.000Z"), JANELA)).toBe(false);
+    expect(isSabbath(em("2026-08-21T20:30:00.000Z"), JANELA)).toBe(false);
   });
 });
 
-describe("sabbathState sem janela — a regra conservadora", () => {
+describe("isSabbath sem janela — a regra conservadora", () => {
   it("nao pausa na sexta as 16h59", () => {
-    expect(sabbathState(em("2026-08-21T19:59:00.000Z"), null)).toBe(false);
+    expect(isSabbath(em("2026-08-21T19:59:00.000Z"), null)).toBe(false);
   });
 
   it("pausa na sexta as 17h em ponto", () => {
-    expect(sabbathState(em("2026-08-21T20:00:00.000Z"), null)).toBe(true);
+    expect(isSabbath(em("2026-08-21T20:00:00.000Z"), null)).toBe(true);
   });
 
   it("pausa na madrugada de sabado", () => {
-    expect(sabbathState(em("2026-08-22T05:00:00.000Z"), null)).toBe(true);
+    expect(isSabbath(em("2026-08-22T05:00:00.000Z"), null)).toBe(true);
   });
 
   it("ainda pausa no sabado as 20h30 em ponto", () => {
-    expect(sabbathState(em("2026-08-22T23:30:00.000Z"), null)).toBe(true);
+    expect(isSabbath(em("2026-08-22T23:30:00.000Z"), null)).toBe(true);
   });
 
   it("nao pausa no sabado as 20h31", () => {
-    expect(sabbathState(em("2026-08-22T23:31:00.000Z"), null)).toBe(false);
+    expect(isSabbath(em("2026-08-22T23:31:00.000Z"), null)).toBe(false);
   });
 
   it("ainda pausa as 19h02 de um sabado de janeiro, quando o sol se poe 19h01", () => {
     // O caso que tirou o corte das 19h. Sem ele, alguem "arruma" a constante de
     // volta e o ramo conservador passa a errar contra a observancia — em dez
     // sabados por decada, calado.
-    expect(sabbathState(em("2029-01-13T22:02:00.000Z"), null)).toBe(true);
+    expect(isSabbath(em("2029-01-13T22:02:00.000Z"), null)).toBe(true);
   });
 
   it("ainda pausa sob horario de verao, quando o por do sol marca 20h01", () => {
@@ -77,14 +77,14 @@ describe("sabbathState sem janela — a regra conservadora", () => {
     // sol se por. As bordas acima tambem quebram se alguem voltar para 19h30,
     // mas so por repetirem o numero da constante; este e o unico que quebra
     // por causa de um por do sol real.
-    expect(sabbathState(em("2019-01-12T22:01:47.000Z"), null)).toBe(true);
+    expect(isSabbath(em("2019-01-12T22:01:47.000Z"), null)).toBe(true);
   });
 
   it("nao pausa nos outros dias, a qualquer hora", () => {
     // Quarta 18h, domingo 18h, quinta 23h — todos em Brasilia.
-    expect(sabbathState(em("2026-08-19T21:00:00.000Z"), null)).toBe(false);
-    expect(sabbathState(em("2026-08-23T21:00:00.000Z"), null)).toBe(false);
-    expect(sabbathState(em("2026-08-21T02:00:00.000Z"), null)).toBe(false);
+    expect(isSabbath(em("2026-08-19T21:00:00.000Z"), null)).toBe(false);
+    expect(isSabbath(em("2026-08-23T21:00:00.000Z"), null)).toBe(false);
+    expect(isSabbath(em("2026-08-21T02:00:00.000Z"), null)).toBe(false);
   });
 });
 
@@ -129,21 +129,23 @@ describe("sabbathStartsAt", () => {
   });
 });
 
-describe("janela ilegivel — cai na regra conservadora, nunca em 'nao e sabado'", () => {
+describe("janela podre — cai na regra conservadora, nunca em 'nao e sabado'", () => {
   const PODRE: SabbathWindow = { startsAt: "banana", endsAt: "banana" };
   /** So a ponta final podrida: prende a guarda em `||`, que um `&&` afrouxaria. */
   const MEIO_PODRE: SabbathWindow = { startsAt: JANELA.startsAt, endsAt: "banana" };
+  /** As pontas de JANELA trocadas — o que um mapeamento manual produz. */
+  const INVERTIDA: SabbathWindow = { startsAt: JANELA.endsAt, endsAt: JANELA.startsAt };
   const SABADO_2H = "2026-08-22T05:00:00.000Z";
 
   it("pausa num sabado, em vez de abrir a inscricao", () => {
     // Comparar com NaN e sempre falso, entao sem a guarda `t >= NaN && t <= NaN`
     // da false — "nao e sabado" — e a inscricao ABRIRIA no sabado. E a unica
     // direcao que esta feature nao pode errar.
-    expect(sabbathState(em(SABADO_2H), PODRE)).toBe(true);
+    expect(isSabbath(em(SABADO_2H), PODRE)).toBe(true);
   });
 
   it("pausa tambem quando so uma das pontas esta podre", () => {
-    expect(sabbathState(em(SABADO_2H), MEIO_PODRE)).toBe(true);
+    expect(isSabbath(em(SABADO_2H), MEIO_PODRE)).toBe(true);
   });
 
   it("sabbathEndsAt nao entrega a string podre para a tela", () => {
@@ -152,6 +154,24 @@ describe("janela ilegivel — cai na regra conservadora, nunca em 'nao e sabado'
 
   it("sabbathStartsAt nao entrega a string podre para a tela", () => {
     expect(sabbathStartsAt(em("2026-08-21T13:00:00.000Z"), PODRE))
+      .toBe("2026-08-21T20:00:00.000Z");
+  });
+
+  it("pausa com a janela INVERTIDA, que o typecheck nao pega", () => {
+    /*
+     * Mesma forma do caso podre, uma casa ao lado: com as pontas trocadas
+     * nenhum instante satisfaz `t >= start && t <= end`, entao sem a guarda a
+     * resposta seria "nao e sabado" e a inscricao abriria. O CHECK do banco
+     * fecha a origem; a porta que sobra e o mapeamento manual de quem consome,
+     * onde `starts_at` e `ends_at` sao dois `string` e a troca e invisivel.
+     */
+    expect(isSabbath(em(SABADO_2H), INVERTIDA)).toBe(true);
+  });
+
+  it("nao entrega os instantes trocados para a tela", () => {
+    // Sem a guarda, `sabbathEndsAt` devolveria um instante ANTERIOR ao inicio.
+    expect(sabbathEndsAt(em(SABADO_2H), INVERTIDA)).toBe("2026-08-22T23:30:00.000Z");
+    expect(sabbathStartsAt(em("2026-08-21T13:00:00.000Z"), INVERTIDA))
       .toBe("2026-08-21T20:00:00.000Z");
   });
 });

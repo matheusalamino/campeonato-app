@@ -266,6 +266,12 @@ DECLARE
   v_dow   int;
   v_time  time;
 BEGIN
+  -- Bordas INCLUSIVAS nas duas pontas. E o ramo que decide 100% dos casos
+  -- reais: a regra conservadora la embaixo so roda depois que a tabela acaba, em
+  -- 2029. Espelha `t >= parsed.start && t <= parsed.end` em
+  -- features/registration/sabbath.ts. Se um dia alguem perguntar "o segundo
+  -- exato do por do sol conta?", a resposta esta aqui e la, e as duas tem que
+  -- mudar juntas.
   IF EXISTS (
     SELECT 1 FROM public.sabbath_windows
      WHERE p_at >= starts_at AND p_at <= ends_at
@@ -277,6 +283,13 @@ BEGIN
   -- sabado. Sem esta saida, toda sexta das 17h ao por do sol real (~17h50 no
   -- inverno) a regra conservadora abaixo pausaria por engano, TODA semana,
   -- mesmo com a tabela perfeita — e o aviso do por do sol mentiria o horario.
+  --
+  -- Este ramo NAO tem contraparte em features/registration/sabbath.ts, e nao e
+  -- espelho faltando: la ele vive no FORMATO DA CONSULTA, que entrega a janela
+  -- atual-ou-proxima e distingue "e futura" (false) de "nao ha" (conservadora).
+  -- Quem "consertar" o TS acrescentando este ramo — cair na regra conservadora
+  -- quando a janela nao cobre agora — reintroduz exatamente o bug descrito no
+  -- paragrafo acima: pausar toda sexta as 17h, para sempre.
   IF EXISTS (SELECT 1 FROM public.sabbath_windows WHERE ends_at >= p_at) THEN
     RETURN false;
   END IF;
