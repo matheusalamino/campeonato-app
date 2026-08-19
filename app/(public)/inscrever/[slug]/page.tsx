@@ -7,7 +7,9 @@ import RegistrationWizard from "./RegistrationWizard";
 import RestOverlay from "./RestOverlay";
 import ClosedNotice from "./ClosedNotice";
 import NotOpenNotice from "./NotOpenNotice";
+import NotYetNotice from "./NotYetNotice";
 import InscreverHeader from "./InscreverHeader";
+import { registrationGate } from "@/features/registration/registration-gate";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +57,7 @@ export default async function InscreverPage({ params }: { params: Promise<{ slug
 
   const { data: champ } = await supabase
     .from("championships")
-    .select("id, name, slug, status, max_players, max_waitlist_players, base_price, extra_ticket_price, registration_group_options, registration_image_url, pix_key, pix_merchant_name, pix_merchant_city, max_extra_tickets")
+    .select("id, name, slug, status, max_players, max_waitlist_players, base_price, extra_ticket_price, registration_group_options, registration_image_url, pix_key, pix_merchant_name, pix_merchant_city, max_extra_tickets, registration_start_date, registration_end_date")
     .eq("slug", slug)
     .is("deleted_at", null)
     .maybeSingle();
@@ -73,18 +75,32 @@ export default async function InscreverPage({ params }: { params: Promise<{ slug
   };
   const liveCount = count ?? 0;
 
-  // The Sabbath "rest" view is a full-screen modal experience — no header.
-  if (champ.status === "rest") {
+  const gate = registrationGate(champ, new Date());
+
+  // O repouso de sabado e uma experiencia modal de tela cheia — sem header.
+  if (gate.view === "rest") {
     return <RestOverlay championship={championship} liveCount={liveCount} />;
   }
 
   let view;
-  if (champ.status === "subscribing") {
-    view = <RegistrationWizard championship={championship} liveCount={liveCount} />;
-  } else if (champ.status === "subscribed") {
-    view = <ClosedNotice name={champ.name} />;
-  } else {
-    view = <NotOpenNotice />;
+  switch (gate.view) {
+    case "wizard":
+      view = <RegistrationWizard championship={championship} liveCount={liveCount} />;
+      break;
+    case "not_yet":
+      view = <NotYetNotice name={champ.name} opensAt={gate.opensAt} />;
+      break;
+    case "ended_by_deadline":
+      view = <ClosedNotice name={champ.name} reason="deadline" endedAt={gate.endedAt} />;
+      break;
+    case "ended_by_capacity":
+      view = <ClosedNotice name={champ.name} reason="capacity" />;
+      break;
+    case "not_open":
+      view = <NotOpenNotice />;
+      break;
+    default:
+      gate satisfies never;
   }
 
   return (
