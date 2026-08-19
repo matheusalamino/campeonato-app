@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { GroupOption } from "@/types/championship";
@@ -20,6 +20,7 @@ import { radarDataFrom, hasAnyRating } from "@/features/registration/radar";
 import { extraTicketsCap } from "@/features/registration/extra-tickets";
 import { canOpenStep, type SlotReservation } from "@/features/registration/slot";
 import { createLatestOnly } from "@/features/registration/latest-only";
+import { shouldRenewSlot, HEARTBEAT_INTERVAL_MS } from "@/features/registration/slot-keepalive";
 import { lookupCpfAction, submitRegistrationAction, reserveSlotAction } from "./actions";
 import StepShell from "./steps/StepShell";
 import SlotNotice from "./steps/SlotNotice";
@@ -71,6 +72,18 @@ export default function RegistrationWizard({
   const [looking, setLooking] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [slot, setSlot] = useState<SlotReservation | null>(null);
+  /**
+   * O CPF que a reserva viva conhece — nao o que estiver no campo agora.
+   *
+   * O passo 1 continua reabrivel de proposito, entao o campo pode estar no meio
+   * de uma correcao quando o heartbeat bate. Renovar `form.cpf` ali criaria uma
+   * segunda reserva para um CPF pela metade, gastando vaga de gente de verdade.
+   */
+  const reservedCpf = useRef("");
+  /** Ultimo sinal de vida do jogador: toque, tecla, ou volta para a aba. */
+  const lastActivity = useRef(Date.now());
+  /** Quando a ultima renovacao foi disparada, para o piso entre duas. */
+  const lastRenew = useRef(0);
 
   const isFull = championship.max_players != null && liveCount >= championship.max_players;
   // Mesma fonte de verdade da faixa. `isFull` soma principal + espera e por isso
@@ -179,11 +192,17 @@ export default function RegistrationWizard({
     // retry isso custa um RPC redundante sobre uma reserva recem-criada — o
     // sequenciador ordena os dois, e o preco e menor que o da assimetria.
     if (reservation?.ok) {
-      void latestOnly(() => reserveSlotAction(championship.id, form.cpf)).then(
+      // Fixa o CPF do disparo: e ele que a reserva renovada passa a conhecer, e
+      // o heartbeat precisa continuar renovando o mesmo, nao o que o campo
+      // mostrar depois.
+      const cpf = form.cpf;
+      void latestOnly(() => reserveSlotAction(championship.id, cpf)).then(
         (renovada) => {
           // `null` quando outra reserva foi disparada enquanto esta voltava:
           // este resultado ja nasceu velho e nao pode mandar na navegacao.
-          if (renovada) setSlot(renovada);
+          if (!renovada) return;
+          if (renovada.ok) reservedCpf.current = cpf;
+          setSlot(renovada);
         },
         (erro) => {
           // Mantem o estado anterior de proposito: a reserva que ja esta na tela
@@ -262,6 +281,7 @@ export default function RegistrationWizard({
         // O aviso na faixa ja explica cada caso.
         return;
       }
+      reservedCpf.current = form.cpf;
       // A reserva recem-nascida vai junto porque `slot` so a recebe no proximo
       // render — e este e o caminho de retry de quem levou um `error`.
       advance(1, reservation);
@@ -282,6 +302,87 @@ export default function RegistrationWizard({
     const t = setTimeout(() => router.push("/"), 6000);
     return () => clearTimeout(t);
   }, [result, router]);
+
+  /**
+   * Mantem a reserva viva enquanto o formulario esta aberto.
+   *
+   * Ate aqui a vaga so era renovada no clique em "Continuar" — e o passo onde o
+   * jogador mais demora e o do pagamento: trocar para o app do banco, fazer o
+   * PIX, voltar e achar o comprovante na galeria passa dos quinze minutos sem
+   * clique nenhum. A reserva morria calada, e a guarda de navegacao nao tem como
+   * ajudar: ela so roda na saida do passo, e o dinheiro sai dentro dele.
+   *
+   * Para quando a reserva nao esta ok (nao ha o que renovar) e quando a
+   * inscricao teve desfecho — dai em diante a vaga e da inscricao gravada, nao
+   * da reserva.
+   *
+   * As deps trazem `slot` de proposito: toda reserva nova reinicia o intervalo,
+   * e o callback so enxerga valores do render que o criou. O que muda mais
+   * rapido que o efeito — CPF reservado, sinal de vida, ultima renovacao — vem
+   * de ref e e lido na hora da batida, nunca capturado.
+   */
+  useEffect(() => {
+    if (!slot?.ok || result) return;
+    // Reserva nova acabou de chegar: o piso entre renovacoes conta a partir dela.
+    lastRenew.current = Date.now();
+
+    const renew = () => {
+      const cpf = reservedCpf.current;
+      if (!cpf) return;
+      lastRenew.current = Date.now();
+      void latestOnly(() => reserveSlotAction(championship.id, cpf)).then(
+        (renovada) => {
+          if (renovada) setSlot(renovada);
+        },
+        (erro) => {
+          // Uma batida perdida nao mata a vaga: o intervalo cabe quase quatro
+          // vezes no TTL e a proxima tenta de novo. Mas isto e vizinho do
+          // pagamento, e renovacao que falha calada nao deixa rastro nenhum.
+          console.warn("Falha ao renovar a reserva da vaga", erro);
+        },
+      );
+    };
+
+    const beat = () => {
+      const pode = shouldRenewSlot({
+        nowMs: Date.now(),
+        lastActivityMs: lastActivity.current,
+        lastRenewMs: lastRenew.current,
+      });
+      if (pode) renew();
+    };
+
+    /*
+     * Interacao e o sinal que separa "esta preenchendo" de "esqueceu a aba
+     * aberta" — e e ela, nao a visibilidade da aba, que alimenta o orcamento.
+     * Renova tambem na hora (o piso de um minuto segura a enxurrada), para quem
+     * volta ao formulario com a reserva quase vencida nao esperar a batida.
+     */
+    const onActivity = () => {
+      lastActivity.current = Date.now();
+      beat();
+    };
+    /*
+     * Voltar para a aba e o sinal de quem foi ao app do banco. No celular o
+     * timer fica suspenso enquanto a aba esta oculta, entao a volta costuma ser
+     * a primeira chance de renovar — e ela nao gera toque nenhum sozinha.
+     */
+    const onVisible = () => {
+      if (document.visibilityState === "visible") onActivity();
+    };
+
+    const timer = setInterval(beat, HEARTBEAT_INTERVAL_MS);
+    window.addEventListener("pointerdown", onActivity);
+    window.addEventListener("keydown", onActivity);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("pointerdown", onActivity);
+      window.removeEventListener("keydown", onActivity);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [slot, result, championship.id, latestOnly]);
+
   const activeSkills = skillsFor(form.preferred_position);
   const total = computeTicketsTotal({
     basePrice: championship.base_price,
