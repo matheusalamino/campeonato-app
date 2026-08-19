@@ -165,6 +165,33 @@ r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid', '99900000301',
 restou=$($DB -c "SELECT count(*) FROM championship_registrations WHERE championship_id='$CHAMP';")
 checar "inscricao desfeita quando a habilidade e invalida" "0" "$restou"
 
+# A excecao deliberada do A5: reservou as 23h58, o prazo fechou as 23:59:59, e
+# ele envia as 00h03. E aceito. A reserva e a autorizacao, e recusa-lo aqui
+# recriaria o "pagou e foi recusado" justo na correria de ultima hora.
+echo "== tolerancia: reservou antes do prazo, enviou depois =="
+preparar
+$DB -c "INSERT INTO players (cpf, name) VALUES ('99900000501', 'Tolerancia A5');" > /dev/null
+pid=$($DB -c "SELECT id FROM players WHERE cpf='99900000501';")
+$DB -c "UPDATE championships SET registration_start_date = now() - interval '1 day',
+                                 registration_end_date = now() + interval '1 minute' WHERE id='$CHAMP';" > /dev/null
+$DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000501');" > /dev/null
+# O prazo vira enquanto ele preenche.
+$DB -c "UPDATE championships SET registration_end_date = now() - interval '1 second' WHERE id='$CHAMP';" > /dev/null
+r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid', '99900000501',
+      '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0}'::jsonb,
+      '{\"visao\":4}'::jsonb)::text;")
+checar "reserva viva atravessa o prazo" "true" "$(echo "$r" | sed 's/.*\"success\" : \([a-z]*\).*/\1/')"
+
+# O outro lado da mesma moeda: sem reserva viva nao ha promessa a honrar, entao
+# o prazo vale. Mesmo campeonato, mesmo instante — so muda a reserva.
+echo "== sem reserva viva, o prazo vale =="
+$DB -c "INSERT INTO players (cpf, name) VALUES ('99900000502', 'Sem reserva A5');" > /dev/null
+pid=$($DB -c "SELECT id FROM players WHERE cpf='99900000502';")
+r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid', '99900000502',
+      '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0}'::jsonb,
+      '{\"visao\":4}'::jsonb)::text;")
+checar "sem reserva, fora do prazo recusa" "not_open" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
 limpar
 
 if [ "$falhou" -eq 0 ]; then
