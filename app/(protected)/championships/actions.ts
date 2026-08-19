@@ -35,6 +35,7 @@ function toRow(values: {
   tournament_start_date?: Date;
   max_players?: number;
   max_waitlist_players: number;
+  max_extra_tickets: number;
   status: string;
   registration_image_url?: string;
   base_price?: number;
@@ -55,6 +56,7 @@ function toRow(values: {
     tournament_start_date: iso(values.tournament_start_date),
     max_players: values.max_players ?? null,
     max_waitlist_players: values.max_waitlist_players,
+    max_extra_tickets: values.max_extra_tickets,
     status: values.status,
     registration_image_url: values.registration_image_url ?? null,
     base_price: values.base_price ?? null,

@@ -76,7 +76,7 @@ export function ChampionshipForm({
       tournament_start_date: emptyToUndef(form.tournament_start_date),
       max_players: emptyToUndef(form.max_players),
       max_waitlist_players: form.max_waitlist_players,
-      max_extra_tickets: form.max_extra_tickets,
+      max_extra_tickets: emptyToUndef(form.max_extra_tickets),
       status: form.status,
       registration_image_url: emptyToUndef(form.registration_image_url),
       base_price: emptyToUndef(form.base_price),
