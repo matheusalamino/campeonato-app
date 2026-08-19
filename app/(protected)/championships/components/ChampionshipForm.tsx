@@ -11,15 +11,10 @@ import {
   type Championship,
   type ChampionshipStatus,
 } from "@/types/championship";
+import { brasiliaInputToIso, isoToBrasiliaInput } from "@/lib/datetime-br";
 import { MAX_PIX_KEY } from "@/lib/pix";
 
 type FieldErrors = Record<string, string>;
-
-/** ISO timestamp -> "YYYY-MM-DD" for <input type="date">. */
-function toDateInput(value?: string | null): string {
-  if (!value) return "";
-  return new Date(value).toISOString().slice(0, 10);
-}
 
 function FieldError({ errors, name }: { errors: FieldErrors; name: string }) {
   if (!errors[name]) return null;
@@ -41,10 +36,10 @@ export function ChampionshipForm({
     name: initial?.name ?? "",
     season: initial?.season ?? "",
     description: initial?.description ?? "",
-    registration_start_date: toDateInput(initial?.registration_start_date),
-    registration_end_date: toDateInput(initial?.registration_end_date),
-    gala_night_date: toDateInput(initial?.gala_night_date),
-    tournament_start_date: toDateInput(initial?.tournament_start_date),
+    registration_start_date: isoToBrasiliaInput(initial?.registration_start_date),
+    registration_end_date: isoToBrasiliaInput(initial?.registration_end_date),
+    gala_night_date: isoToBrasiliaInput(initial?.gala_night_date),
+    tournament_start_date: isoToBrasiliaInput(initial?.tournament_start_date),
     max_players: initial?.max_players != null ? String(initial.max_players) : "",
     max_waitlist_players:
       initial?.max_waitlist_players != null ? String(initial.max_waitlist_players) : "0",
@@ -70,10 +65,10 @@ export function ChampionshipForm({
       name: form.name,
       season: emptyToUndef(form.season),
       description: emptyToUndef(form.description),
-      registration_start_date: emptyToUndef(form.registration_start_date),
-      registration_end_date: emptyToUndef(form.registration_end_date),
-      gala_night_date: emptyToUndef(form.gala_night_date),
-      tournament_start_date: emptyToUndef(form.tournament_start_date),
+      registration_start_date: brasiliaInputToIso(form.registration_start_date),
+      registration_end_date: brasiliaInputToIso(form.registration_end_date),
+      gala_night_date: brasiliaInputToIso(form.gala_night_date),
+      tournament_start_date: brasiliaInputToIso(form.tournament_start_date),
       max_players: emptyToUndef(form.max_players),
       max_waitlist_players: emptyToUndef(form.max_waitlist_players),
       max_extra_tickets: emptyToUndef(form.max_extra_tickets),
@@ -177,7 +172,7 @@ export function ChampionshipForm({
           <div>
             <label className={labelClass}>Abertura Inscrições</label>
             <input
-              type="date"
+              type="datetime-local"
               className={inputClass}
               value={form.registration_start_date}
               onChange={(e) => set("registration_start_date", e.target.value)}
@@ -187,7 +182,7 @@ export function ChampionshipForm({
           <div>
             <label className={labelClass}>Finalização Inscrições</label>
             <input
-              type="date"
+              type="datetime-local"
               className={inputClass}
               value={form.registration_end_date}
               onChange={(e) => set("registration_end_date", e.target.value)}
@@ -197,7 +192,7 @@ export function ChampionshipForm({
           <div>
             <label className={labelClass}>Noite de Gala</label>
             <input
-              type="date"
+              type="datetime-local"
               className={inputClass}
               value={form.gala_night_date}
               onChange={(e) => set("gala_night_date", e.target.value)}
@@ -207,7 +202,7 @@ export function ChampionshipForm({
           <div>
             <label className={labelClass}>Jogos (início do torneio)</label>
             <input
-              type="date"
+              type="datetime-local"
               className={inputClass}
               value={form.tournament_start_date}
               onChange={(e) => set("tournament_start_date", e.target.value)}
