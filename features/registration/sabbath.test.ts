@@ -54,19 +54,30 @@ describe("sabbathState sem janela — a regra conservadora", () => {
     expect(sabbathState(em("2026-08-22T05:00:00.000Z"), null)).toBe(true);
   });
 
-  it("ainda pausa no sabado as 19h30 em ponto", () => {
-    expect(sabbathState(em("2026-08-22T22:30:00.000Z"), null)).toBe(true);
+  it("ainda pausa no sabado as 20h30 em ponto", () => {
+    expect(sabbathState(em("2026-08-22T23:30:00.000Z"), null)).toBe(true);
   });
 
-  it("nao pausa no sabado as 19h31", () => {
-    expect(sabbathState(em("2026-08-22T22:31:00.000Z"), null)).toBe(false);
+  it("nao pausa no sabado as 20h31", () => {
+    expect(sabbathState(em("2026-08-22T23:31:00.000Z"), null)).toBe(false);
   });
 
   it("ainda pausa as 19h02 de um sabado de janeiro, quando o sol se poe 19h01", () => {
-    // O caso que fez o corte sair de 19h para 19h30. Sem ele, alguem "arruma" a
-    // constante de volta e o ramo conservador passa a errar contra a
-    // observancia — em dez sabados por decada, calado.
+    // O caso que tirou o corte das 19h. Sem ele, alguem "arruma" a constante de
+    // volta e o ramo conservador passa a errar contra a observancia — em dez
+    // sabados por decada, calado.
     expect(sabbathState(em("2029-01-13T22:02:00.000Z"), null)).toBe(true);
+  });
+
+  it("ainda pausa sob horario de verao, quando o por do sol marca 20h01", () => {
+    // 12/01/2019 foi sabado, e o Brasil estava em horario de verao. Este
+    // instante — a mesma hora UTC do por do sol de sabado mais tardio da tabela
+    // — le 20:01:47 no relogio de parede, contra 19:01:47 sem DST. Com o corte
+    // em 19h30 este caso devolveria false: a pausa encerrada 31 min antes do
+    // sol se por. As bordas acima tambem quebram se alguem voltar para 19h30,
+    // mas so por repetirem o numero da constante; este e o unico que quebra
+    // por causa de um por do sol real.
+    expect(sabbathState(em("2019-01-12T22:01:47.000Z"), null)).toBe(true);
   });
 
   it("nao pausa nos outros dias, a qualquer hora", () => {
@@ -82,21 +93,21 @@ describe("sabbathEndsAt", () => {
     expect(sabbathEndsAt(em("2026-08-22T05:00:00.000Z"), JANELA)).toBe(JANELA.endsAt);
   });
 
-  it("sem janela, numa sexta, aponta as 19h30 do sabado seguinte", () => {
+  it("sem janela, numa sexta, aponta as 20h30 do sabado seguinte", () => {
     expect(sabbathEndsAt(em("2026-08-21T20:30:00.000Z"), null))
-      .toBe("2026-08-22T22:30:00.000Z");
+      .toBe("2026-08-22T23:30:00.000Z");
   });
 
-  it("sem janela, num sabado, aponta as 19h30 do mesmo dia", () => {
+  it("sem janela, num sabado, aponta as 20h30 do mesmo dia", () => {
     expect(sabbathEndsAt(em("2026-08-22T05:00:00.000Z"), null))
-      .toBe("2026-08-22T22:30:00.000Z");
+      .toBe("2026-08-22T23:30:00.000Z");
   });
 
   it("sem janela, numa sexta que vira o mes, nao inventa o dia 32", () => {
     // 31/07/2026 e uma sexta. `addDays` anda pelo UTC de propriedade: somar 1
     // no texto daria "2026-07-32" e `brasiliaAt` recusaria.
     expect(sabbathEndsAt(em("2026-07-31T20:30:00.000Z"), null))
-      .toBe("2026-08-01T22:30:00.000Z");
+      .toBe("2026-08-01T23:30:00.000Z");
   });
 });
 

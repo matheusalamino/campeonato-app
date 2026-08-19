@@ -11,21 +11,31 @@ import { brasiliaInputToIso, brasiliaParts } from "@/lib/datetime-br";
 export type SabbathWindow = { startsAt: string; endsAt: string };
 
 /**
- * A regra conservadora: sexta 17h a sabado 19h30, horario de Brasilia.
+ * A regra conservadora: sexta 17h a sabado 20h30, horario de Brasilia.
  *
  * Pausa mais larga que a real, nunca menos — errar pausando a mais custa
  * algumas horas de inscricao, errar pausando a menos custa a observancia.
  *
- * 19h30 e nao 19h: a tabela `sabbath_windows` tem DEZ sabados de janeiro com
- * por do sol depois das 19h, o ultimo as 19:01:47. Com o corte em 19h, o ramo
- * que existe para errar a favor da observancia erraria contra ela. A margem
- * agora espelha a da sexta — o por do sol mais cedo do ano e 17:30:40.
+ * Nao e 19h: a tabela `sabbath_windows` tem DEZ sabados de janeiro com por do
+ * sol depois das 19h, o ultimo as 19:01:47, e o corte ali encerraria a pausa
+ * antes do sol se por.
+ *
+ * E nao e 19h30 porque isto le hora de PAREDE. Sob horario de verao
+ * reinstituido, aquele por do sol de 19:01:47 passa a marcar 20:01:47, e 19h30
+ * recriaria o mesmo bug uma hora mais fundo. As janelas gravadas nao tem esse
+ * problema: sao instantes absolutos, imunes ao DST. 20h30 cobre os dois
+ * regimes com ~28 min de folga, a mesma margem da sexta (17:30:40).
+ *
+ * Considerado e recusado: ler a hora com offset fixo de -3 seria exato nos dois
+ * regimes, mas custaria uma segunda nocao de "hora local" no codigo — e
+ * `brasiliaParts`, que o versiculo vai usar, precisa da hora CIVIL. Este ramo e
+ * rede de seguranca: obvio e generoso vale mais que exato e sutil.
  *
  * Espelha o bloco final de `public.is_sabbath` na migration
  * 20260819030000_sabbath_windows.sql. Mexeu aqui, mexa la.
  */
 const SABBATH_FALLBACK_START = "17:00";
-const SABBATH_FALLBACK_END = "19:30";
+const SABBATH_FALLBACK_END = "20:30";
 const FRIDAY = 5;
 const SATURDAY = 6;
 
