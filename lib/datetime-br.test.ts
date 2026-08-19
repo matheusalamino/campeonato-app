@@ -19,6 +19,14 @@ describe("brasiliaInputToIso", () => {
   it("devolve undefined para texto que nao e datetime-local", () => {
     expect(brasiliaInputToIso("12/08/2026")).toBeUndefined();
   });
+
+  it("usa o offset de horario de verao quando o Brasil tinha (ex: jan/2018)", () => {
+    // O horario de verao foi abolido por decreto em 2019, nao por lei, e pode
+    // voltar do mesmo jeito. Sem este caso, a suite nunca exercita o ramo que
+    // consulta o Intl: os outros 9 testes usam datas so com offset -03, entao
+    // fixar zoneOffsetMinutes em -180 tambem passaria nelas.
+    expect(brasiliaInputToIso("2018-01-15T00:00")).toBe("2018-01-15T02:00:00.000Z");
+  });
 });
 
 describe("isoToBrasiliaInput", () => {

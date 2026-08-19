@@ -56,11 +56,11 @@ export function isoToBrasiliaInput(iso?: string | null): string {
   // `sv-SE` porque o formato dessa localidade e "2026-08-12 00:00:00", que so
   // precisa trocar o espaco por T. Nao e capricho: e a forma mais curta de
   // pedir ISO ao Intl sem montar as partes na mao.
-  const texto = new Intl.DateTimeFormat("sv-SE", {
+  const text = new Intl.DateTimeFormat("sv-SE", {
     timeZone: CHAMPIONSHIP_TIME_ZONE,
     hour12: false,
     year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit",
   }).format(d);
-  return texto.replace(" ", "T").slice(0, 16);
+  return text.replace(" ", "T").slice(0, 16);
 }
