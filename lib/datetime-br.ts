@@ -73,3 +73,21 @@ export function isoToBrasiliaInput(iso?: string | null): string {
   }).format(d);
   return text.replace(" ", "T").slice(0, 16);
 }
+
+/**
+ * A data local, o minuto do dia e o dia da semana em Brasilia.
+ *
+ * Terceiro consumidor do fuso, e por isso mora aqui: a regra conservadora do
+ * sabado e a escolha do versiculo precisam saber o dia da semana LOCAL, e
+ * `getDay()` responderia com o fuso da maquina — que no servidor e UTC. Numa
+ * sexta as 22h de Brasilia, UTC ja e sabado.
+ */
+export function brasiliaParts(instant: Date): { date: string; minutes: number; dow: number } {
+  const text = isoToBrasiliaInput(instant.toISOString()); // "2026-08-21T17:00"
+  const date = text.slice(0, 10);
+  const minutes = Number(text.slice(11, 13)) * 60 + Number(text.slice(14, 16));
+  // A data ja esta em Brasilia; le-la de volta como meia-noite UTC devolve o
+  // dia da semana correto sem reabrir a questao do fuso.
+  const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
+  return { date, minutes, dow };
+}

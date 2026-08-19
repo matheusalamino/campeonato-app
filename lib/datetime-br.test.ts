@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { brasiliaInputToIso, isoToBrasiliaInput, CHAMPIONSHIP_TIME_ZONE } from "./datetime-br";
+import { brasiliaInputToIso, isoToBrasiliaInput, brasiliaParts, CHAMPIONSHIP_TIME_ZONE } from "./datetime-br";
 
 describe("brasiliaInputToIso", () => {
   it("le o texto do input como hora de Brasilia, nao como UTC", () => {
@@ -72,5 +72,25 @@ describe("ida e volta", () => {
     // 3h e os testes acima falham, em qualquer maquina que rode a suite —
     // nao so na de quem mora fora de Sao Paulo.
     expect(CHAMPIONSHIP_TIME_ZONE).toBe("America/Sao_Paulo");
+  });
+});
+
+describe("brasiliaParts", () => {
+  it("le a data, o minuto do dia e o dia da semana em Brasilia", () => {
+    // 21/08/2026 e uma sexta. 20:00Z sao 17:00 em Brasilia.
+    expect(brasiliaParts(new Date("2026-08-21T20:00:00.000Z")))
+      .toEqual({ date: "2026-08-21", minutes: 17 * 60, dow: 5 });
+  });
+
+  it("nao vira o dia junto com o UTC", () => {
+    // 22/08 as 02:00Z ainda e 21/08, 23h, em Brasilia — e ainda e sexta. Sem o
+    // fuso, este caso viraria sabado e a regra conservadora mudaria de lado.
+    expect(brasiliaParts(new Date("2026-08-22T02:00:00.000Z")))
+      .toEqual({ date: "2026-08-21", minutes: 23 * 60, dow: 5 });
+  });
+
+  it("conta o sabado como 6 e o domingo como 0", () => {
+    expect(brasiliaParts(new Date("2026-08-22T22:00:00.000Z")).dow).toBe(6);
+    expect(brasiliaParts(new Date("2026-08-23T22:00:00.000Z")).dow).toBe(0);
   });
 });
