@@ -11,6 +11,10 @@ CREATE OR REPLACE FUNCTION public.reserve_registration_slot(
   p_cpf text
 ) RETURNS json AS $$
 DECLARE
+  -- Mexeu aqui, mexa em IDLE_BUDGET_MS de features/registration/slot-keepalive.ts:
+  -- o orcamento de inatividade do heartbeat espelha este valor, e junto com ele
+  -- forma o teto de tempo que uma aba abandonada segura a vaga (orcamento +
+  -- TTL). Nada em TS le este numero, entao mudar so um lado passa despercebido.
   v_ttl               constant interval := interval '15 minutes';
   v_status            text;
   v_max_players       int;

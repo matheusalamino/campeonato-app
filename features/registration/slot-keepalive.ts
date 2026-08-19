@@ -38,6 +38,12 @@ export const HEARTBEAT_INTERVAL_MS = 4 * 60_000;
  * dobro do que seguraria sem heartbeat nenhum (o orcamento, e depois o TTL
  * inteiro da ultima renovacao). E folga de sobra para quem esta com a tela
  * parada mas presente — lendo o QR, digitando o PIX em outro aparelho.
+ *
+ * O TTL mora no banco (`v_ttl` em
+ * supabase/migrations/20260818040000_reserve_registration_slot.sql) e nao ha
+ * como amarrar os dois sem expo-lo por outra rodada de rede. Entao ficam os
+ * dois avisos, um de cada lado: mexer la sem mexer aqui muda o teto de posse
+ * da aba abandonada em silencio.
  */
 export const IDLE_BUDGET_MS = 15 * 60_000;
 

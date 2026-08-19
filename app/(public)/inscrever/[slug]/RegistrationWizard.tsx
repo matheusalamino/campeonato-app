@@ -355,31 +355,55 @@ export default function RegistrationWizard({
     /*
      * Interacao e o sinal que separa "esta preenchendo" de "esqueceu a aba
      * aberta" — e e ela, nao a visibilidade da aba, que alimenta o orcamento.
-     * Renova tambem na hora (o piso de um minuto segura a enxurrada), para quem
-     * volta ao formulario com a reserva quase vencida nao esperar a batida.
+     * Renova tambem na hora, e nao so credita o orcamento: e assim que quem
+     * passou do orcamento e volta a mexer recupera a reserva no primeiro toque,
+     * em vez de esperar ate quatro minutos pela proxima batida.
+     *
+     * O efeito colateral e a taxa real: quem esta digitando sem parar dispara
+     * uma renovacao por minuto, o piso do `shouldRenewSlot` — nao uma a cada
+     * quatro, como o intervalo sugere. Num formulario de vinte minutos sao
+     * ~20 chamadas em vez de 5. E um RPC curto sob o lock de uma linha, por
+     * jogador que esta com o formulario na mao: nesta escala o custo nao
+     * aparece, e o piso ja existe justamente para uma tecla nao virar um RPC.
      */
     const onActivity = () => {
       lastActivity.current = Date.now();
       beat();
     };
     /*
-     * Voltar para a aba e o sinal de quem foi ao app do banco. No celular o
-     * timer fica suspenso enquanto a aba esta oculta, entao a volta costuma ser
-     * a primeira chance de renovar — e ela nao gera toque nenhum sozinha.
+     * Os dois lados da troca de aba, e eles nao sao simetricos.
+     *
+     * Na volta, o jogador esta de novo na frente do formulario: e sinal de vida
+     * como um toque, e renova na hora — no celular o timer fica suspenso
+     * enquanto a aba esta oculta, entao a volta costuma ser a primeira chance
+     * de renovar, e ela nao gera toque nenhum sozinha.
+     *
+     * Na ida e que estava o buraco. Chrome e Safari congelam a aba de fundo em
+     * poucos minutos: quem vai ao app do banco levava so a batida seguinte e
+     * ficava com a reserva vencendo no meio do PIX. Renovar no instante da
+     * partida entrega os quinze minutos cheios contados da saida, sem depender
+     * de timer nenhum rodar no fundo.
+     *
+     * Mas a ida NAO credita o orcamento: mandar a aba para segundo plano nao e
+     * sinal de que alguem esta ali. Se creditasse, bastaria a aba esquecida
+     * cair para o fundo para o teto de posse evaporar. Por isso `beat()`, que
+     * consulta a mesma politica, e nao `renew()` direto — passado o orcamento,
+     * a saida nao renova mais nada.
      */
-    const onVisible = () => {
+    const onVisibility = () => {
       if (document.visibilityState === "visible") onActivity();
+      else beat();
     };
 
     const timer = setInterval(beat, HEARTBEAT_INTERVAL_MS);
     window.addEventListener("pointerdown", onActivity);
     window.addEventListener("keydown", onActivity);
-    document.addEventListener("visibilitychange", onVisible);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       clearInterval(timer);
       window.removeEventListener("pointerdown", onActivity);
       window.removeEventListener("keydown", onActivity);
-      document.removeEventListener("visibilitychange", onVisible);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [slot, result, championship.id, latestOnly]);
 

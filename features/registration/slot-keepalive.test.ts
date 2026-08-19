@@ -79,7 +79,11 @@ describe("shouldRenewSlot", () => {
         lastRenew = t;
       }
     }
-    // Nenhuma renovacao depois do orcamento, por mais que o timer bata.
+    // Sem esta primeira linha o teste e unilateral: com a politica recusando
+    // tudo, `renovacoes` fica vazio, `Math.max()` de vazio e -Infinity e as duas
+    // assercoes de teto passam — "nunca renovou" seria lido como sucesso.
+    expect(renovacoes.length).toBeGreaterThan(0);
+    // E nenhuma renovacao depois do orcamento, por mais que o timer bata.
     expect(Math.max(...renovacoes)).toBeLessThanOrEqual(IDLE_BUDGET_MS);
     expect(renovacoes.length).toBeLessThanOrEqual(IDLE_BUDGET_MS / HEARTBEAT_INTERVAL_MS + 1);
   });
