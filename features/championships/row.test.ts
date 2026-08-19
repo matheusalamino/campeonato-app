@@ -2,8 +2,9 @@ import { describe, it, expect } from "vitest";
 import { baseChampionshipObject } from "./schema";
 import { toRow } from "./row";
 
-// Amostra completa: um valor para cada campo do schema do formulario, para
-// garantir que toRow() de fato usa (e nao ignora) cada um deles.
+// Amostra completa: um valor por campo do schema do formulario, usada para
+// verificar que toRow() liga cada chave ao valor correto (nao so a presenca
+// da chave).
 const sampleValues = {
   name: "Copa Interna",
   season: "2026",
@@ -25,12 +26,31 @@ const sampleValues = {
   registration_group_options: [{ label: "Grupo A", requires_invite_code: false }],
 };
 
+// O row esperado: igual ao fixture, exceto pelas datas, que toRow() converte
+// para ISO string antes de gravar. Como todo campo do fixture esta
+// preenchido (nada undefined), essa comparacao nao exercita os fallbacks
+// `?? null` / `?? []` de toRow() para campos ausentes — so a ligacao
+// chave->valor de cada campo presente.
+const expectedRow = {
+  ...sampleValues,
+  registration_start_date: sampleValues.registration_start_date.toISOString(),
+  registration_end_date: sampleValues.registration_end_date.toISOString(),
+  gala_night_date: sampleValues.gala_night_date.toISOString(),
+  tournament_start_date: sampleValues.tournament_start_date.toISOString(),
+};
+
 describe("toRow", () => {
   it("grava no banco toda coluna que existe no schema do formulario", () => {
     // Deriva as chaves esperadas do proprio schema, em vez de uma lista
     // escrita a mao — uma lista a mao teria o mesmo problema de manutencao
     // que fez max_extra_tickets ficar de fora do toRow original.
     const formKeys = Object.keys(baseChampionshipObject.shape);
+
+    // Sentinela: se baseChampionshipObject.shape algum dia vier vazio (bump
+    // major do Zod, refactor do schema), formKeys e missing ficariam ambos
+    // [] e o teste passaria sem checar nada. Garante que a lista tem o
+    // tamanho esperado antes de confiar nela.
+    expect(formKeys.length).toBeGreaterThan(10);
 
     const row = toRow(sampleValues);
     const rowKeys = new Set(Object.keys(row));
@@ -41,5 +61,10 @@ describe("toRow", () => {
       missing,
       `Colunas do schema do formulario ausentes no row gravado no banco: ${missing.join(", ")}`,
     ).toEqual([]);
+  });
+
+  it("liga cada chave ao valor correto, nao so verifica presenca", () => {
+    const row = toRow(sampleValues);
+    expect(row).toEqual(expectedRow);
   });
 });

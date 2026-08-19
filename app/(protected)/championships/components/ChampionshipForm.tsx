@@ -75,7 +75,7 @@ export function ChampionshipForm({
       gala_night_date: emptyToUndef(form.gala_night_date),
       tournament_start_date: emptyToUndef(form.tournament_start_date),
       max_players: emptyToUndef(form.max_players),
-      max_waitlist_players: form.max_waitlist_players,
+      max_waitlist_players: emptyToUndef(form.max_waitlist_players),
       max_extra_tickets: emptyToUndef(form.max_extra_tickets),
       status: form.status,
       registration_image_url: emptyToUndef(form.registration_image_url),
