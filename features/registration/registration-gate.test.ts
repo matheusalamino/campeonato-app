@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { registrationGate } from "./registration-gate";
 
-const ABRE = "2026-08-12T03:00:00.000Z";   // 12/08 00:00 em Brasilia
+const ABRE_RAW = "2026-08-12T03:00:00+00:00"; // como o PostgREST devolve
+const ABRE = "2026-08-12T03:00:00.000Z";   // como o gate normaliza (12/08 00:00 em Brasilia)
 const FECHA = "2026-09-28T02:59:59.000Z";  // 27/09 23:59:59 em Brasilia
 
 const base = {
   status: "subscribing",
-  registration_start_date: ABRE,
+  registration_start_date: ABRE_RAW,
   registration_end_date: FECHA,
 };
 
@@ -63,8 +64,10 @@ describe("registrationGate", () => {
   });
 
   it("sem data nenhuma, se comporta como antes do A5", () => {
-    expect(registrationGate({ status: "subscribing" }, em("2026-09-01T12:00:00Z")))
-      .toEqual({ view: "wizard" });
+    expect(registrationGate(
+      { status: "subscribing", registration_start_date: null, registration_end_date: null },
+      em("2026-09-01T12:00:00Z"),
+    )).toEqual({ view: "wizard" });
   });
 
   it("data ilegivel e tratada como borda inexistente, nao como agora", () => {

@@ -15,12 +15,12 @@ export type RegistrationGate =
 
 export type GateChampionship = {
   status?: string | null;
-  registration_start_date?: string | null;
-  registration_end_date?: string | null;
+  registration_start_date: string | null;
+  registration_end_date: string | null;
 };
 
 /** Instante utilizavel, ou null. Data corrompida vira borda inexistente. */
-function instante(value?: string | null): Date | null {
+function instant(value?: string | null): Date | null {
   if (!value) return null;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
@@ -42,12 +42,12 @@ export function registrationGate(
   if (champ.status === "subscribed") return { view: "ended_by_capacity" };
   if (champ.status !== "subscribing") return { view: "not_open" };
 
-  const abre = instante(champ.registration_start_date);
-  const fecha = instante(champ.registration_end_date);
+  const opensAt = instant(champ.registration_start_date);
+  const endsAt = instant(champ.registration_end_date);
 
   // Bordas inclusivas: escolhido 23:59, aquele minuto conta inteiro.
-  if (abre && now < abre) return { view: "not_yet", opensAt: abre.toISOString() };
-  if (fecha && now > fecha) return { view: "ended_by_deadline", endedAt: fecha.toISOString() };
+  if (opensAt && now < opensAt) return { view: "not_yet", opensAt: opensAt.toISOString() };
+  if (endsAt && now > endsAt) return { view: "ended_by_deadline", endedAt: endsAt.toISOString() };
 
   return { view: "wizard" };
 }
