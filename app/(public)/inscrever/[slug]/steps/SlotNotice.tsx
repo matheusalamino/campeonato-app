@@ -21,11 +21,12 @@ const redTone = {
 };
 
 /**
- * O texto da faixa e o quanto ele urge.
+ * O texto da faixa e o tom em que ele entra.
  *
- * `urgent` decide duas coisas de uma vez — a tinta vermelha e o container que
- * anuncia na hora — porque as duas respondem a mesma pergunta: isso impede o
- * jogador de seguir?
+ * `urgent` e severidade, nao bloqueio: decide a tinta vermelha e o container
+ * que anuncia na hora. Os dois eixos nao coincidem — "voce ja esta inscrito"
+ * tambem impede seguir e mesmo assim e dourado, porque a noticia e boa. A
+ * pergunta que classifica e "isso e ma noticia para o jogador?".
  */
 function noticeFor(slot: SlotReservation): { urgent: boolean; body: ReactNode } {
   if (slot.ok) {
@@ -80,12 +81,18 @@ function noticeFor(slot: SlotReservation): { urgent: boolean; body: ReactNode } 
         body: <>Não foi possível confirmar sua vaga agora. Tente novamente em instantes.</>,
       };
 
-    default:
-      // `not_found` e `not_open`. Nenhum dos dois e lotacao cheia: o primeiro e
-      // campeonato que sumiu do ar durante o preenchimento, o segundo e status
-      // que saiu de `subscribing`. Dizer "esgotaram" aqui seria inventar.
+    case "not_found":
+    case "not_open":
+      // Nenhum dos dois e lotacao cheia: o primeiro e campeonato que sumiu do
+      // ar durante o preenchimento, o segundo e status que saiu de
+      // `subscribing`. Dizer "esgotaram" aqui seria inventar.
       return { urgent: true, body: <>As inscrições para este campeonato não estão abertas.</> };
   }
+
+  // Sem `default`, de proposito. Com um, todo membro novo da uniao escorregaria
+  // calado para a ultima frase — e foi assim que "esgotaram" passou a ser dita
+  // para quem nao tinha esgotado nada. Aqui o compilador cobra o proximo.
+  slot satisfies never;
 }
 
 /**

@@ -136,10 +136,13 @@ export default function RegistrationWizard({
     setStep(next);
     // Renova a reserva a cada passo: quinze minutos contam a partir da ultima
     // acao, nao do inicio. Sem isso, quem preenche com calma perde a vaga.
-    // Falha de rede mantem o estado anterior de proposito — a reserva que ja
-    // esta na tela continua valendo, e o proximo passo tenta de novo.
     if (slot?.ok) {
-      void reserveSlotAction(championship.id, form.cpf).then(setSlot, () => {});
+      void reserveSlotAction(championship.id, form.cpf).then(setSlot, (erro) => {
+        // Mantem o estado anterior de proposito: a reserva que ja esta na tela
+        // continua valendo, e o proximo passo tenta de novo. Mas isto e vizinho
+        // do pagamento, e renovacao que falha calada nao deixa rastro nenhum.
+        console.warn("Falha ao renovar a reserva da vaga", erro);
+      });
     }
   }
 

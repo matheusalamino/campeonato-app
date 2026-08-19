@@ -148,6 +148,13 @@ export async function checkLookupRateLimit(ip: string): Promise<boolean> {
   return true;
 }
 
+/** Razoes que a RPC declara no seu COMMENT, fora `all_reserved`, que tem forma propria. */
+const RPC_REASONS = ["not_found", "not_open", "already_registered", "full"] as const;
+
+function isKnownReason(value: unknown): value is (typeof RPC_REASONS)[number] {
+  return typeof value === "string" && (RPC_REASONS as readonly string[]).includes(value);
+}
+
 /**
  * Reserva a vaga do jogador enquanto ele preenche.
  *
@@ -184,10 +191,14 @@ export async function reserveSlot(
   if (result.reason === "all_reserved") {
     return { ok: false, reason: "all_reserved", retryAt: result.retry_at ?? null };
   }
-  return {
-    ok: false,
-    reason: (result.reason as "not_found" | "not_open" | "already_registered" | "full") ?? "not_found",
-  };
+  // O `as` que estava aqui carimbava qualquer string vinda do JSON como uma das
+  // quatro razoes, entao uma razao nova na RPC — ou uma resposta malformada —
+  // seria renderizada como um veredito que ninguem deu. Razao que nao esta na
+  // lista e resposta que nao entendemos, e nao ha lotacao a declarar: `error`
+  // convida a tentar de novo, que e a unica resposta honesta.
+  return isKnownReason(result.reason)
+    ? { ok: false, reason: result.reason }
+    : { ok: false, reason: "error" };
 }
 
 export async function getOpenRegistrationChampionship(): Promise<{ slug: string; name: string } | null> {
