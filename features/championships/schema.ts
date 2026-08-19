@@ -6,7 +6,7 @@ export const championshipStatusSchema = z.enum(CHAMPIONSHIP_STATUS);
 
 const optionalDate = z.coerce.date().optional();
 
-const baseChampionshipObject = z.object({
+export const baseChampionshipObject = z.object({
   name: z.string().trim().min(1, "Nome é obrigatório"),
   season: z.string().trim().optional(),
   description: z.string().trim().optional(),
