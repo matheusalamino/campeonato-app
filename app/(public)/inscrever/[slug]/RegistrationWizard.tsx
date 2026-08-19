@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { GroupOption } from "@/types/championship";
 import { isValidCpf, formatCpf } from "@/lib/cpf";
-import { formatPhoneBR, formatHeightM, heightToMask } from "@/lib/masks";
+import { formatPhoneBR, formatHeightM, heightToMask, formatBRL } from "@/lib/masks";
 import { BR_STATES } from "@/lib/br-states";
 import { groupRequiresInviteCode } from "@/features/registration/groups";
 import { skillsFor, SKILL_LABELS } from "@/features/registration/skills";
@@ -697,7 +697,7 @@ export default function RegistrationWizard({
                   do que ajudaria. */}
               {championship.extra_ticket_price != null && championship.extra_ticket_price > 0 && (
                 <span className="text-xs text-[var(--gala-ink-dim)]">
-                  R$ {championship.extra_ticket_price.toFixed(2)} cada
+                  {formatBRL(championship.extra_ticket_price)} cada
                 </span>
               )}
               <div className="flex items-center gap-3 ml-auto">
@@ -713,7 +713,7 @@ export default function RegistrationWizard({
           </div>
           <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3">
             <span className="text-sm text-[var(--gala-ink-dim)]">Total</span>
-            <b className="text-[var(--gala-gold-2)]">R$ {total.toFixed(2)}</b>
+            <b className="text-[var(--gala-gold-2)]">{formatBRL(total)}</b>
           </div>
           <UploadCard icon="📷" label="Foto de perfil (3x4)" hint="Toque para enviar" required bucket="registration-photos"
                       value={form.profile_photo_link} onChange={(u) => set("profile_photo_link", u)} />
@@ -748,7 +748,7 @@ export default function RegistrationWizard({
           <div className="text-sm text-[var(--gala-ink-dim)] space-y-1">
             <div><b className="text-[var(--gala-ink)]">{form.name || "—"}</b> · {form.preferred_position}</div>
             <div>{form.group_affiliation || "—"}</div>
-            <div>Total: R$ {total.toFixed(2)}{waitlisted ? " · Lista de espera" : ""}</div>
+            <div>Total: {formatBRL(total)}{waitlisted ? " · Lista de espera" : ""}</div>
           </div>
           <button onClick={onSubmit} disabled={submitting}
                   className="w-full rounded-xl py-3 font-black uppercase tracking-wide text-[#050507]"

@@ -33,3 +33,21 @@ export function heightToMask(height: number): string {
 export function heightMaskToNumeric(value: string): string {
   return value.replace(",", ".");
 }
+
+/**
+ * Format a number as Brazilian currency for display: "R$ 1.234,56".
+ *
+ * Only the digits go through Intl, in "decimal" style — comma for the
+ * fraction, plain ASCII period for the thousands grouping. The "R$ " prefix
+ * is a literal string with a normal space, not Intl's "currency" style:
+ * that style inserts a non-breaking space (U+00A0) between symbol and
+ * number instead, which would silently mismatch every other money string
+ * in the app that already reads "R$ " + digits.
+ */
+export function formatBRL(value: number): string {
+  const digits = new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+  return `R$ ${digits}`;
+}
