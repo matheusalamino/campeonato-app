@@ -76,6 +76,38 @@ describe("fridaysBetween", () => {
   });
 });
 
+describe("fridaysBetween com data invalida", () => {
+  /*
+   * Duas falhas, e nenhuma das duas grita.
+   *
+   * `fromStr` invalido pendura o processo: o laco que procura a primeira sexta
+   * roda `while (dia.getUTCDay() !== 5)`, e numa Invalid Date isso e
+   * `NaN !== 5` — sempre verdadeiro, para sempre. Quem digitou errado fica
+   * olhando um terminal parado, sem mensagem e sem saida.
+   *
+   * `toStr` invalido e pior, porque parece que funcionou: `dia <= Invalid Date`
+   * e sempre falso, entao a funcao devolve vazio calada, o CLI imprime nada e
+   * sai com codigo 0. Um VALUES sem linha nenhuma pode acabar colado numa
+   * migration.
+   *
+   * O timeout curto e proposital, mas nao e a rede de verdade: um laco infinito
+   * SINCRONO trava o event loop, e o timeout do vitest nunca chega a disparar.
+   * A rede e a guarda em si.
+   */
+  it("recusa fromStr invalido em vez de girar para sempre", { timeout: 3000 }, () => {
+    expect(() => fridaysBetween("banana", "2026-12-31")).toThrow(/fromStr/);
+  });
+
+  it("recusa toStr invalido em vez de devolver vazio calado", { timeout: 3000 }, () => {
+    expect(() => fridaysBetween("2026-08-01", "banana")).toThrow(/toStr/);
+  });
+
+  it("diz qual argumento veio ruim, o que veio e o que se esperava", { timeout: 3000 }, () => {
+    expect(() => fridaysBetween("01/08/2026", "2026-12-31"))
+      .toThrow('Data invalida em fromStr: "01/08/2026". Esperado o formato YYYY-MM-DD.');
+  });
+});
+
 describe("sabbathWindows", () => {
   const janelas = sabbathWindows("2026-08-01", "2029-12-31");
 

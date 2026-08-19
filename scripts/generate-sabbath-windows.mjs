@@ -47,10 +47,33 @@ export function sunsetAt(dateStr) {
   return sunset;
 }
 
+/**
+ * Le "YYYY-MM-DD" como meia-noite UTC, ou estoura dizendo qual argumento veio
+ * ruim.
+ *
+ * Uma Invalid Date que passe daqui falha de dois jeitos calados, e nenhum deles
+ * aponta o culpado. Em `fromStr`, o laco que procura a primeira sexta testa
+ * `dia.getUTCDay() !== 5`, que numa Invalid Date e `NaN !== 5` — verdadeiro
+ * para sempre: o processo pendura sem mensagem nenhuma. Em `toStr` e pior,
+ * porque parece ter dado certo: `dia <= fim` e sempre falso, a funcao devolve
+ * lista vazia, e o CLI imprime nada e sai com codigo 0.
+ */
+function midnightUtc(dateStr, argumento) {
+  const dia = new Date(`${dateStr}T00:00:00Z`);
+  if (Number.isNaN(dia.getTime())) {
+    throw new Error(
+      `Data invalida em ${argumento}: ${JSON.stringify(dateStr)}. ` +
+        "Esperado o formato YYYY-MM-DD.",
+    );
+  }
+  return dia;
+}
+
 /** Todas as sextas entre duas datas locais, inclusive. */
 export function fridaysBetween(fromStr, toStr) {
-  const fim = new Date(`${toStr}T00:00:00Z`);
-  let dia = new Date(`${fromStr}T00:00:00Z`);
+  // Na ordem dos argumentos, para o erro apontar o primeiro que veio ruim.
+  let dia = midnightUtc(fromStr, "fromStr");
+  const fim = midnightUtc(toStr, "toStr");
   while (dia.getUTCDay() !== 5) dia = new Date(dia.getTime() + DIA_MS);
 
   const sextas = [];
