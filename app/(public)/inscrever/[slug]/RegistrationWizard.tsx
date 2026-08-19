@@ -18,7 +18,8 @@ import { summarizeErrors } from "@/features/registration/error-summary";
 import { SHIRT_SIZES, CUSTOM_SHIRT_SIZE } from "@/features/registration/shirt-sizes";
 import { radarDataFrom, hasAnyRating } from "@/features/registration/radar";
 import { extraTicketsCap } from "@/features/registration/extra-tickets";
-import type { SlotReservation } from "@/features/registration/slot";
+import { canOpenStep, type SlotReservation } from "@/features/registration/slot";
+import { createLatestOnly } from "@/features/registration/latest-only";
 import { lookupCpfAction, submitRegistrationAction, reserveSlotAction } from "./actions";
 import StepShell from "./steps/StepShell";
 import SlotNotice from "./steps/SlotNotice";
@@ -48,6 +49,13 @@ const EMPTY = {
   profile_photo_link: "", payment_receipt_link: "", legal_authorization_link: "",
 };
 
+/**
+ * Recusa de navegacao precisa ser dita. A faixa no topo ja explica qual e o
+ * caso; sem este aviso o jogador toca o cabecalho do passo, nada acontece, e
+ * ele conclui que o formulario travou — entao insiste em vez de ler a faixa.
+ */
+const BLOCKED_BY_SLOT = "Não é possível seguir agora. Veja o aviso no topo da página.";
+
 const inputBase =
   "w-full rounded-xl px-3 py-3 text-base bg-white/5 border text-[var(--gala-ink)] outline-none";
 const inputOk = "border-white/10 focus:border-[var(--gala-gold-2)]";
@@ -74,7 +82,25 @@ export default function RegistrationWizard({
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((p) => ({ ...p, [k]: v }));
   }
-  const open = (n: number) => setStep((s) => (s === n ? 0 : n));
+  // Toda reserva passa por aqui, para que uma resposta atrasada nunca
+  // sobrescreva um veredito mais novo agora que a reserva comanda a navegacao.
+  const [latestOnly] = useState(createLatestOnly);
+
+  /**
+   * Abrir (ou fechar) um passo pelo cabecalho do accordion.
+   *
+   * O botao continua clicavel de proposito: desabilita-lo devolveria silencio,
+   * e silencio foi o que fez o jogador insistir. Ele clica, ouve o porque e le
+   * a faixa.
+   */
+  const open = (n: number) => {
+    const target = step === n ? 0 : n;
+    if (!canOpenStep(target, slot, done)) {
+      toast.error(BLOCKED_BY_SLOT);
+      return;
+    }
+    setStep(target);
+  };
 
   const minor = form.birth_date ? isMinor(form.birth_date) : false;
 
@@ -116,7 +142,21 @@ export default function RegistrationWizard({
     return parsed.success ? {} : errorsForStep(from, fieldErrorsFrom(parsed.error));
   }
 
-  function advance(from: number) {
+  /**
+   * `reservation` existe porque `setSlot` so aparece no render seguinte: quando
+   * o jogador tenta de novo depois de uma falha de rede, a reserva boa acaba de
+   * nascer e o `slot` do escopo ainda carrega o veredito velho. Sem receber a
+   * nova aqui, a guarda leria o antigo e prenderia justamente quem se salvou.
+   */
+  function advance(from: number, reservation: SlotReservation | null = slot) {
+    // Sem menor de idade, o passo da carta nao existe e e pulado.
+    const next = from + 1 === AUTHORIZATION_STEP && !minor ? from + 2 : from + 1;
+    // Antes da validacao, de proposito: mandar quem esta sem vaga consertar
+    // campos que nao vao lhe servir para nada e cruel e faz perder tempo.
+    if (!canOpenStep(next, reservation, done)) {
+      toast.error(BLOCKED_BY_SLOT);
+      return;
+    }
     const found = stepErrors(from);
     if (Object.keys(found).length) {
       setErrors((prev) => ({ ...prev, ...found }));
@@ -131,18 +171,23 @@ export default function RegistrationWizard({
       return next;
     });
     setDone((d) => ({ ...d, [from]: true }));
-    // Sem menor de idade, o passo da carta nao existe e e pulado.
-    const next = from + 1 === AUTHORIZATION_STEP && !minor ? from + 2 : from + 1;
     setStep(next);
     // Renova a reserva a cada passo: quinze minutos contam a partir da ultima
     // acao, nao do inicio. Sem isso, quem preenche com calma perde a vaga.
     if (slot?.ok) {
-      void reserveSlotAction(championship.id, form.cpf).then(setSlot, (erro) => {
-        // Mantem o estado anterior de proposito: a reserva que ja esta na tela
-        // continua valendo, e o proximo passo tenta de novo. Mas isto e vizinho
-        // do pagamento, e renovacao que falha calada nao deixa rastro nenhum.
-        console.warn("Falha ao renovar a reserva da vaga", erro);
-      });
+      void latestOnly(() => reserveSlotAction(championship.id, form.cpf)).then(
+        (renovada) => {
+          // `null` quando outra reserva foi disparada enquanto esta voltava:
+          // este resultado ja nasceu velho e nao pode mandar na navegacao.
+          if (renovada) setSlot(renovada);
+        },
+        (erro) => {
+          // Mantem o estado anterior de proposito: a reserva que ja esta na tela
+          // continua valendo, e o proximo passo tenta de novo. Mas isto e vizinho
+          // do pagamento, e renovacao que falha calada nao deixa rastro nenhum.
+          console.warn("Falha ao renovar a reserva da vaga", erro);
+        },
+      );
     }
   }
 
@@ -202,7 +247,10 @@ export default function RegistrationWizard({
         }));
         toast.success("Encontramos você! Confira seus dados.");
       }
-      const reservation = await reserveSlotAction(championship.id, form.cpf);
+      const reservation = await latestOnly(() => reserveSlotAction(championship.id, form.cpf));
+      // Outra tentativa mais nova assumiu enquanto esta voltava: resultado velho
+      // nao vira estado nem decide navegacao.
+      if (!reservation) return;
       setSlot(reservation);
       if (!reservation.ok) {
         // Sem vaga nao ha o que preencher, e quem ja esta inscrito muito menos:
@@ -210,7 +258,9 @@ export default function RegistrationWizard({
         // O aviso na faixa ja explica cada caso.
         return;
       }
-      advance(1);
+      // A reserva recem-nascida vai junto porque `slot` so a recebe no proximo
+      // render — e este e o caminho de retry de quem levou um `error`.
+      advance(1, reservation);
     } catch {
       toast.error("Não foi possível verificar o CPF. Tente novamente.");
     } finally { setLooking(false); }
@@ -263,6 +313,11 @@ export default function RegistrationWizard({
         setResult({ ok: false, already: true });
       } else {
         // O servidor ja disse qual campo falhou: mostra no campo e abre o passo.
+        // Sem a guarda da reserva de proposito: so chega aqui quem esta no passo
+        // do envio, e para chegar la ja concluiu todos os anteriores — a guarda
+        // liberaria os mesmos passos e nao ha campo mapeado no passo do envio.
+        // Guardar aqui so criaria o caso em que o jogador ve um campo em
+        // vermelho e nao tem como abrir o passo para conserta-lo.
         if (res.fieldErrors) {
           setErrors(res.fieldErrors);
           const target = firstStepWithError(res.fieldErrors);
