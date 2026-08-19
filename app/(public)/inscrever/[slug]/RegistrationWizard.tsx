@@ -17,8 +17,11 @@ import { errorsForStep, firstStepWithError, stepNumber, AUTHORIZATION_STEP, UNIF
 import { summarizeErrors } from "@/features/registration/error-summary";
 import { SHIRT_SIZES, CUSTOM_SHIRT_SIZE } from "@/features/registration/shirt-sizes";
 import { radarDataFrom, hasAnyRating } from "@/features/registration/radar";
-import { lookupCpfAction, submitRegistrationAction } from "./actions";
+import { extraTicketsCap } from "@/features/registration/extra-tickets";
+import type { SlotReservation } from "@/features/registration/slot";
+import { lookupCpfAction, submitRegistrationAction, reserveSlotAction } from "./actions";
 import StepShell from "./steps/StepShell";
+import SlotNotice from "./steps/SlotNotice";
 import SkillStars from "./steps/SkillStars";
 import UploadCard from "./steps/UploadCard";
 import PixPayment from "./steps/PixPayment";
@@ -29,6 +32,7 @@ export type WizardChampionship = {
   id: string; name: string; slug: string;
   base_price: number | null; extra_ticket_price: number | null;
   max_players: number | null; registration_image_url: string | null;
+  max_extra_tickets: number | null;
   registration_group_options: GroupOption[];
   pix_key: string | null;
   pix_merchant_name: string | null;
@@ -58,6 +62,7 @@ export default function RegistrationWizard({
   const [done, setDone] = useState<Record<number, boolean>>({});
   const [looking, setLooking] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [slot, setSlot] = useState<SlotReservation | null>(null);
 
   const isFull = championship.max_players != null && liveCount >= championship.max_players;
 
@@ -99,8 +104,10 @@ export default function RegistrationWizard({
 
   /** Roda o schema completo e recorta so o que pertence ao passo pedido. */
   function stepErrors(from: number) {
-    const parsed = makeRegistrationSchema(championship.registration_group_options)
-      .safeParse(buildPayload());
+    const parsed = makeRegistrationSchema(
+      championship.registration_group_options,
+      championship.max_extra_tickets,
+    ).safeParse(buildPayload());
     return parsed.success ? {} : errorsForStep(from, fieldErrorsFrom(parsed.error));
   }
 
@@ -122,6 +129,9 @@ export default function RegistrationWizard({
     // Sem menor de idade, o passo da carta nao existe e e pulado.
     const next = from + 1 === AUTHORIZATION_STEP && !minor ? from + 2 : from + 1;
     setStep(next);
+    // Renova a reserva a cada passo: quinze minutos contam a partir da ultima
+    // acao, nao do inicio. Sem isso, quem preenche com calma perde a vaga.
+    if (slot?.ok) void reserveSlotAction(championship.id, form.cpf).then(setSlot);
   }
 
   /**
@@ -179,6 +189,14 @@ export default function RegistrationWizard({
           profile_photo_link: p.profile_photo_link ?? "",
         }));
         toast.success("Encontramos você! Confira seus dados.");
+      }
+      const reservation = await reserveSlotAction(championship.id, form.cpf);
+      setSlot(reservation);
+      if (!reservation.ok) {
+        // Sem vaga nao ha o que preencher, e quem ja esta inscrito muito menos:
+        // deixar avancar so levaria a uma recusa depois do formulario inteiro.
+        // O aviso na faixa ja explica cada caso.
+        return;
       }
       advance(1);
     } catch {
@@ -287,7 +305,13 @@ export default function RegistrationWizard({
       <h1 className="text-xl font-extrabold text-[var(--gala-gold-2)] mb-1">Inscrição</h1>
       <p className="text-sm text-[var(--gala-ink-dim)] mb-4">{championship.name}</p>
 
-      {isFull && (
+      <SlotNotice slot={slot} />
+
+      {/* Some assim que a reserva responde: `liveCount` e uma contagem do
+          render do servidor e nao distingue principal de espera, entao com as
+          duas lotacoes cheias ele prometia lista de espera enquanto a faixa da
+          reserva — que sabe a verdade daquele CPF — dizia que esgotou. */}
+      {isFull && !slot && (
         <div className="mb-4 rounded-xl px-3 py-2 text-xs"
              style={{ background: "rgba(230,180,34,.1)", border: "1px solid rgba(230,180,34,.35)", color: "var(--gala-gold-2)" }}>
           ⚠︎ Vagas esgotadas — você entrará na LISTA DE ESPERA.
@@ -455,7 +479,9 @@ export default function RegistrationWizard({
               <button type="button" onClick={() => set("extra_tickets_count", Math.max(0, form.extra_tickets_count - 1))}
                       className="w-8 h-8 rounded-lg font-bold text-[#050507]" style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>–</button>
               <b>{form.extra_tickets_count}</b>
-              <button type="button" onClick={() => set("extra_tickets_count", form.extra_tickets_count + 1)}
+              <button type="button"
+                      onClick={() => set("extra_tickets_count",
+                        Math.min(extraTicketsCap(championship.max_extra_tickets), form.extra_tickets_count + 1))}
                       className="w-8 h-8 rounded-lg font-bold text-[#050507]" style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>+</button>
             </div>
           </div>
