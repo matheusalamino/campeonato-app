@@ -18,7 +18,7 @@ import { summarizeErrors } from "@/features/registration/error-summary";
 import { SHIRT_SIZES, CUSTOM_SHIRT_SIZE } from "@/features/registration/shirt-sizes";
 import { radarDataFrom, hasAnyRating } from "@/features/registration/radar";
 import { extraTicketsCap } from "@/features/registration/extra-tickets";
-import { canOpenStep, type SlotReservation } from "@/features/registration/slot";
+import { canOpenStep, isSlotVerdict, type SlotReservation } from "@/features/registration/slot";
 import { createLatestOnly } from "@/features/registration/latest-only";
 import { shouldRenewSlot, HEARTBEAT_INTERVAL_MS } from "@/features/registration/slot-keepalive";
 import { lookupCpfAction, submitRegistrationAction, reserveSlotAction } from "./actions";
@@ -192,16 +192,21 @@ export default function RegistrationWizard({
     // retry isso custa um RPC redundante sobre uma reserva recem-criada — o
     // sequenciador ordena os dois, e o preco e menor que o da assimetria.
     if (reservation?.ok) {
-      // Fixa o CPF do disparo: e ele que a reserva renovada passa a conhecer, e
-      // o heartbeat precisa continuar renovando o mesmo, nao o que o campo
-      // mostrar depois.
-      const cpf = form.cpf;
+      // O CPF da reserva viva, e nao `form.cpf`: o passo 1 continua reabrivel e
+      // o campo pode estar no meio de uma correcao. `normalizeCpf` no servidor
+      // so tira pontuacao, entao renovar o que esta no campo criaria uma segunda
+      // reserva para um CPF pela metade — queimando vaga de gente de verdade.
+      const cpf = reservedCpf.current;
+      if (!cpf) return;
       void latestOnly(() => reserveSlotAction(championship.id, cpf)).then(
         (renovada) => {
           // `null` quando outra reserva foi disparada enquanto esta voltava:
           // este resultado ja nasceu velho e nao pode mandar na navegacao.
           if (!renovada) return;
-          if (renovada.ok) reservedCpf.current = cpf;
+          // Mesma regra da batida de fundo: falha de chamada nao derruba reserva
+          // viva. Aqui o dano seria o mesmo — vermelho na faixa e pagamento
+          // trancado —, so que estourando no clique de quem estava so avancando.
+          if (!isSlotVerdict(renovada)) return;
           setSlot(renovada);
         },
         (erro) => {
@@ -332,7 +337,12 @@ export default function RegistrationWizard({
       lastRenew.current = Date.now();
       void latestOnly(() => reserveSlotAction(championship.id, cpf)).then(
         (renovada) => {
-          if (renovada) setSlot(renovada);
+          if (!renovada) return;
+          // Chamada que falhou volta RESOLVIDA como `error` — o ramo de baixo so
+          // pega rejeicao, que e o caso raro. Sem esta linha, a batida de fundo
+          // trocava uma reserva viva por um veredito que ninguem deu.
+          if (!isSlotVerdict(renovada)) return;
+          setSlot(renovada);
         },
         (erro) => {
           // Uma batida perdida nao mata a vaga: o intervalo cabe quase quatro
@@ -386,9 +396,9 @@ export default function RegistrationWizard({
      *
      * Mas a ida NAO credita o orcamento: mandar a aba para segundo plano nao e
      * sinal de que alguem esta ali. Se creditasse, bastaria a aba esquecida
-     * cair para o fundo para o teto de posse evaporar. Por isso `beat()`, que
-     * consulta a mesma politica, e nao `renew()` direto — passado o orcamento,
-     * a saida nao renova mais nada.
+     * cair para o fundo para o teto de posse evaporar. Por isso `beat()`, e nao
+     * `onActivity()` como na volta: os dois renovam, mas so um credita — e a
+     * simplificacao de usar o mesmo dos dois lados leva o teto junto.
      */
     const onVisibility = () => {
       if (document.visibilityState === "visible") onActivity();

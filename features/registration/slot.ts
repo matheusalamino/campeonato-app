@@ -61,3 +61,29 @@ export function canOpenStep(
   if (target === PAYMENT_STEP) return false;
   return done[target] === true;
 }
+
+/**
+ * Se este resultado tem autoridade para substituir uma reserva viva na tela.
+ *
+ * `error` nao tem: como diz `SlotReservation` la em cima, ele e a chamada que
+ * nao completou, e nao um veredito sobre vaga. Deixa-lo entrar no lugar de uma
+ * reserva boa troca a faixa por vermelho e, por `canOpenStep`, tranca o passo
+ * do pagamento — tudo isso enquanto a reserva segue viva no servidor, com
+ * quinze minutos pela frente. Um soluco de rede de 200ms nao pode fazer isso.
+ *
+ * Antes do heartbeat isso so acontecia num clique do jogador. Agora ha
+ * renovacao de fundo — inclusive uma disparada de proposito no instante em que
+ * ele sai para o app do banco, que e a chamada com mais chance de pegar a rede
+ * do celular no meio da troca. Ele voltaria do PIX para uma faixa vermelha e um
+ * passo trancado.
+ *
+ * Os outros continuam passando: `full`, `all_reserved`, `not_open`,
+ * `not_found` e `already_registered` sao veredito, e veredito precisa derrubar
+ * — e para isso que a reserva existe.
+ *
+ * Nao serve para a reserva inicial: la nao ha reserva boa a preservar, e quem
+ * levou um `error` precisa ve-lo para saber que vale tentar de novo.
+ */
+export function isSlotVerdict(reservation: SlotReservation): boolean {
+  return reservation.ok || reservation.reason !== "error";
+}

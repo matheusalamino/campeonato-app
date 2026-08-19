@@ -101,10 +101,8 @@ export type SlotCountdown =
  * meio minuto, e arredondar para cima virava "por mais 16 min" numa reserva de
  * quinze — um numero que nao existe, logo na frase que precisa ser confiavel.
  *
- * Zero e estado alcancavel: e o que sobra quando o orcamento de inatividade
- * acabou e ninguem mais renovou. Dizer que expirou e a unica leitura honesta —
- * e a saida e barata, porque qualquer toque volta a valer como sinal de vida e
- * dispara uma nova tentativa de reserva.
+ * Vencida e caso proprio, sem rotulo: quem mostra troca de elemento, e quem
+ * decide isso e o `SlotNotice`.
  */
 export function slotCountdown(expiresAt: string, nowMs: number): SlotCountdown | null {
   const deadline = Date.parse(expiresAt);

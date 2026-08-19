@@ -103,6 +103,22 @@ describe("shouldRenewSlot", () => {
   });
 });
 
+describe("os dois numeros com contrato fora deste arquivo", () => {
+  it("orcamento de inatividade espelha o TTL da reserva no banco", () => {
+    // `v_ttl` em supabase/migrations/20260818040000_reserve_registration_slot.sql
+    // e `interval '15 minutes'`. Nada em TS le esse valor, entao e este teste que
+    // segura o par: juntos eles formam o teto de tempo que uma aba abandonada
+    // segura a vaga (orcamento + TTL). Mudou la, tem que mudar aqui.
+    expect(IDLE_BUDGET_MS).toBe(15 * 60_000);
+  });
+
+  it("o piso entre renovacoes cabe muitas vezes no intervalo das batidas", () => {
+    // Se o piso alcancasse o intervalo, a batida periodica passaria a ser
+    // recusada por ele e o heartbeat viraria decoracao.
+    expect(MIN_RENEW_GAP_MS * 2).toBeLessThan(HEARTBEAT_INTERVAL_MS);
+  });
+});
+
 describe("slotCountdown", () => {
   const em = (ms: number) => slotCountdown(new Date(T0 + ms).toISOString(), T0);
   /** Estreita a uniao nos casos em que a assercao e sobre o rotulo. */
@@ -125,6 +141,9 @@ describe("slotCountdown", () => {
   it("troca de tom quando o tempo esta acabando", () => {
     expect(contando(10 * MIN).low).toBe(false);
     expect(contando(2 * MIN).low).toBe(true);
+    // Prende o limiar dos dois lados: so com o "logo acima" um limiar maior
+    // passaria despercebido, e o tom de urgencia apareceria com folga de sobra.
+    expect(contando(2 * MIN + 1000).low).toBe(false);
     expect(contando(90_000).label).toBe("Vaga reservada por mais 1 min");
   });
 

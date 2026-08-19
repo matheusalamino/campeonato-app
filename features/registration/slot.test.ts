@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { canOpenStep, type SlotReservation } from "./slot";
+import { canOpenStep, isSlotVerdict, type SlotReservation } from "./slot";
 import { PAYMENT_STEP, UNIFORM_STEP } from "./field-steps";
 
 const RESERVADA: SlotReservation = {
@@ -72,5 +72,25 @@ describe("canOpenStep", () => {
     // O passo 7 nao entra em `done` (o wizard passa `done={false}`), entao a
     // regra dos concluidos nao lhe abre a porta.
     expect(canOpenStep(7, ESGOTOU, TUDO_FEITO)).toBe(false);
+  });
+});
+
+describe("isSlotVerdict", () => {
+  it("falha de chamada nao derruba a reserva viva", () => {
+    // `error` e a chamada que nao completou. Numa batida de fundo ele pintaria a
+    // faixa de vermelho e trancaria o pagamento com a vaga intacta no servidor.
+    expect(isSlotVerdict(FALHOU)).toBe(false);
+  });
+
+  it("reserva boa e veredito, e substitui a anterior", () => {
+    expect(isSlotVerdict(RESERVADA)).toBe(true);
+  });
+
+  it("recusa de verdade derruba: e para isso que a reserva existe", () => {
+    expect(isSlotVerdict(ESGOTOU)).toBe(true);
+    expect(isSlotVerdict({ ok: false, reason: "all_reserved", retryAt: null })).toBe(true);
+    expect(isSlotVerdict({ ok: false, reason: "not_open" })).toBe(true);
+    expect(isSlotVerdict({ ok: false, reason: "not_found" })).toBe(true);
+    expect(isSlotVerdict({ ok: false, reason: "already_registered" })).toBe(true);
   });
 });
