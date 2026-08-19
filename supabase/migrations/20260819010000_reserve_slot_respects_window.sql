@@ -144,6 +144,22 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+-- O schema public concede EXECUTE a anon/authenticated por default privileges
+-- no momento da criacao da funcao -- REVOKE FROM PUBLIC sozinho nao basta,
+-- porque isso so remove o grant via a pseudo-role PUBLIC, nao os grants
+-- explicitos que anon/authenticated ja recebem. So o cliente service-role
+-- (createAdminClient() em services/public-registration.ts) deve chamar isto;
+-- sem o revoke por nome, qualquer um na internet forja CPFs via PostgREST e
+-- esgota max_players/max_waitlist com reservas falsas.
+--
+-- Repetido aqui, e nao herdado de 20260818040000: CREATE OR REPLACE preserva a
+-- ACL de uma funcao que ja existe, mas se este arquivo rodar sem que aquele
+-- tenha criado a funcao antes -- baseline squashada, drop manual, reordenacao
+-- -- ele a cria do zero, e ela nasce executavel por anon. Idempotente e de
+-- graca; a alternativa e reabrir um incidente que ja aconteceu uma vez.
+REVOKE ALL ON FUNCTION public.reserve_registration_slot(uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.reserve_registration_slot(uuid, text) FROM anon, authenticated;
+
 COMMENT ON FUNCTION public.reserve_registration_slot(uuid, text) IS
 'Reserva a vaga do jogador (por CPF) sob lock da linha do campeonato. So o
 cliente service-role deve chamar -- anon/authenticated nao tem EXECUTE.

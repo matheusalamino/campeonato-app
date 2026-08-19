@@ -99,6 +99,28 @@ $DB -c "UPDATE championships SET registration_start_date = NULL,
 r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000404')::text;")
 checar "data nula nao fecha nada" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
 
+# As bordas sao inclusivas: o admin que escolhe 23:59 espera aquele minuto
+# inteiro. UPDATE e chamada precisam ficar na MESMA transacao — now() e o
+# instante do BEGIN, entao os dois lados enxergam o mesmo relogio e a igualdade
+# e exata. Em transacoes separadas o tempo anda no meio e o teste vira ">= -1ms",
+# que nao distingue < de <=.
+preparar
+r=$($DB -c "
+  BEGIN;
+  UPDATE championships SET registration_start_date = now(),
+                           registration_end_date = NULL WHERE id='$CHAMP';
+  SELECT reserve_registration_slot('$CHAMP', '99900000405')::text;
+  COMMIT;" | grep '"success"')
+checar "no instante da abertura ja reserva" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+r=$($DB -c "
+  BEGIN;
+  UPDATE championships SET registration_start_date = NULL,
+                           registration_end_date = now() WHERE id='$CHAMP';
+  SELECT reserve_registration_slot('$CHAMP', '99900000406')::text;
+  COMMIT;" | grep '"success"')
+checar "no instante do encerramento ainda reserva" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
 echo "== concorrencia: duas transacoes disputando a ultima vaga =="
 preparar
 $DB -c "UPDATE championships SET max_players = 1, max_waitlist_players = 0 WHERE id='$CHAMP';" > /dev/null
