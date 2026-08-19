@@ -31,12 +31,17 @@
 --   migration NOVA. Nunca edite esta.
 -- O --silent nao e enfeite: sem ele o banner do npm entra dentro do arquivo.
 --
--- COMECE PELA ULTIMA SEXTA JA GRAVADA, NUNCA DEPOIS DELA. Sobrepor e seguro,
--- que o ON CONFLICT absorve a linha repetida; deixar vao nao e. Com um buraco
--- no meio, as linhas DEPOIS do vao ainda satisfazem `ends_at >= p_at`, o
--- segundo ramo de is_sabbath dispara, e a funcao responde "nao e sabado" para
--- todo sabado dentro do vao — caladamente, sem nunca chegar na regra
--- conservadora. E o modo de falha mais perigoso deste arquivo.
+-- COMECE PELA ULTIMA SEXTA JA GRAVADA, NUNCA DEPOIS DELA. Deixar vao e o modo
+-- de falha mais perigoso deste arquivo: com um buraco no meio, as linhas DEPOIS
+-- do vao ainda satisfazem `ends_at >= p_at`, o segundo ramo de is_sabbath
+-- dispara, e a funcao responde "nao e sabado" para todo sabado dentro do vao —
+-- caladamente, sem nunca chegar na regra conservadora.
+--
+-- Sobrepor, ao contrario, e seguro para ESTENDER a cobertura: o ON CONFLICT
+-- absorve a linha repetida. Mas nao serve para CORRIGIR uma linha ja gravada.
+-- Se a fonte do por do sol for revisada e a mesma starts_at voltar com outra
+-- ends_at, o DO NOTHING descarta a correcao sem avisar — nesse caso apague a
+-- linha velha antes de inserir a nova, na mesma migration.
 --
 -- HORARIO DE VERAO NAO E MOTIVO PARA REGERAR. As linhas sao instantes
 -- absolutos vindos de astronomia: se o Brasil reinstituir o DST, o por do sol

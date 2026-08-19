@@ -314,9 +314,17 @@ describe("toSqlRows", () => {
     // so aparece na hora de aplicar a migration. Agora a linha termina no
     // comentario, entao o que se checa e o SQL antes dele.
     const ultima = toSqlRows(JANELAS).split("\n").at(-1)!;
-    const sql = ultima.slice(0, ultima.indexOf(" --"));
+    const corte = ultima.indexOf(" --");
+    // Sem esta ancora, um comentario ausente daria corte = -1, o slice devolveria
+    // texto vazio, e as duas asserções abaixo virariam decoracao.
+    expect(corte).toBeGreaterThan(0);
+    const sql = ultima.slice(0, corte);
     expect(sql.endsWith(")")).toBe(true);
     expect(sql.endsWith("),")).toBe(false);
+    // E a virgula tambem nao pode estar escondida DEPOIS do comentario, onde o
+    // slice acima nao olha: para o Postgres ela sumiria junto com o comentario,
+    // mas para o proximo humano que colar uma linha embaixo ela nao existe.
+    expect(ultima.trimEnd().endsWith(",")).toBe(false);
   });
 
   it("poe a virgula antes do comentario, nunca depois", () => {
@@ -326,6 +334,12 @@ describe("toSqlRows", () => {
      * longe daqui, com a mensagem apontando para a linha seguinte.
      */
     const [primeira] = toSqlRows(JANELAS).split("\n");
+    // As duas ancoras vem antes da comparacao de propósito: `indexOf` devolve -1
+    // para o que nao existe, e -1 e menor que qualquer posicao. Sem elas, mover
+    // a virgula para depois do comentario (o exato mutante que este caso nomeia)
+    // sumiria com o `),`, daria -1, e o teste passaria verde.
+    expect(primeira).toContain("),");
+    expect(primeira).toContain(" --");
     expect(primeira.indexOf("),")).toBeLessThan(primeira.indexOf(" --"));
   });
 
