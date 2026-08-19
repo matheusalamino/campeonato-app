@@ -1,4 +1,5 @@
 import { CHAMPIONSHIP_TIME_ZONE } from "@/lib/datetime-br";
+import Countdown from "./steps/Countdown";
 
 /**
  * O link da inscricao circula por WhatsApp e Instagram, entao muita gente cai
@@ -21,6 +22,7 @@ export default function NotYetNotice({
       <p className="max-w-sm text-sm text-[var(--gala-ink-dim)]">
         As inscrições para <b>{name}</b> abrem em <b>{formattedOpensAt}</b>.
       </p>
+      <Countdown targetIso={opensAt} />
     </div>
   );
 }
