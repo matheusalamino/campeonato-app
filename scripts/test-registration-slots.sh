@@ -50,6 +50,11 @@ preparar() {
   " > /dev/null
 }
 
+# Fotografia da tabela global ANTES de qualquer cenario. A assercao que fecha o
+# ciclo esta no fim do arquivo -- leia o porque la antes de mexer aqui.
+sabbath_linhas_antes=$($DB -c "SELECT count(*) FROM sabbath_windows;")
+sabbath_cobrindo_antes=$($DB -c "SELECT count(*) FROM sabbath_windows WHERE now() BETWEEN starts_at AND ends_at;")
+
 # O cabecalho acima serve a quem LE o arquivo; este bloco serve a quem le a
 # SAIDA, que e onde a pessoa esta olhando quando a suite quebra. Sem bypass de
 # proposito: o aviso explica, nao perdoa -- os cenarios rodam todos e o script
@@ -309,6 +314,45 @@ r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid', '99900000502',
 checar "sem reserva, fora do prazo recusa" "not_open" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
 
 limpar
+
+# ASSERCAO, e nao limpeza, de proposito -- nao "conserte" isto para um DELETE.
+# Este script pode um dia ser apontado para um banco que nao e o local, e apagar
+# ali uma janela que cobre now() DESTRAVARIA a inscricao durante a observancia:
+# exatamente o dano que a feature inteira existe para impedir. Gritar e seguro;
+# consertar sozinho nao e.
+#
+# A rede do limpar() nao cobre este caso: ela so apaga starts_at >= '2098-01-01',
+# e uma janela cobrindo now() e do ano corrente por definicao. Esta assercao ja
+# pagou por si: uma linha viva ficou onze minutos na tabela porque um trap com
+# `|| true` engoliu o erro do DELETE. Foi a contagem que gritou, nao o trap.
+sabbath_linhas_depois=$($DB -c "SELECT count(*) FROM sabbath_windows;")
+sabbath_cobrindo_depois=$($DB -c "SELECT count(*) FROM sabbath_windows WHERE now() BETWEEN starts_at AND ends_at;")
+
+if [ "$sabbath_linhas_antes" != "$sabbath_linhas_depois" ] ||
+   [ "$sabbath_cobrindo_antes" != "$sabbath_cobrindo_depois" ]; then
+  echo ""
+  echo "==============================================================="
+  echo "  !!! sabbath_windows MUDOU DURANTE A EXECUCAO !!!"
+  echo ""
+  echo "  antes:  $sabbath_linhas_antes linhas, $sabbath_cobrindo_antes cobrindo now()"
+  echo "  depois: $sabbath_linhas_depois linhas, $sabbath_cobrindo_depois cobrindo now()"
+  echo ""
+  echo "  Esta tabela e GLOBAL, sem vinculo com campeonato. Uma linha"
+  echo "  de teste esquecida aqui PAUSA O SITE DE VERDADE; uma linha"
+  echo "  a menos DESTRAVA a inscricao durante a observancia."
+  echo ""
+  echo "  Ache a linha e remova por valor EXATO de starts_at:"
+  echo "    SELECT starts_at, ends_at FROM sabbath_windows"
+  echo "     WHERE now() BETWEEN starts_at AND ends_at;"
+  echo ""
+  echo "  O script NAO apaga sozinho, e isso e deliberado: se este"
+  echo "  banco nao for o local, apagar seria o dano, nao a correcao."
+  echo ""
+  echo "  (Se so o segundo numero mudou e a contagem bate, o por do"
+  echo "  sol pode ter virado no meio da execucao -- confira antes.)"
+  echo "==============================================================="
+  falhou=1
+fi
 
 if [ "$falhou" -eq 0 ]; then
   echo ""
