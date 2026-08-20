@@ -9,6 +9,7 @@ const RESERVADA: SlotReservation = {
 };
 const ESGOTOU: SlotReservation = { ok: false, reason: "full" };
 const FALHOU: SlotReservation = { ok: false, reason: "error" };
+const SABADO: SlotReservation = { ok: false, reason: "sabbath" };
 
 /** Quem chegou ao passo da revisao concluiu todos os anteriores. */
 const TUDO_FEITO = { 1: true, 2: true, 4: true, 5: true, 6: true };
@@ -32,6 +33,17 @@ describe("canOpenStep", () => {
     expect(canOpenStep(3, ESGOTOU, {})).toBe(false);
     expect(canOpenStep(4, ESGOTOU, {})).toBe(false);
     expect(canOpenStep(UNIFORM_STEP, ESGOTOU, {})).toBe(false);
+  });
+
+  it("com a pausa do sabado, fecha o pagamento e os passos do meio", () => {
+    // A pausa e veredito do servidor, nao soluco de rede: durante ela nem a
+    // reserva nem o commit passam. Abrir o pagamento aqui levaria o jogador a
+    // pagar o PIX por uma inscricao que a RPC vai recusar de qualquer jeito — o
+    // mesmo dano que esta guarda existe para evitar, so que sem nem a desculpa
+    // de a lotacao ter enchido.
+    expect(canOpenStep(PAYMENT_STEP, SABADO, {})).toBe(false);
+    expect(canOpenStep(2, SABADO, {})).toBe(false);
+    expect(canOpenStep(UNIFORM_STEP, SABADO, {})).toBe(false);
   });
 
   it("mantem o passo do CPF aberto, senao a falha de rede prende para sempre", () => {
@@ -84,6 +96,16 @@ describe("isSlotVerdict", () => {
 
   it("reserva boa e veredito, e substitui a anterior", () => {
     expect(isSlotVerdict(RESERVADA)).toBe(true);
+  });
+
+  it("a pausa do sabado derruba a reserva viva, ao contrario da falha", () => {
+    // Quem recebe `sabbath` esta preenchendo no instante do por do sol e leva a
+    // recusa pelo heartbeat, sem ter tocado em nada — do mesmo jeito que leva um
+    // `error`. Chegam pela mesma porta e precisam de respostas opostas: `error`
+    // nao sabe se ha vaga e nao pode derrubar reserva boa nenhuma; a pausa e
+    // resposta do servidor, e depois dela a reserva nao e mais renovada.
+    expect(isSlotVerdict(SABADO)).toBe(true);
+    expect(isSlotVerdict(FALHOU)).toBe(false);
   });
 
   it("recusa de verdade derruba: e para isso que a reserva existe", () => {

@@ -9,7 +9,7 @@ import { makeRegistrationSchema } from "@/features/registration/schema";
 import { computeTicketsTotal } from "@/features/registration/pricing";
 import { skillsFor } from "@/features/registration/skills";
 import { fieldErrorsFrom } from "@/features/registration/field-errors";
-import type { SlotReservation } from "@/features/registration/slot";
+import type { SlotReservation, SimpleRefusalReason } from "@/features/registration/slot";
 import type { SabbathWindow } from "@/features/registration/sabbath";
 import type { GroupOption } from "@/types/championship";
 
@@ -149,11 +149,32 @@ export async function checkLookupRateLimit(ip: string): Promise<boolean> {
   return true;
 }
 
-/** Razoes que a RPC declara no seu COMMENT, fora `all_reserved`, que tem forma propria. */
-const RPC_REASONS = ["not_found", "not_open", "already_registered", "full"] as const;
+/**
+ * Razoes que a RPC declara no seu COMMENT, fora `all_reserved`, que tem forma
+ * propria.
+ *
+ * O `Record<SimpleRefusalReason, true>` e o guarda, e nao enfeite: e ele que
+ * amarra esta tabela a uniao nos DOIS sentidos — chave a mais nao existe na
+ * uniao e o literal e recusado; chave a menos e propriedade faltando e o `tsc`
+ * cobra pelo nome. Uma lista solta so cobra o primeiro sentido, e e o segundo
+ * que faz estrago: `isKnownReason` e type guard, entao tirar uma razao daqui
+ * apenas o estreita, `{ ok: false, reason: result.reason }` continua atribuivel,
+ * nada falha — e a razao perdida passa a chegar na tela como `error`, que
+ * convida a tentar de novo. Para `sabbath` isso seria convidar a insistir
+ * durante 24h de pausa.
+ */
+const RPC_REASONS: Record<SimpleRefusalReason, true> = {
+  not_found: true,
+  not_open: true,
+  already_registered: true,
+  full: true,
+  sabbath: true,
+};
 
-function isKnownReason(value: unknown): value is (typeof RPC_REASONS)[number] {
-  return typeof value === "string" && (RPC_REASONS as readonly string[]).includes(value);
+function isKnownReason(value: unknown): value is SimpleRefusalReason {
+  // `Object.hasOwn`, e nao `value in RPC_REASONS`: `in` acha `toString` e
+  // `constructor` no prototipo e carimbaria lixo do JSON como razao conhecida.
+  return typeof value === "string" && Object.hasOwn(RPC_REASONS, value);
 }
 
 /**
@@ -193,7 +214,7 @@ export async function reserveSlot(
     return { ok: false, reason: "all_reserved", retryAt: result.retry_at ?? null };
   }
   // O `as` que estava aqui carimbava qualquer string vinda do JSON como uma das
-  // quatro razoes, entao uma razao nova na RPC — ou uma resposta malformada —
+  // razoes da tabela, entao uma razao nova na RPC — ou uma resposta malformada —
   // seria renderizada como um veredito que ninguem deu. Razao que nao esta na
   // lista e resposta que nao entendemos, e nao ha lotacao a declarar: `error`
   // convida a tentar de novo, que e a unica resposta honesta.
@@ -455,6 +476,25 @@ export async function submitRegistration(
   };
 
   if (!result.success) {
+    // Primeiro porque na RPC a pausa vem logo depois de achar o campeonato e
+    // antes de qualquer outra recusa, e ler os ramos na ordem dela ajuda quem
+    // for conferir — nao porque o codigo dependa disso: a RPC devolve uma razao
+    // so, entao estes `if` sao mutuamente exclusivos e trocar a ordem nao muda
+    // resposta nenhuma.
+    //
+    // Sem "tente novamente em instantes", que e o que as outras recusas dizem:
+    // a pausa vai ate o por do sol de sabado, e convidar a insistir por 24h e
+    // pior do que nao dizer nada. O que o jogador precisa saber e que nada foi
+    // gravado — ele acabou de tocar em "Enviar", possivelmente ja com o PIX
+    // pago — e onde esta o horario da volta, que quem sabe dizer e a tela de
+    // repouso, do outro lado do recarregamento.
+    if (result.reason === "sabbath") {
+      return {
+        ok: false,
+        error:
+          "As inscrições entraram em repouso para o sábado e sua inscrição não foi gravada. Recarregue a página para ver o horário da volta.",
+      };
+    }
     if (result.reason === "already_registered") {
       return { ok: false, error: "Você já está inscrito neste campeonato.", alreadyRegistered: true };
     }

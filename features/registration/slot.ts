@@ -1,6 +1,27 @@
 import { PAYMENT_STEP } from "./field-steps";
 
 /**
+ * Razoes de recusa que cabem inteiras no nome, sem dado nenhum junto.
+ *
+ * Tem nome proprio, em vez de continuar solta dentro da uniao, porque o servico
+ * amarra a ela a tabela de razoes que aceita da RPC — e sem esse elo tirar uma
+ * razao de la nao quebra nada: o type guard so fica mais estreito, a atribuicao
+ * continua valida, e a razao perdida vira `error` na tela de quem a recebeu.
+ *
+ * `sabbath` e a pausa de sabado, do por do sol de sexta ao de sabado —
+ * observancia religiosa da comunidade, e nao configuracao de campeonato. Vem
+ * das duas RPCs com razao propria de proposito: dobra-la em `not_open` faria a
+ * faixa dizer "as inscricoes nao estao abertas", que e justo a frase vaga que a
+ * tela de repouso existe para substituir.
+ */
+export type SimpleRefusalReason =
+  | "not_found"
+  | "not_open"
+  | "already_registered"
+  | "full"
+  | "sabbath";
+
+/**
  * Resultado de reservar a vaga do jogador.
  *
  * Vive aqui, e nao no servico, porque o componente que mostra o estado da vaga
@@ -14,7 +35,7 @@ import { PAYMENT_STEP } from "./field-steps";
  */
 export type SlotReservation =
   | { ok: true; isWaitlist: boolean; expiresAt: string }
-  | { ok: false; reason: "not_found" | "not_open" | "already_registered" | "full" }
+  | { ok: false; reason: SimpleRefusalReason }
   | { ok: false; reason: "all_reserved"; retryAt: string | null }
   | { ok: false; reason: "error" };
 
@@ -78,8 +99,14 @@ export function canOpenStep(
  * passo trancado.
  *
  * Os outros continuam passando: `full`, `all_reserved`, `not_open`,
- * `not_found` e `already_registered` sao veredito, e veredito precisa derrubar
- * — e para isso que a reserva existe.
+ * `not_found`, `already_registered` e `sabbath` sao veredito, e veredito
+ * precisa derrubar — e para isso que a reserva existe.
+ *
+ * `sabbath` e o caso em que isso pesa mais: quem chega nele esta preenchendo no
+ * instante do por do sol e recebe a recusa pelo heartbeat, sem ter tocado em
+ * nada. A partir dali a RPC nao renova mais a reserva, entao ela morre em ate
+ * um TTL — manter a faixa dourada prometendo "sua vaga esta garantida" seria a
+ * tela sustentando uma promessa que o servidor ja retirou.
  *
  * Nao serve para a reserva inicial: la nao ha reserva boa a preservar, e quem
  * levou um `error` precisa ve-lo para saber que vale tentar de novo.
