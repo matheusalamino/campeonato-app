@@ -71,8 +71,13 @@ describe("a tela de repouso do sabado", () => {
     expect(container).toContain("pointer-events-none");
   });
 
-  it("todo link externo sai com noopener noreferrer", () => {
-    const externos = [...overlay.matchAll(/<a\b[^>]*target="_blank"[^>]*>/g)].map((m) => m[0]);
+  it("todo link externo das duas telas sai com noopener noreferrer", () => {
+    // Varre os dois arquivos, e nao so o overlay: hoje o SabbathVideo nao tem
+    // link, mas "abrir no YouTube" e o botao mais obvio a nascer ali, e um teste
+    // que so olha o overlay ficaria verde sem nunca ter visto o link novo.
+    const externos = [overlay, video].flatMap((fonte) =>
+      [...fonte.matchAll(/<a\b[^>]*target="_blank"[^>]*>/g)].map((m) => m[0]),
+    );
     expect(externos.length).toBeGreaterThan(0);
     expect(externos.filter((tag) => !tag.includes('rel="noopener noreferrer"'))).toEqual([]);
   });
@@ -89,5 +94,26 @@ describe("a tela de repouso do sabado", () => {
     expect(video).not.toContain("youtube.com");
     // O outro dominio da capa, que nao tem "youtube" no nome.
     expect(video).not.toContain("ytimg");
+  });
+
+  /**
+   * A outra metade da fachada, e a que o titulo acima ja prometia sem cobrir.
+   *
+   * `useState(false)` -> `useState(true)` monta o iframe no primeiro paint: o
+   * visitante entrega IP e request ao Google ANTES de qualquer clique, que e o
+   * dano exato que a fachada existe para evitar. Passa no `tsc`, no eslint e na
+   * suite inteira, e a tela continua parecendo funcionar — so que o botao some
+   * e o video ja esta la. E invisivel pelo mesmo criterio dos casos acima.
+   */
+  it("comeca fechado — o iframe so existe depois do clique", () => {
+    expect(video).toContain("useState(false)");
+    expect(video).not.toContain("useState(true)");
+
+    // E o iframe fica mesmo atras da guarda, e nao solto no corpo do
+    // componente: sem isto, trocar o `if (playing)` por um render incondicional
+    // passaria mesmo com o estado inicial certo.
+    const guarda = video.indexOf("if (playing)");
+    expect(guarda).toBeGreaterThan(0);
+    expect(video.indexOf("<iframe")).toBeGreaterThan(guarda);
   });
 });

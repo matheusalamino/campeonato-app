@@ -2,12 +2,12 @@ import RegistrationWizard, { type WizardChampionship } from "./RegistrationWizar
 import Countdown from "./steps/Countdown";
 import SabbathVideo from "./steps/SabbathVideo";
 import { verseForSabbath } from "@/features/registration/sabbath-verses";
-import { brasiliaParts, CHAMPIONSHIP_TIME_ZONE } from "@/lib/datetime-br";
+import { announceableEndsAt } from "@/features/registration/sabbath-return";
+import { CHAMPIONSHIP_TIME_ZONE } from "@/lib/datetime-br";
 
-/** `dow` de `brasiliaParts`, onde 0 e domingo. */
-const SATURDAY = 6;
-
-/** "sábado, 22/08/2026, 20:15" — com o dia da semana, em horário de Brasília. */
+// A amostra entre aspas e texto de UI, e por isso mantem os acentos; a prosa
+// depois dela segue a convencao dos comentarios, sem acento.
+/** "sábado, 22/08/2026, 20:15" — com o dia da semana, em horario de Brasilia. */
 function formatEndsAt(endsAt: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
     timeZone: CHAMPIONSHIP_TIME_ZONE,
@@ -15,37 +15,6 @@ function formatEndsAt(endsAt: string): string {
     day: "2-digit", month: "2-digit", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   }).format(new Date(endsAt));
-}
-
-/**
- * O `endsAt` em que da para confiar a ponto de ANUNCIAR o dia da semana.
- *
- * O dia da semana nao e decoracao aqui: o sabado vai do por do sol de sexta ao
- * de sabado, entao a inscricao volta sempre num SABADO. Uma tela dizendo "voltam
- * quinta-feira" contradiz, com toda a confianca, a propria razao de a pausa
- * existir — e quem le conclui que ou o site esta quebrado ou a observancia e
- * negociavel.
- *
- * Nos dois caminhos reais o dia bate: as 178 linhas de `sabbath_windows`
- * terminam no por do sol de um sabado, e a regra conservadora termina no sabado
- * as 20h30. Nao cair num sabado significa dado corrompido — e a resposta certa
- * para dado corrompido nao e um dia errado com ar de certeza, e sim a mesma
- * copia honesta do override manual, que ja existe logo abaixo para o caso em
- * que ninguem sabe a hora.
- *
- * Le o dia por `brasiliaParts`, e nao por `getUTCDay()`, porque o servidor roda
- * em UTC: um por do sol de sabado as 21h de Brasilia ja e domingo em UTC, e a
- * guarda recusaria justamente o dado bom.
- *
- * `Date` invalido cai junto, pelo mesmo motivo — e porque `brasiliaParts` LANCA
- * nesse caso, e derrubar a pagina de repouso por causa de uma string podre
- * seria trocar um texto errado por tela nenhuma.
- */
-function announceableEndsAt(endsAt: string | null): string | null {
-  if (!endsAt) return null;
-  const instant = new Date(endsAt);
-  if (Number.isNaN(instant.getTime())) return null;
-  return brasiliaParts(instant).dow === SATURDAY ? endsAt : null;
 }
 
 /**
@@ -74,6 +43,14 @@ export default function RestOverlay({
   // Um so ponto de decisao: sem horario anunciavel, a tela inteira — texto e
   // contagem — cai no ramo honesto, em vez de misturar meia promessa com meia
   // duvida.
+  //
+  // O preco, registrado: sem `Countdown` nao ha `router.refresh()`, entao o ramo
+  // honesto nao se recupera sozinho — quem esta nele recarrega na mao. Para o
+  // override manual isso ja era verdade e continua certo (quem decide a volta e
+  // um humano no admin). Para `endsAt` nao-nulo e nao-sabado e uma perda de
+  // verdade: a hora E conhecida e ainda assim nada recarrega. Defensavel porque
+  // aquele valor so aparece com dado corrompido, e contar para um instante que
+  // nao merece ser anunciado seria confiar nele pela porta dos fundos.
   const returnsAt = announceableEndsAt(endsAt);
 
   return (
