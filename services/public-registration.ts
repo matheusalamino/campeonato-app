@@ -218,17 +218,25 @@ export async function reserveSlot(
  *
  * `vitest.config.ts` inclui `lib/**`, `features/**` e `scripts/**`; `services/**`
  * esta de fora, entao um teste escrito aqui nem rodaria. Nada segura o `gte`, a
- * coluna filtrada, o `ascending`, o `limit` ou o `try/catch`. Duas edicoes
+ * coluna filtrada, o `ascending`, o `limit` ou o `try/catch`. TRES edicoes
  * erram para o LADO PROIBIDO sem quebrar teste nenhum:
  *
  *   1. filtrar `starts_at` em vez de `ends_at`;
- *   2. inverter o `ascending`.
+ *   2. inverter o `ascending`;
+ *   3. trocar o `.gte` por `.gt`.
  *
- * As duas fazem a consulta devolver uma janela FUTURA durante o sabado.
- * `isSabbath` entao responde "nao e sabado" — porque janela futura significa
- * exatamente isso — e o site ABRE a inscricao no sabado, caladamente, sem nunca
- * chegar na regra conservadora. A unica defesa hoje e revisao humana: quem for
- * editar esta consulta precisa ler isto ANTES de editar.
+ * As duas primeiras fazem a consulta devolver uma janela FUTURA durante todo o
+ * sabado. `isSabbath` entao responde "nao e sabado" — porque janela futura
+ * significa exatamente isso — e o site ABRE a inscricao no sabado, caladamente,
+ * sem nunca chegar na regra conservadora.
+ *
+ * A terceira tem alcance minusculo e a mesma direcao: `.gt` descarta a janela
+ * corrente no instante exato de `ends_at`, devolve a proxima, e abre a
+ * inscricao no segundo do por do sol — justamente a borda inclusiva que este
+ * modulo e o `is_sabbath` do SQL defendem espelhados.
+ *
+ * A lista vale como checklist antes de editar, entao precisa ser exaustiva:
+ * "duas" convidaria a achar que acabou. A unica defesa hoje e revisao humana.
  *
  * O que ESTA contido: trocar o mapeamento (`startsAt: data.ends_at`) sempre
  * produz uma janela com `end < start`, e a guarda de janela invertida em

@@ -63,9 +63,9 @@ const inputOk = "border-white/10 focus:border-[var(--gala-gold-2)]";
 const inputError = "border-red-400/70 focus:border-red-400";
 
 /**
- * `sunsetAt` ja entra no contrato, mas ainda nao e lido: so a pagina sabe o
- * proximo por do sol, e exigir a prop agora garante que ela chegue aqui antes
- * de quem esta preenchendo precisar do aviso.
+ * `sunsetAt` ja entra no contrato, mas ainda nao e lido: o wizard nao calcula o
+ * por do sol, recebe. A pagina manda o proximo; o `RestOverlay` manda `null`,
+ * porque o wizard borrado ao fundo dele nao tem ninguem para avisar.
  */
 export default function RegistrationWizard({
   championship, liveCount,

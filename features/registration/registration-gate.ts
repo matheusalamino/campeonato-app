@@ -1,3 +1,5 @@
+import type { SabbathPause } from "./sabbath";
+
 /**
  * O que a pagina de inscricao mostra.
  *
@@ -12,9 +14,6 @@ export type RegistrationGate =
   | { view: "not_yet"; opensAt: string }
   | { view: "ended_by_deadline"; endedAt: string }
   | { view: "ended_by_capacity" };
-
-/** A pausa vigente, quando ha uma. `endsAt` e quando ela termina. */
-export type SabbathPause = { endsAt: string };
 
 export type GateChampionship = {
   status?: string | null;

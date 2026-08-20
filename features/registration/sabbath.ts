@@ -186,9 +186,10 @@ export function sabbathEndsAt(now: Date, window: SabbathWindow | null): string {
  *
  * Atencao para quem for montar a tela: DURANTE a pausa os dois ramos discordam.
  * Com janela devolve um inicio ja passado, e `sunsetAlert` le "cutoff"; sem
- * janela, num sabado, devolve `null` e le "none". Nao e alcancavel enquanto a
- * pagina passar `null` enquanto esta pausada — mas isso e escolha de quem
- * chama, nao garantia deste modulo.
+ * janela, num sabado, devolve `null` e le "none". Isso deixou de depender de
+ * quem chama: `sabbathStatus`, logo abaixo, e o unico caminho da pagina ate
+ * aqui, e ele nao pergunta o inicio enquanto a pausa vale. A divergencia
+ * continua existindo nesta funcao, mas ficou inalcancavel por construcao.
  */
 export function sabbathStartsAt(now: Date, window: SabbathWindow | null): string | null {
   const parsed = parseWindow(window);
@@ -198,29 +199,44 @@ export function sabbathStartsAt(now: Date, window: SabbathWindow | null): string
   return brasiliaAt(date, SABBATH_FALLBACK_START);
 }
 
-/** O que a pagina precisa saber sobre a pausa: o veredito e o proximo por do sol. */
-export type SabbathView = { pause: { endsAt: string } | null; sunsetAt: string | null };
+/** A pausa vigente, quando ha uma. `endsAt` e quando ela termina. */
+export type SabbathPause = { endsAt: string };
+
+/**
+ * O que a pagina precisa saber sobre a pausa: o veredito e o proximo por do sol.
+ *
+ * Uniao discriminada, e nao um par de campos independentes, pelo mesmo motivo
+ * do `RegistrationGate`: a combinacao proibida — pausado E com por do sol a
+ * anunciar — deixa de ser coisa que um comentario pede e passa a ser coisa que
+ * o compilador recusa.
+ */
+export type SabbathStatus =
+  | { pause: SabbathPause; sunsetAt: null }
+  | { pause: null; sunsetAt: string | null };
 
 /**
  * A decisao inteira da pagina sobre o sabado, num lugar so.
  *
  * Existe porque a alternativa nao tem rede. Montada a mao no Server Component,
- * a regra vira tres expressoes soltas que nenhum teste alcanca — e a pior delas
- * passa no `tsc` sem reclamar: chamar `sabbathEndsAt` sem antes perguntar
- * `isSabbath` faz o gate devolver `rest` para TODO campeonato, em qualquer dia,
- * e a inscricao morre calada.
+ * a regra vira expressoes soltas que nenhum teste de comportamento alcanca — e
+ * a pior delas passa no `tsc` sem reclamar: chamar `sabbathEndsAt` sem antes
+ * perguntar `isSabbath` devolve `rest` para todo campeonato QUE ESTARIA NO
+ * WIZARD, em qualquer dia, e a inscricao morre calada. Nao e "todo campeonato":
+ * a ordem do gate mantem `draft`, lotado e prazo vencido nos seus proprios
+ * desfechos, e generalizar isso seria repetir no comentario o exagero que
+ * motivou a reordenacao.
  *
  * `sunsetAt` e null durante a pausa, e essa e a invariante que esta funcao
  * existe para guardar: quem ja esta pausado ve a tela de repouso, com a
  * contagem do FIM; o por do sol so interessa a quem ainda esta preenchendo.
+ * Quem trava a invariante e a uniao acima; aqui ela so e escrita uma vez.
  *
- * Ela tambem fecha aqui dentro a precondicao que os docblocks de
- * `sabbathEndsAt` e `sabbathStartsAt` avisam depender de quem chama. Com esta
- * funcao no meio, deixa de depender: `sabbathEndsAt` so e alcancado depois de
- * `isSabbath` dizer `true`, e o ramo em que os dois discordam durante a pausa
- * fica inalcancavel por construcao, nao por disciplina de quem chama.
+ * Ela tambem fecha a precondicao que o docblock de `sabbathEndsAt` descreve:
+ * `sabbathEndsAt` so e alcancado depois de `isSabbath` dizer `true`, entao o
+ * ramo em que os dois discordam durante a pausa fica inalcancavel por
+ * construcao, e nao por disciplina de quem chama.
  */
-export function sabbathView(now: Date, window: SabbathWindow | null): SabbathView {
+export function sabbathStatus(now: Date, window: SabbathWindow | null): SabbathStatus {
   if (isSabbath(now, window)) {
     return { pause: { endsAt: sabbathEndsAt(now, window) }, sunsetAt: null };
   }
