@@ -70,6 +70,12 @@ BEGIN
   -- "as inscricoes nao estao abertas", que num sabado e justo a frase vaga que
   -- a tela de repouso existe para substituir.
   --
+  -- Consequencia que o bloco da janela (acima) tem e este repete: como esta
+  -- checagem fica ACIMA do ramo que renova reserva viva, durante a pausa o
+  -- heartbeat tambem para de renovar, e reserva viva no por do sol morre em ate
+  -- um TTL. Importa para o commit, cuja regra e oposta: quem reservou 17h e
+  -- termina o formulario 17h50 chega la SEM reserva viva.
+  --
   -- DEPOIS de status e janela, e ANTES de already_registered, e a ordem importa
   -- nas duas pontas:
   --
@@ -94,9 +100,9 @@ BEGIN
     RETURN json_build_object('success', false, 'reason', 'sabbath');
   END IF;
 
-  -- Antes de tudo: quem ja esta inscrito tomaria uma vaga que nunca vai usar, e
-  -- ela so voltaria quinze minutos depois. E ele merece saber no primeiro passo,
-  -- nao depois de preencher o formulario inteiro.
+  -- Antes da poda e da contagem: quem ja esta inscrito tomaria uma vaga que
+  -- nunca vai usar, e ela so voltaria quinze minutos depois. E ele merece saber
+  -- no primeiro passo, nao depois de preencher o formulario inteiro.
   IF EXISTS (
     SELECT 1
       FROM public.championship_registrations cr

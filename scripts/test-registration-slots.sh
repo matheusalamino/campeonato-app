@@ -66,14 +66,39 @@ sabbath_cobrindo_antes=$($DB -c "SELECT count(*) FROM sabbath_windows WHERE now(
 # proposito: o aviso explica, nao perdoa -- os cenarios rodam todos e o script
 # continua saindo com 1 se falhar.
 if [ "$($DB -c "SELECT is_sabbath(now());" | tr -d ' ')" = "t" ]; then
+  # is_sabbath(now()) fica verdadeiro por DOIS motivos: uma linha de
+  # sabbath_windows cobrindo agora, ou a regra conservadora quando a tabela nao
+  # alcanca. E a linha pode ser LIXO DE TESTE -- ja aconteceu, numa quinta-feira,
+  # com uma janela de 09:00 as 10:11 inserida para conferir a tela no navegador.
+  # Nesse estado "rode depois do por do sol" manda o dev esperar um por do sol
+  # que nao limpa nada. Por isso o banner IMPRIME a janela: quem le decide se
+  # aquilo e um sabado ou sujeira. A guarda do fim do arquivo nao cobre este
+  # caso -- ela compara antes/depois, e linha ja presente na largada passa muda.
+  janela=$($DB -c "SELECT to_char(starts_at AT TIME ZONE 'America/Sao_Paulo', 'Dy DD/MM HH24:MI') || '  ->  ' || to_char(ends_at AT TIME ZONE 'America/Sao_Paulo', 'Dy DD/MM HH24:MI') || '   (' || round(extract(epoch FROM (ends_at - starts_at)) / 3600)::text || 'h)' FROM sabbath_windows WHERE now() BETWEEN starts_at AND ends_at ORDER BY starts_at LIMIT 1;")
   echo "==============================================================="
-  echo "  ATENCAO: ESTA SUITE ESTA RODANDO DURANTE A PAUSA DE SABADO."
+  echo "  ATENCAO: is_sabbath(now()) ESTA VERDADEIRO AGORA."
   echo ""
   echo "  reserve_registration_slot chama is_sabbath(now()) e nao tem"
-  echo "  relogio injetavel, entao ate o por do sol de sabado TODA"
-  echo "  reserva devolve 'sabbath'. As falhas que voce vai ver em"
-  echo "  cenarios sem relacao com a pausa sao ESPERADAS -- elas nao"
-  echo "  sao regressao, e nao ha nada para consertar no codigo."
+  echo "  relogio injetavel, entao TODA reserva devolve 'sabbath'. As"
+  echo "  falhas em cenarios sem relacao com a pausa sao ESPERADAS --"
+  echo "  nao sao regressao, e nao ha o que consertar no codigo."
+  echo ""
+  if [ -n "$janela" ]; then
+    echo "  Quem esta pausando (horario de Brasilia):"
+    echo "    $janela"
+    echo ""
+    echo "  >>> CONFIRA ESSA JANELA ANTES DE IR EMBORA. Sabado de"
+    echo "  verdade dura ~24h e TERMINA NUM SABADO. Se o que voce leu"
+    echo "  acima for curto, ou terminar noutro dia da semana, e linha"
+    echo "  de TESTE esquecida na tabela -- e ai esperar o por do sol"
+    echo "  nao resolve nada. Remova por valor exato de starts_at:"
+    echo "    DELETE FROM sabbath_windows WHERE starts_at = '<acima>';"
+  else
+    echo "  Nenhuma linha de sabbath_windows alcanca agora: quem pausa"
+    echo "  e a REGRA CONSERVADORA (sexta 17h a sabado 20h30), que so"
+    echo "  vale depois que a tabela acaba, em 2029. Se ainda nao e"
+    echo "  2030, isso e sinal de tabela vazia ou nao aplicada."
+  fi
   echo ""
   echo "  Seguem validos os cenarios que montam a janela DENTRO de"
   echo "  uma transacao. Os dois controles ('fora do sabado ...')"
@@ -81,10 +106,11 @@ if [ "$($DB -c "SELECT is_sabbath(now());" | tr -d ' ')" = "t" ]; then
   echo "  entao ha FALHOU dentro das proprias secoes de sabado, e"
   echo "  ali tambem e esperado."
   echo ""
-  echo "  Para uma leitura limpa, rode de novo depois do por do sol."
-  echo "  Nao existe flag para desligar a trava, e isso e deliberado:"
-  echo "  porta dos fundos em trava de observancia fica ligada por"
-  echo "  engano, e o custo de nao ter e exatamente este aviso."
+  echo "  Se a janela acima for mesmo um sabado, rode de novo depois"
+  echo "  do por do sol. Nao existe flag para desligar a trava, e isso"
+  echo "  e deliberado: porta dos fundos em trava de observancia fica"
+  echo "  ligada por engano, e o custo de nao ter e exatamente este"
+  echo "  aviso."
   echo "==============================================================="
   echo ""
 fi
