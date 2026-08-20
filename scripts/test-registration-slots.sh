@@ -8,11 +8,12 @@
 # sabado a suite falha inteira, e nao por regressao: reserve_registration_slot e
 # commit_registration chamam is_sabbath(now()), sem relogio injetavel, entao
 # TODA reserva e TODO commit devolvem `sabbath`. Medido com uma janela cobrindo
-# now(): 17 das 30 assertivas falham. Passam os cenarios que montam a janela
-# DENTRO de uma transacao; falham os TRES controles que dependem do relogio de
+# now(): 18 das 32 assertivas falham. Passam os cenarios que montam a janela
+# DENTRO de uma transacao; falham os QUATRO controles que dependem do relogio de
 # fora ("fora do sabado a reserva segue normal", "fora do sabado o ja inscrito
-# ouve already_registered" e "sem sabado, a mesma reserva grava") -- ou seja, ha
-# FALHOU dentro das proprias secoes de sabado, e isso e esperado. Se quebrar
+# ouve already_registered", "sem sabado, a mesma reserva grava" e "fora do
+# sabado, o prazo vencido responde not_open") -- ou seja, ha cenarios quebrados
+# dentro das proprias secoes de sabado, e isso e esperado. Se quebrar
 # tudo de uma vez numa sexta a noite, olhe o relogio antes de olhar o codigo --
 # o script avisa em tempo de execucao quando esse for o caso.
 set -e
@@ -103,13 +104,16 @@ if [ "$($DB -c "SELECT is_sabbath(now());" | tr -d ' ')" = "t" ]; then
     echo "  2030, isso e sinal de tabela vazia ou nao aplicada."
   fi
   echo ""
+  # NUNCA comece uma linha deste banner com a palavra de falha: quem mede a
+  # suite com `grep -c "^  FALHOU "` passa a contar o TEXTO DO AVISO como se
+  # fosse um cenario quebrado. Ja aconteceu -- inflou a contagem em exatamente
+  # 1 e mandou procurar uma regressao que nao existia.
   echo "  Seguem validos os cenarios que montam a janela DENTRO de"
-  echo "  uma transacao. Os TRES controles que leem o relogio de"
-  echo "  fora NAO ('fora do sabado a reserva segue normal', 'fora"
-  echo "  do sabado o ja inscrito ouve already_registered' e 'sem"
-  echo "  sabado, a mesma reserva grava'): falham agora, entao ha"
-  echo "  FALHOU dentro das proprias secoes de sabado, e ali"
-  echo "  tambem e esperado."
+  echo "  uma transacao. Os QUATRO controles que leem o relogio de"
+  echo "  fora NAO: eles esperam a resposta de um dia comum e agora"
+  echo "  recebem 'sabbath', entao ha linhas de falha dentro das"
+  echo "  proprias secoes de sabado -- e ali tambem e esperado."
+  echo "  (Sao os cenarios 'fora do sabado ...' e 'sem sabado ...'.)"
   echo ""
   echo "  Se a janela acima for mesmo um sabado, rode de novo depois"
   echo "  do por do sol. Nao existe flag para desligar a trava, e isso"
@@ -419,6 +423,57 @@ r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid', '99900000701',
       '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0}'::jsonb,
       '{\"visao\":4}'::jsonb)::text;")
 checar "sem sabado, a mesma reserva grava" "true" "$(echo "$r" | sed 's/.*\"success\" : \([a-z]*\).*/\1/')"
+
+# A OUTRA metade da precedencia, e a que mais precisa de trava: aqui `sabbath`
+# ganha de `not_open`, e em reserve_registration_slot e o CONTRARIO. Ler as duas
+# funcoes lado a lado parece descuido; nao e.
+#
+# Na reserva, not_open ganha porque "volte apos o por do sol" seria mentira num
+# campeonato encerrado -- voltar no domingo nao abriria porta nenhuma. Aqui a
+# checagem fica no TOPO da funcao, e nao logo antes do INSERT, porque no topo
+# ela cobre TODA escrita abaixo dela -- inclusive a que alguem acrescentar no
+# futuro. As duas posicoes tem modo de falha para edicao futura, mas os danos
+# sao de ordens diferentes:
+#
+#   topo          -> pior caso: jogador com prazo vencido ouve "volte apos o
+#                    por do sol". Cosmetico, e so alcancavel chamando a server
+#                    action direto -- no sabado a pagina mostra a tela de
+#                    repouso, e fora dele mostra o prazo encerrado.
+#   antes do INSERT -> pior caso: uma escrita nova, acrescentada acima da
+#                    checagem, acontece DURANTE O SABADO. O pecado capital.
+#
+# Falhar fechado cedo ganha, e por isso a divergencia e ESCOLHIDA. Sem este
+# cenario, quem "harmonizar" as duas funcoes move a checagem para perto do
+# INSERT e quebra a precedencia em silencio -- que e o dano de verdade, muito
+# pior que a promessa falsa.
+echo "== no commit, o sabado ganha do prazo =="
+preparar
+$DB -c "INSERT INTO players (cpf, name) VALUES ('99900000702', 'Prazo vencido A6');" > /dev/null
+pid=$($DB -c "SELECT id FROM players WHERE cpf='99900000702';")
+$DB -c "UPDATE championships SET registration_end_date = now() - interval '1 day' WHERE id='$CHAMP';" > /dev/null
+
+# Controle PRIMEIRO, e ele nao e enfeite: `sabbath` e a PRIMEIRA checagem da
+# funcao, entao o cenario de baixo responderia 'sabbath' mesmo com o prazo
+# ABERTO -- e nao teria provado precedencia nenhuma. E este controle que fixa
+# que o prazo esta mesmo vencido no mesmo instante. Nenhuma das duas chamadas
+# grava, entao rodar as duas com o mesmo CPF e seguro.
+r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid', '99900000702',
+      '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0}'::jsonb,
+      '{\"visao\":4}'::jsonb)::text;")
+checar "fora do sabado, o prazo vencido responde not_open" "not_open" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+saida=$($DB <<SQL
+BEGIN;
+INSERT INTO sabbath_windows (starts_at, ends_at)
+VALUES (now() - interval '1 hour', now() + interval '1 hour');
+SELECT commit_registration('$CHAMP', '$pid', '99900000702',
+  '{"group_affiliation":"G","shirt_size":"M","profile_photo_link":"http://x/y.jpg","tickets_total":0}'::jsonb,
+  '{"visao":4}'::jsonb)::text;
+ROLLBACK;
+SQL
+)
+r=$(echo "$saida" | grep '"success"')
+checar "prazo vencido E sabado, sabbath ganha (divergencia deliberada da reserva)" "sabbath" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
 
 # =============================================================================
 # Lacuna HERDADA, e nao especifica de uma task: TODOS os cenarios acima rodam
