@@ -7,10 +7,11 @@
 # NAO RODE ISTO DURANTE UM SABADO DE VERDADE — do por do sol de sexta ao de
 # sabado a suite falha inteira, e nao por regressao: reserve_registration_slot
 # chama is_sabbath(now()), sem relogio injetavel, entao TODA reserva devolve
-# `sabbath` e uns treze cenarios que nao tem nada a ver com a pausa quebram
-# junto. Os casos de pausa daqui contornam isso com janela temporaria em
-# transacao, mas o resto da suite nao tem como. Se quebrar tudo de uma vez numa
-# sexta a noite, olhe o relogio antes de olhar o codigo.
+# `sabbath`. Medido com uma janela cobrindo now(): 15 das 25 assertivas falham,
+# e as 4 da propria pausa continuam passando, porque montam a janela dentro de
+# uma transacao e nao dependem do relogio de fora. Se quebrar tudo de uma vez
+# numa sexta a noite, olhe o relogio antes de olhar o codigo -- o script avisa
+# em tempo de execucao quando esse for o caso.
 set -e
 
 DB="docker exec -i supabase_db_campeonato-app psql -U postgres -d postgres -tA"
@@ -48,6 +49,31 @@ preparar() {
     VALUES ('$CHAMP', 'Teste A4', 'teste-a4', 'subscribing', 2, 1);
   " > /dev/null
 }
+
+# O cabecalho acima serve a quem LE o arquivo; este bloco serve a quem le a
+# SAIDA, que e onde a pessoa esta olhando quando a suite quebra. Sem bypass de
+# proposito: o aviso explica, nao perdoa -- os cenarios rodam todos e o script
+# continua saindo com 1 se falhar.
+if [ "$($DB -c "SELECT is_sabbath(now());" | tr -d ' ')" = "t" ]; then
+  echo "==============================================================="
+  echo "  ATENCAO: ESTA SUITE ESTA RODANDO DURANTE A PAUSA DE SABADO."
+  echo ""
+  echo "  reserve_registration_slot chama is_sabbath(now()) e nao tem"
+  echo "  relogio injetavel, entao ate o por do sol de sabado TODA"
+  echo "  reserva devolve 'sabbath'. As falhas que voce vai ver em"
+  echo "  cenarios sem relacao com a pausa sao ESPERADAS -- elas nao"
+  echo "  sao regressao, e nao ha nada para consertar no codigo."
+  echo ""
+  echo "  Os cenarios da propria pausa seguem validos: eles montam a"
+  echo "  janela numa transacao e nao dependem do relogio de fora."
+  echo ""
+  echo "  Para uma leitura limpa, rode de novo depois do por do sol."
+  echo "  Nao existe flag para desligar a trava, e isso e deliberado:"
+  echo "  porta dos fundos em trava de observancia fica ligada por"
+  echo "  engano, e o custo de nao ter e exatamente este aviso."
+  echo "==============================================================="
+  echo ""
+fi
 
 echo "== classificacao =="
 preparar

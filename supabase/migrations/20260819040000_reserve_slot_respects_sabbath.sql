@@ -84,6 +84,12 @@ BEGIN
   --   pagina dizendo a mesma coisa -- que e a razao desta trava existir. Custa
   --   uma viagem a toa a quem ja esta inscrito e insiste num sabado; na duvida
   --   entre pausar a mais e pausar a menos, este projeto pausa a mais.
+  --
+  --   E esse custo e menor do que parece lido de fora: no sabado a pagina
+  --   mostra a tela de repouso e o wizard nem chega a ficar interativo, entao
+  --   "ja inscrito tenta reservar no sabado" e praticamente inalcancavel pela
+  --   interface -- sobra quem chama a server action por fora. Quem reabrir
+  --   este trade-off nao deve superestimar o lado que ele custa.
   IF public.is_sabbath(now()) THEN
     RETURN json_build_object('success', false, 'reason', 'sabbath');
   END IF;
