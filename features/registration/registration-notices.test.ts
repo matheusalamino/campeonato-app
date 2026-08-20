@@ -3,15 +3,17 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import SunsetNotice from "@/app/(public)/inscrever/[slug]/steps/SunsetNotice";
 import PaymentClosedNotice from "@/app/(public)/inscrever/[slug]/steps/PaymentClosedNotice";
+import SlotNotice from "@/app/(public)/inscrever/[slug]/steps/SlotNotice";
 import type { SunsetAlert } from "./sabbath";
+import type { SlotReservation } from "./slot";
 
 /**
- * As duas faixas da pausa, RENDERIZADAS — e nao lidas como texto-fonte.
+ * As faixas da pausa, RENDERIZADAS — e nao lidas como texto-fonte.
  *
  * Por que aqui e possivel, e no wizard nao. Os outros testes desta pasta leem
  * arquivos com `readFileSync` porque o projeto nao tem jsdom nem Testing Library
  * e o wizard arrasta server actions, upload, PIX e o heartbeat da reserva. Estes
- * dois componentes nao arrastam nada: recebem props, devolvem markup, e
+ * componentes nao arrastam nada: recebem props, devolvem markup, e
  * `react-dom/server` ja vem com o Next — sem dependencia nova, sem ambiente de
  * DOM, com o mesmo `environment: "node"`.
  *
@@ -150,5 +152,77 @@ describe("PaymentClosedNotice", () => {
     // um minuto. `payment_receipt_link` e `optional()` no schema, entao sem esta
     // frase ele envia a inscricao sem comprovante nenhum.
     expect(aviso("sunset")).toContain("guarde o comprovante");
+  });
+});
+
+/**
+ * A terceira faixa, e a que a T9 deixou sem rede.
+ *
+ * O `slot satisfies never` no fim de `noticeFor` garante que EXISTE um ramo para
+ * cada razao — nao que o ramo diz a verdade nem que entra no tom certo. E o ramo
+ * do sabado gastou doze linhas de comentario argumentando exatamente sobre o
+ * tom, que era a unica coisa que nada segurava. Passavam verdes, nos tres
+ * portoes:
+ *
+ *   `urgent: false` -> `true`     ->  a pausa pinta a tela de VERMELHO e
+ *                                     interrompe o leitor de tela, quando o
+ *                                     vermelho desta tela significa perda ou
+ *                                     incerteza e a pausa nao e nenhuma das duas.
+ *   o texto do sabado -> a frase  ->  "Tente novamente em instantes" convidando a
+ *   do `error`                        insistir durante 24h de pausa.
+ *   o texto do sabado -> a frase  ->  "as inscricoes nao estao abertas", que e
+ *   do `not_open`, em vermelho        justo a frase vaga que a tela de repouso
+ *                                     existe para substituir.
+ *
+ * O mesmo caminho dos dois vizinhos aqui em cima: `react-dom/server`, sem jsdom
+ * e sem dependencia nova. O `SlotNotice` so importa `react`, `slot.ts`,
+ * `slot-keepalive.ts` e `tones.ts` — nao arrasta server action, upload nem PIX.
+ */
+describe("SlotNotice", () => {
+  const faixaDaVaga = (slot: SlotReservation | null) =>
+    renderToStaticMarkup(createElement(SlotNotice, { slot }));
+
+  it("na pausa: diz repouso, sem mandar tentar de novo e sem a frase vaga", () => {
+    const html = faixaDaVaga({ ok: false, reason: "sabbath" });
+    expect(html).toContain("em repouso");
+    // A frase do `error`. Aqui ela convidaria a insistir por 24h.
+    expect(html).not.toContain("Tente novamente");
+    // A frase do `not_open`. E o que a tela de repouso existe para substituir.
+    expect(html).not.toContain("não estão abertas");
+  });
+
+  it("na pausa: DOURADA, e na regiao educada", () => {
+    // Os dois eixos que `urgent` decide de uma vez — a tinta e a regiao live —,
+    // medidos juntos porque uma unica troca de `false` para `true` move os dois.
+    const html = faixaDaVaga({ ok: false, reason: "sabbath" });
+    // As cores escritas aqui de proposito, como no teste do `SunsetNotice`:
+    // importar `goldTone` faria o teste concordar com qualquer valor que a
+    // constante viesse a ter, inclusive com o vermelho.
+    expect(html).toContain("rgba(230,180,34,.08)");
+    expect(html).not.toContain("rgba(220,38,38");
+    // A regiao `polite` vem primeiro no DOM: o texto antes do `role="alert"`
+    // esta dentro dela; depois, estaria na assertiva.
+    expect(html.indexOf("em repouso")).toBeLessThan(html.indexOf('role="alert"'));
+  });
+
+  it("a perda de vaga continua VERMELHA e na regiao assertiva", () => {
+    // O contraste, sem o qual "dourada" passaria num mundo em que tudo ficou
+    // dourado. `error` e o vizinho exato da pausa: chega pela mesma batida de
+    // fundo, e as duas respostas precisam ser opostas.
+    const html = faixaDaVaga({ ok: false, reason: "error" });
+    expect(html).toContain("Tente novamente em instantes");
+    expect(html).toContain("rgba(220,38,38,.10)");
+    expect(html).not.toContain("rgba(230,180,34,.08)");
+    expect(html.indexOf("Tente novamente")).toBeGreaterThan(html.indexOf('role="alert"'));
+  });
+
+  it("as duas regioes live estao no DOM antes de haver reserva", () => {
+    // Sem reserva a faixa nao tem texto, mas as regioes precisam estar la: o
+    // leitor de tela tem de ja estar observando quando o texto entra, e no
+    // caminho recusado esta faixa e o unico sinal — nao ha toast e o foco nao se
+    // move.
+    const html = faixaDaVaga(null);
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('role="alert"');
   });
 });
