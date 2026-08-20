@@ -67,8 +67,8 @@ describe("commitRefusal", () => {
     // da tabela. Com `in` no lugar dele a busca acha a chave e devolve o que o
     // prototipo tem ali: `MESSAGES["toString"]` e uma FUNCAO, `__proto__` e o
     // proprio `Object.prototype`. Nenhum dos dois e `undefined`, e nenhum dos
-    // dois tem propriedade propria enumeravel — o chamador espalha o retorno,
-    // sai um objeto sem `error`, e a recusa chega a tela sem mensagem nenhuma.
+    // dois tem propriedade propria enumeravel — a copia que `commitRefusal`
+    // devolve espalha o nada, sai `{}`, e a recusa chega a tela sem frase.
     for (const reason of [
       "banana",
       undefined,

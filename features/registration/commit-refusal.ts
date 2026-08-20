@@ -70,10 +70,9 @@ function isCommitReason(value: unknown): value is CommitRefusalReason {
   // importa para quem for conferir. `MESSAGES["toString"]` e a FUNCAO
   // `Object.prototype.toString`; `MESSAGES["__proto__"]` e o proprio
   // `Object.prototype`. A recusa chega sem frase do mesmo jeito, e por um
-  // caminho mais calado: o unico chamador espalha o retorno
-  // (`{ ok: false, ...commitRefusal(...) }`), e nem funcao nem `Object.prototype`
-  // tem propriedade propria enumeravel, entao o objeto sai sem `error` nenhum e
-  // ninguem lanca.
+  // caminho mais calado: nem funcao nem `Object.prototype` tem propriedade
+  // propria enumeravel, entao a copia logo abaixo espalha o nada e sai `{}` —
+  // sem `error`, sem lancar e sem rastro.
   //
   // O vizinho `isKnownReason`, em slot.ts, tem o mesmo `Object.hasOwn` por motivo
   // parecido mas mecanismo diferente: la quem devolve `undefined` de verdade e o
