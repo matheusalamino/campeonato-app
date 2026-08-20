@@ -510,6 +510,21 @@ checar "prazo vencido E sabado, sabbath ganha (divergencia deliberada da reserva
 # linhas -- CREATE OR REPLACE preserva a ACL de funcao existente, mas cria do
 # zero (e aberta) numa baseline squashada.
 # =============================================================================
+# A POSICAO da trava, e nao so o efeito dela. O comentario da migration promete
+# que a checagem no topo cobre TODA escrita abaixo -- e a mutacao que ninguem
+# pegava era acrescentar escrita ACIMA dela, que roda durante o sabado com a
+# suite verde. Prosa nao segura isso; esta assercao segura. Le o corpo da funcao
+# no catalogo e exige que `is_sabbath` venha antes da primeira escrita.
+# =============================================================================
+echo "== a trava do sabado vem ANTES de qualquer escrita =="
+r=$($DB -c "
+  SELECT (position('is_sabbath' in prosrc) > 0
+      AND position('is_sabbath' in prosrc) < position('INSERT INTO' in prosrc)
+      AND position('is_sabbath' in prosrc) < position('UPDATE ' in prosrc))::text
+    FROM pg_proc WHERE proname = 'commit_registration';")
+checar "is_sabbath precede a primeira escrita em commit_registration" "true" "$r"
+
+# =============================================================================
 echo "== as RPCs publicas nao sao chamaveis por anon =="
 r=$($DB -c "
   SELECT has_function_privilege('anon','public.reserve_registration_slot(uuid, text)','EXECUTE')::text || '|' ||

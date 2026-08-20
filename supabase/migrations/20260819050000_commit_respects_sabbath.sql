@@ -62,8 +62,14 @@ BEGIN
   -- Se voce estiver movendo esta checagem para dentro do IF NOT v_had_reservation
   -- "por consistencia": nao. E a inconsistencia que e a decisao.
   --
-  -- No topo, e nao logo antes do INSERT, tambem de proposito: assim nenhum
-  -- RETURN futuro acrescentado acima dela escapa da pausa por descuido. O preco
+  -- No topo, e nao logo antes do INSERT, tambem de proposito: daqui ela cobre
+  -- TODA escrita ABAIXO dela, inclusive a que alguem acrescentar depois. Note o
+  -- que isso NAO diz: ela nao cobre o que for posto ACIMA. Uma ESCRITA nova ali
+  -- rodaria DURANTE O SABADO, e a suite passava verde -- medido por mutacao, nao
+  -- suposto. Por isso o script assere a POSICAO ("a trava do sabado vem ANTES de
+  -- qualquer escrita"), e nao so o efeito: e a unica coisa que pega isso. Um
+  -- RETURN novo acima continua escapando, e nada o pega -- se voce vem inserir
+  -- checagem nova nesta funcao, ponha DEPOIS deste bloco. O preco
   -- e uma divergencia de precedencia com reserve_registration_slot, onde
   -- not_open ganha de sabbath -- aqui, quem chega sem reserva num campeonato
   -- encerrado durante a pausa ouve `sabbath`, nao `not_open`. Aceito de
