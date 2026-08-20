@@ -29,6 +29,14 @@ export type SimpleRefusalReason =
  * Vive aqui, e nao no servico, porque o componente que mostra o estado da vaga
  * roda no cliente e o servico e marcado com `server-only`.
  *
+ * O arquivo tem DUAS metades, e essa frase descreve so a primeira. A de cliente
+ * — `SlotReservation`, `canOpenStep`, `paymentGate`, `isSlotVerdict` — e a que o
+ * wizard importa. A de servidor e `reservationFromRpc`, cujo unico consumidor e
+ * `services/`, e que so mora aqui para ter teste (ver o docblock dela). Como o
+ * wizard importa deste arquivo, as duas metades vao para o bundle do navegador:
+ * cabe porque sao funcoes puras, e por isso mesmo nada que dependa de segredo,
+ * de env ou de client do Supabase pode ser trazido para ca pelo mesmo motivo.
+ *
  * `error` e o ramo da chamada que nao completou — PostgREST fora do ar, falta
  * de permissao, timeout, rede. Ele existe separado porque nao e um veredito
  * sobre vaga: nao sabemos se ha lugar ou nao. Dobra-lo em `not_found`, como era
@@ -57,10 +65,11 @@ export type SlotReservation =
  * Uma lista PELADA (`["not_found", ...]`, o estado de antes) cobre so o primeiro
  * sentido. Uma lista com guarda de exaustividade cobre os dois — isto foi
  * medido, e nao suposto, e o `Record` nao e o unico jeito de fechar a porta. Ele
- * ficou por tres motivos menores e somados: o erro do `tsc` pousa na propria
- * tabela e NOMEIA a chave que falta, em vez de apontar para uma linha de guarda
- * longe dela; nao sobra linha inerte nem `void` para explicar a quem ler
- * depois; e sao seis linhas a menos.
+ * ficou por dois motivos, e um deles carrega o peso todo: o erro do `tsc` pousa
+ * na propria tabela e NOMEIA a chave que falta, em vez de apontar para uma linha
+ * de guarda longe dela, e nao sobra linha inerte nem `void` para explicar a quem
+ * ler depois. O tamanho nao entra na conta — a lista com guarda gasta uma linha
+ * a mais, e uma linha nao decide nada.
  */
 const RPC_REASONS: Record<SimpleRefusalReason, true> = {
   not_found: true,

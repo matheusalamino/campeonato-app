@@ -6,6 +6,17 @@ export default defineConfig({
     alias: { "@": path.resolve(__dirname, ".") },
   },
   test: {
+    // Tres pastas, e `services/**` NAO esta entre elas: nenhum teste roda dentro
+    // do servico. Quem for mexer la precisa saber por que, porque o motivo obvio
+    // esta errado — nao e o `import "server-only"`. MEDIDO: com um alias dele
+    // para `next/dist/compiled/server-only/empty.js` e `services/**` nesta
+    // linha, um teste escrito la roda. O que segura e o resto: toda funcao
+    // exportada do servico monta o cliente do Supabase la dentro
+    // (`createAdminClient()`, `createClient()`), entao a primeira assertiva de
+    // verdade comeca dublando o banco. A obra e grande e esta adiada de
+    // proposito, e o desvio desta feature e este: regra vai para `features/**`,
+    // onde tem teste de verdade, e a FIACAO que sobra no servico e lida como
+    // texto em features/registration/service-wiring.test.ts.
     include: ["lib/**/*.test.ts", "features/**/*.test.ts", "scripts/**/*.test.ts"],
     environment: "node",
     // TZ fixo em UTC, que espelha o servidor: sem isso, o teste que garante

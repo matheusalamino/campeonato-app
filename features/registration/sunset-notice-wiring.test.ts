@@ -3,7 +3,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * A FIACAO do aviso do por do sol no wizard, lida como texto.
+ * A FIACAO das faixas da pausa no wizard, lida como texto.
+ *
+ * Nasceu so para o aviso do por do sol — dai o nome — e ganhou o vizinho no
+ * ultimo round: `<SlotNotice>` tinha a mesma forma apagavel e era o unico dos
+ * tres sem esta rede. Estao no mesmo arquivo porque sao o mesmo arquivo LIDO, o
+ * mesmo `semComentarios`, os mesmos helpers.
  *
  * Fiacao, e so isso. As regras foram para funcoes puras e sao testadas de
  * verdade: `sunsetAlert`, `sunsetHasPassed`, `clockSkewMs` e `sunsetTimeLabel`
@@ -20,6 +25,12 @@ import { join } from "node:path";
  *                                        nunca fecha. Ate a T9 a prop chegava e
  *                                        morria na assinatura.
  *   `alert={sunset}` -> outra coisa  ->  a faixa fica presa no estado inicial.
+ *   `<SlotNotice>` some do topo      ->  quem e pego pelo por do sol recebe a
+ *                                        recusa `sabbath` pelo heartbeat, fica
+ *                                        com os passos trancados por
+ *                                        `canOpenStep` e ZERO explicacao: nao ha
+ *                                        toast, o foco nao se move, e esta faixa
+ *                                        era o unico sinal.
  *   `paymentGate` reescrito a mao    ->  a regra volta a ser expressao solta, e
  *                                        volta a nao ter teste.
  *   o `skew` some do tick            ->  o formulario volta a comparar o por do
@@ -290,5 +301,40 @@ describe("a fiacao do aviso do por do sol", () => {
     const limpos = [...wizard.matchAll(/clearInterval\(/g)];
     expect(abertos.length).toBeGreaterThan(0);
     expect(limpos).toHaveLength(abertos.length);
+  });
+});
+
+/**
+ * A terceira faixa, ligada — e nao so dizendo a coisa certa.
+ *
+ * registration-notices.test.ts renderiza o `SlotNotice` e prova cada frase, cada
+ * tinta e cada regiao live dele. Nada ali prova que ele esta NA PAGINA: apagar
+ * `<SlotNotice slot={slot} />` do wizard deixa o `tsc` limpo e a suite inteira
+ * verde. Basta alguem reorganizar o topo do formulario.
+ *
+ * O que some junto e o unico sinal do caminho recusado. Quem e pego pelo por do
+ * sol enquanto preenche recebe `sabbath` pela batida do heartbeat, sem ter
+ * tocado em nada: a navegacao fecha sozinha por `canOpenStep`, nao ha toast, o
+ * foco nao se move, e a explicacao inteira mora nesta faixa. Sem ela sobra um
+ * formulario que parou de responder e nenhuma frase dizendo por que — o mesmo
+ * desfecho que o comentario de `isKnownReason` descreve como o pior possivel,
+ * so que por uma porta muito mais larga.
+ *
+ * Mesma forma dos dois vizinhos: abertura de tag mais prop, com o nome local
+ * LIDO do arquivo. Renomear o estado pelo atalho da IDE continua sendo no-op.
+ */
+describe("a fiacao da faixa da vaga", () => {
+  it("a faixa esta no topo do formulario, e recebe a reserva viva", () => {
+    // `nomeDo` falha se nao achar a declaracao: sem sentinela, um arquivo que
+    // parou de ter o estado passaria com o nome vazio casando em qualquer coisa.
+    const reserva = nomeDo("SlotReservation \\| null");
+
+    const tags = [...wizard.matchAll(/<SlotNotice\b[^>]*>/g)].map((m) => m[0]);
+    // Uma, e exatamente uma: zero e a faixa apagada; duas poem o mesmo
+    // paragrafo em duas regioes live e o leitor de tela le tudo em dobro.
+    expect(tags).toHaveLength(1);
+    // E ela recebe o ESTADO, e nao `null` — que compila, apaga a faixa do mesmo
+    // jeito e ainda deixa a tag no lugar para enganar quem for conferir de olho.
+    expect(prop(tags[0], "slot")).toBe(reserva);
   });
 });

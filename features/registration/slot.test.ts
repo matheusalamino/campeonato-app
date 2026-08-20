@@ -191,10 +191,20 @@ describe("paymentGate", () => {
  * Postgres e passa a ser tipo que a tela conhece.
  *
  * Ela morava em `services/public-registration.ts`, e la NADA a segurava: o
- * arquivo tem 511 linhas, sete funcoes exportadas e zero assertivas, porque
- * `vitest.config.ts` inclui `lib/**`, `features/**` e `scripts/**` e o arquivo
- * ainda importa `server-only`, que nem esta no `node_modules`. Um teste escrito
- * la nao rodaria nem se a config mudasse.
+ * arquivo inteiro tem zero assertivas, porque `vitest.config.ts` inclui
+ * `lib/**`, `features/**` e `scripts/**` — e nao `services/**`.
+ *
+ * A config e o que fecha a porta HOJE, e nao o `import "server-only"`: MEDIDO,
+ * um alias de `server-only` para `next/dist/compiled/server-only/empty.js` mais
+ * `services/**` no `include` faz um teste escrito la rodar. Quem quiser tentar,
+ * tente — o que espera do outro lado e o motivo de verdade: toda funcao
+ * exportada do servico monta o cliente do Supabase la dentro
+ * (`createAdminClient()`, `createClient()`), entao a primeira assertiva sobre
+ * COMPORTAMENTO comeca dublando o banco. Essa obra esta adiada de proposito, e
+ * enquanto durar a traducao coberta aqui custa nada e vale tudo.
+ *
+ * O que sobrou de fiacao no servico — a chamada e o `error ? null : data` — tem
+ * rede propria em service-wiring.test.ts, lida como texto.
  *
  * O que passava verde com ela invisivel: dobrar `sabbath` em `error` — e ai a
  * faixa convida a "tentar novamente em instantes" durante 24h de pausa —, tirar

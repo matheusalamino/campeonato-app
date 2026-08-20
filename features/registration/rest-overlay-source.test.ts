@@ -120,13 +120,24 @@ describe("a tela de repouso do sabado", () => {
    * e o video ja esta la. E invisivel pelo mesmo criterio dos casos acima.
    */
   it("comeca fechado — o iframe so existe depois do clique", () => {
-    expect(video).toContain("useState(false)");
-    expect(video).not.toContain("useState(true)");
+    // O nome do estado e LIDO do arquivo, e nao escrito aqui, pelo mesmo motivo
+    // dos irmaos: renomear `playing` pelo atalho da IDE e no-op, e teste que
+    // morre em no-op ensina a nao refatorar. Pela mesma razao o padrao tolera a
+    // anotacao de tipo (`useState<boolean>(false)`) e a guarda tolera
+    // `if (estado === true)` — as tres edicoes matavam este `it`, e um vermelho
+    // chamado "comeca fechado" manda o proximo cacar uma regressao de
+    // privacidade que nao houve.
+    const inicial = video.match(/const \[(\w+), \w+\] = useState(?:<[^>]*>)?\(\s*false\s*\)/);
+    // Sentinela: sem a declaracao achada nao ha nome, e um nome vazio casaria
+    // com qualquer coisa la embaixo. `useState(true)` cai aqui.
+    expect(inicial).not.toBeNull();
+    const estado = inicial![1];
+    expect(video).not.toMatch(/useState(?:<[^>]*>)?\(\s*true\s*\)/);
 
     // E o iframe fica mesmo atras da guarda, e nao solto no corpo do
-    // componente: sem isto, trocar o `if (playing)` por um render incondicional
-    // passaria mesmo com o estado inicial certo.
-    const guarda = video.indexOf("if (playing)");
+    // componente: sem isto, trocar o `if` por um render incondicional passaria
+    // mesmo com o estado inicial certo.
+    const guarda = video.search(new RegExp(`if\\s*\\(\\s*${estado}\\b`));
     expect(guarda).toBeGreaterThan(0);
     expect(video.indexOf("<iframe")).toBeGreaterThan(guarda);
   });

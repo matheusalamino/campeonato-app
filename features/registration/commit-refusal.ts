@@ -62,10 +62,23 @@ const MESSAGES: Record<CommitRefusalReason, CommitRefusal> = {
 };
 
 function isCommitReason(value: unknown): value is CommitRefusalReason {
-  // `Object.hasOwn`, e nao `value in MESSAGES`, pelo mesmo motivo de
-  // `isKnownReason` em slot.ts: `in` aceita `toString`, `constructor`,
-  // `valueOf`, `hasOwnProperty` e `__proto__`, e ai a tabela devolveria
-  // `undefined` no lugar de uma mensagem — a recusa chegaria sem frase nenhuma.
+  // `Object.hasOwn`, e nao `value in MESSAGES`: `in` aceita `toString`,
+  // `constructor`, `valueOf`, `hasOwnProperty` e `__proto__`, que vem do
+  // prototipo.
+  //
+  // O que a tabela devolveria nao e `undefined` — isto foi MEDIDO, e a diferenca
+  // importa para quem for conferir. `MESSAGES["toString"]` e a FUNCAO
+  // `Object.prototype.toString`; `MESSAGES["__proto__"]` e o proprio
+  // `Object.prototype`. A recusa chega sem frase do mesmo jeito, e por um
+  // caminho mais calado: o unico chamador espalha o retorno
+  // (`{ ok: false, ...commitRefusal(...) }`), e nem funcao nem `Object.prototype`
+  // tem propriedade propria enumeravel, entao o objeto sai sem `error` nenhum e
+  // ninguem lanca.
+  //
+  // O vizinho `isKnownReason`, em slot.ts, tem o mesmo `Object.hasOwn` por motivo
+  // parecido mas mecanismo diferente: la quem devolve `undefined` de verdade e o
+  // `switch` de `noticeFor`, que nao tem `case` para esses nomes. As duas prosas
+  // ja foram uma so, e foi a copia entre mecanismos diferentes que apodreceu.
   return typeof value === "string" && Object.hasOwn(MESSAGES, value);
 }
 
@@ -80,7 +93,14 @@ function isCommitReason(value: unknown): value is CommitRefusalReason {
  * Razao que nao conhecemos cai no generico, que e o comportamento de hoje: a RPC
  * devolve uma razao so, das cinco declaradas, e qualquer outra coisa e resposta
  * malformada.
+ *
+ * Devolve uma COPIA, e nao a linha da tabela. Hoje o unico chamador espalha o
+ * retorno e a diferenca nao aparece, mas `MESSAGES` e modulo — vive enquanto o
+ * processo viver. Um chamador que anexe contexto ao objeto que recebeu
+ * (`recusa.error += ` (pedido ${id})`, um `Sentry.setContext` que decora) estaria
+ * escrevendo na tabela, e a frase envenenada sairia para todo mundo dali em
+ * diante. Uma copia rasa fecha isso sem custo: `CommitRefusal` e plano.
  */
 export function commitRefusal(reason: unknown): CommitRefusal {
-  return isCommitReason(reason) ? MESSAGES[reason] : MESSAGES.not_open;
+  return { ...(isCommitReason(reason) ? MESSAGES[reason] : MESSAGES.not_open) };
 }

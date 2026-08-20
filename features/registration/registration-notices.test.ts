@@ -107,8 +107,9 @@ describe("SunsetNotice", () => {
     // `SlotNotice` fixou a pergunta que classifica: "isso e ma noticia para o
     // jogador?". A pausa nao e — ela congela o campeonato para todo mundo e tem
     // hora para voltar. Pintar de alarme a observancia da comunidade dele e o
-    // erro especifico contra o qual o `SlotNotice` argumenta por doze linhas, e
-    // ate aqui nenhum teste o pegava: `redTone` no lugar do `goldTone`, ou os
+    // erro especifico contra o qual o `SlotNotice` gasta um bloco inteiro de
+    // comentario, e ate aqui nenhum teste o pegava: `redTone` no lugar do
+    // `goldTone`, ou os
     // valores das duas constantes trocados entre si, passavam em tudo.
     //
     // As cores estao escritas AQUI de proposito. Importar `goldTone` faria o
@@ -160,9 +161,9 @@ describe("PaymentClosedNotice", () => {
  *
  * O `slot satisfies never` no fim de `noticeFor` garante que EXISTE um ramo para
  * cada razao — nao que o ramo diz a verdade nem que entra no tom certo. E o ramo
- * do sabado gastou doze linhas de comentario argumentando exatamente sobre o
- * tom, que era a unica coisa que nada segurava. Passavam verdes, nos tres
- * portoes:
+ * do sabado gastou o maior bloco de comentario do arquivo argumentando
+ * exatamente sobre o tom, que era a unica coisa que nada segurava. Passavam
+ * verdes, nos tres portoes:
  *
  *   `urgent: false` -> `true`     ->  a pausa pinta a tela de VERMELHO e
  *                                     interrompe o leitor de tela, quando o
@@ -185,6 +186,12 @@ describe("SlotNotice", () => {
   it("na pausa: diz repouso, sem mandar tentar de novo e sem a frase vaga", () => {
     const html = faixaDaVaga({ ok: false, reason: "sabbath" });
     expect(html).toContain("em repouso");
+    // A UNICA instrucao acionavel que esta faixa da. A pausa dura ate o por do
+    // sol de sabado e a hora da volta so existe do outro lado do recarregamento
+    // — sem esta palavra sobra uma explicacao bonita e nenhuma saida. A frase do
+    // envio recusado ja prende a mesma palavra (commit-refusal.test.ts); a faixa
+    // era a metade da assimetria que ninguem segurava.
+    expect(html).toContain("Recarregue");
     // A frase do `error`. Aqui ela convidaria a insistir por 24h.
     expect(html).not.toContain("Tente novamente");
     // A frase do `not_open`. E o que a tela de repouso existe para substituir.
@@ -203,6 +210,13 @@ describe("SlotNotice", () => {
     // A regiao `polite` vem primeiro no DOM: o texto antes do `role="alert"`
     // esta dentro dela; depois, estaria na assertiva.
     expect(html.indexOf("em repouso")).toBeLessThan(html.indexOf('role="alert"'));
+    // E sai UMA vez so. A linha acima usa `indexOf`, que acha a PRIMEIRA
+    // ocorrencia, entao ela sozinha nao ve a faixa duplicada: trocar
+    // `{notice?.urgent ? box : null}` por `{notice ? box : null}` na regiao
+    // assertiva poe o mesmo paragrafo nas DUAS regioes, e a de baixo interrompe
+    // o leitor de tela — exatamente o que o comentario do `case "sabbath"`
+    // argumenta para nao fazer. Passava em tudo.
+    expect(html.split("em repouso").length - 1).toBe(1);
   });
 
   it("a perda de vaga continua VERMELHA e na regiao assertiva", () => {
@@ -214,6 +228,42 @@ describe("SlotNotice", () => {
     expect(html).toContain("rgba(220,38,38,.10)");
     expect(html).not.toContain("rgba(230,180,34,.08)");
     expect(html.indexOf("Tente novamente")).toBeGreaterThan(html.indexOf('role="alert"'));
+  });
+
+  /**
+   * Os dois ramos `ok`, que este describe cobria em zero casos.
+   *
+   * `noticeFor(slot, countdown?.expired === true)` -> `noticeFor(slot, true)` e
+   * valor legitimo do parametro: passa no `tsc`, no eslint e na suite inteira. O
+   * que ele faz e por TODA reserva viva para dizer "Sua reserva de vaga venceu
+   * enquanto a pagina ficou parada" e mandar tocar na tela para reservar de novo
+   * — dito a quem acabou de reservar, com o QR do PIX na frente dele. O outro
+   * lado (`false` fixo) e o simetrico: a reserva ja vencida segue prometendo
+   * vaga garantida ate o jogador ser recusado no envio.
+   */
+  it("a reserva viva promete a vaga, e nao anuncia um vencimento que nao houve", () => {
+    const html = faixaDaVaga({
+      ok: true,
+      isWaitlist: false,
+      expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+    });
+    expect(html).toContain("Sua vaga está garantida");
+    expect(html).not.toContain("venceu");
+  });
+
+  it("a reserva vencida diz que venceu — e continua DOURADA", () => {
+    const html = faixaDaVaga({
+      ok: true,
+      isWaitlist: false,
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    expect(html).toContain("venceu enquanto a página ficou parada");
+    expect(html).not.toContain("Sua vaga está garantida");
+    // Dourada apesar de ser noticia ruim: nao e veredito sobre lotacao — a vaga
+    // pode continuar ali, so a reserva que a segurava venceu. Vermelho aqui
+    // afirmaria um esgotamento que ninguem mediu.
+    expect(html).toContain("rgba(230,180,34,.08)");
+    expect(html).not.toContain("rgba(220,38,38");
   });
 
   it("as duas regioes live estao no DOM antes de haver reserva", () => {

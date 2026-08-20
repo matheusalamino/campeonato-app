@@ -51,10 +51,24 @@ describe("commitRefusal", () => {
     expect(commitRefusal("not_found")).toEqual(commitRefusal("not_open"));
   });
 
+  it("cada chamada leva a sua copia, e nao a linha da tabela", () => {
+    // `MESSAGES` vive enquanto o processo viver. Devolvida por referencia, um
+    // chamador que decore o objeto que recebeu — juntar o id do pedido a frase,
+    // por exemplo — estaria escrevendo NA TABELA, e a frase envenenada sairia
+    // para todo mundo dali em diante. O envenenamento cai no sabado como cai em
+    // qualquer outra razao, e este e o unico teste que o pega.
+    const primeira = commitRefusal("sabbath");
+    primeira.error = "envenenado";
+    expect(commitRefusal("sabbath").error).toContain("repouso");
+  });
+
   it("razao que nao conhecemos cai no generico, e nao sai sem frase", () => {
     // Inclui os nomes que vem do prototipo, que e o que segura o `Object.hasOwn`
-    // da tabela: com `in` no lugar dele a busca acha a chave, devolve
-    // `undefined`, e a recusa chega a tela sem mensagem nenhuma.
+    // da tabela. Com `in` no lugar dele a busca acha a chave e devolve o que o
+    // prototipo tem ali: `MESSAGES["toString"]` e uma FUNCAO, `__proto__` e o
+    // proprio `Object.prototype`. Nenhum dos dois e `undefined`, e nenhum dos
+    // dois tem propriedade propria enumeravel — o chamador espalha o retorno,
+    // sai um objeto sem `error`, e a recusa chega a tela sem mensagem nenhuma.
     for (const reason of [
       "banana",
       undefined,

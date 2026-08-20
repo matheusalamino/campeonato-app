@@ -520,9 +520,12 @@ describe("announceableEndsAt", () => {
   /**
    * O caso que separa `brasiliaParts` de `getUTCDay()`, e o unico que separa.
    *
-   * Nenhuma das 178 janelas reais chega aqui hoje — todas terminam antes das
-   * 22h01 UTC —, entao esta e a assercao que transforma "risco latente" em
-   * regressao pega. Sem ela, trocar a leitura por `getUTCDay()` passa verde.
+   * Nenhuma janela real chega aqui hoje: todas terminam bem longe da meia-noite
+   * UTC, entao `getUTCDay()` aceitaria as mesmas que `brasiliaParts` aceita.
+   * Esta e a assercao que transforma "risco latente" em regressao pega — sem
+   * ela, trocar a leitura por `getUTCDay()` passa verde. A hora exata do maior
+   * por do sol gravado nao esta escrita aqui de proposito: o dado e regerado, e
+   * numero duro em prosa apodrece calado. O que nao muda e a folga.
    */
   it("anuncia um por do sol de sabado que ja e domingo em UTC", () => {
     // 2026-08-22 21:00 em Brasilia = 2026-08-23 00:00 UTC, um domingo em UTC.
