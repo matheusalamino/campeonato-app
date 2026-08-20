@@ -85,39 +85,65 @@ describe("registrationGate e o sabado", () => {
     registration_start_date: "2026-08-01T03:00:00.000Z",
     registration_end_date: "2026-12-31T02:59:00.000Z",
   };
-  // Sabado, 22/08/2026, 02:00 em Brasilia — dentro da janela que comeca no por
-  // do sol de sexta.
+  // Sabado, 22/08/2026, 02:00 em Brasilia.
   const agora = new Date("2026-08-22T05:00:00.000Z");
-  const FIM = "2026-08-22T20:51:00.000Z";
+  // O fim REAL daquela janela, copiado de `sabbath_windows`: a linha e
+  // 2026-08-21 20:55:36+00 -> 2026-08-22 20:55:58+00.
+  const FIM = "2026-08-22T20:55:58.000Z";
+  const sabado = { endsAt: FIM };
 
-  it("pausa mesmo com o campeonato dentro do prazo e com status subscribing", () => {
-    expect(registrationGate(aberto, agora, { endsAt: FIM }))
-      .toEqual({ view: "rest", endsAt: FIM });
+  it("dentro do prazo e com status subscribing, o sabado substitui o wizard", () => {
+    expect(registrationGate(aberto, agora, sabado)).toEqual({ view: "rest", endsAt: FIM });
   });
 
   it("sem pausa, o campeonato aberto continua no wizard", () => {
     expect(registrationGate(aberto, agora, null)).toEqual({ view: "wizard" });
   });
 
-  it("o status rest continua valendo como override manual, sem horario", () => {
+  it("o status rest sozinho continua valendo como override manual, sem horario", () => {
     // Feriado ou pausa nao prevista: ninguem sabe quando volta, e prometer um
     // horario seria inventar.
     expect(registrationGate({ ...aberto, status: "rest" }, agora, null))
       .toEqual({ view: "rest", endsAt: null });
   });
 
-  it("o sabado ganha do override quando os dois valem — ele sabe a hora", () => {
-    expect(registrationGate({ ...aberto, status: "rest" }, agora, { endsAt: FIM }))
+  it("o override manual herda o horario do sabado quando os dois valem", () => {
+    expect(registrationGate({ ...aberto, status: "rest" }, agora, sabado))
       .toEqual({ view: "rest", endsAt: FIM });
   });
 
-  it("o sabado ganha do prazo vencido e da lotacao", () => {
-    // A ordem importa: durante o sabado o site nao escreve inscricao nenhuma,
-    // entao a pausa e a primeira coisa a ser dita.
+  /*
+   * Os quatro abaixo prendem a ORDEM: a pausa substitui o WIZARD, e so ele.
+   *
+   * O dano de move-la para o topo e concreto, e por isso esta escrito aqui: um
+   * campeonato fechado passaria a mostrar "Inscricoes em repouso" com contagem
+   * regressiva, e depois do por do sol a pessoa voltaria para descobrir que ele
+   * nunca esteve aberto. O horario do fim do sabado nao diz nada sobre um
+   * campeonato que nao reabre ali.
+   *
+   * A observancia nao perde nada com esta ordem: o wizard e o unico caminho
+   * para gravar inscricao, ele vem depois da pausa, e as RPCs das inscricoes
+   * recusam no banco de forma independente da tela.
+   */
+  it("um campeonato fora do ciclo continua not_open no sabado", () => {
+    expect(registrationGate({ ...aberto, status: "draft" }, agora, sabado))
+      .toEqual({ view: "not_open" });
+  });
+
+  it("o prazo vencido continua ended_by_deadline no sabado", () => {
     const vencido = { ...aberto, registration_end_date: "2026-08-01T03:00:00.000Z" };
-    expect(registrationGate(vencido, agora, { endsAt: FIM }))
-      .toEqual({ view: "rest", endsAt: FIM });
-    expect(registrationGate({ ...aberto, status: "subscribed" }, agora, { endsAt: FIM }))
-      .toEqual({ view: "rest", endsAt: FIM });
+    expect(registrationGate(vencido, agora, sabado))
+      .toEqual({ view: "ended_by_deadline", endedAt: "2026-08-01T03:00:00.000Z" });
+  });
+
+  it("a lotacao continua ended_by_capacity no sabado", () => {
+    expect(registrationGate({ ...aberto, status: "subscribed" }, agora, sabado))
+      .toEqual({ view: "ended_by_capacity" });
+  });
+
+  it("quem ainda nao abriu continua not_yet no sabado, com a contagem honesta", () => {
+    const futuro = { ...aberto, registration_start_date: "2026-09-01T03:00:00.000Z" };
+    expect(registrationGate(futuro, agora, sabado))
+      .toEqual({ view: "not_yet", opensAt: "2026-09-01T03:00:00.000Z" });
   });
 });
