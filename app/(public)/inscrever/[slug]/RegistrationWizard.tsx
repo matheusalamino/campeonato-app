@@ -62,9 +62,14 @@ const inputBase =
 const inputOk = "border-white/10 focus:border-[var(--gala-gold-2)]";
 const inputError = "border-red-400/70 focus:border-red-400";
 
+/**
+ * `sunsetAt` ja entra no contrato, mas ainda nao e lido: so a pagina sabe o
+ * proximo por do sol, e exigir a prop agora garante que ela chegue aqui antes
+ * de quem esta preenchendo precisar do aviso.
+ */
 export default function RegistrationWizard({
   championship, liveCount,
-}: { championship: WizardChampionship; liveCount: number }) {
+}: { championship: WizardChampionship; liveCount: number; sunsetAt: string | null }) {
   const router = useRouter();
   const [form, setForm] = useState({ ...EMPTY });
   const [step, setStep] = useState(1);

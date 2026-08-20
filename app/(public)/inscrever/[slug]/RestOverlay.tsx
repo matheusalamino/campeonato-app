@@ -1,14 +1,19 @@
 import RegistrationWizard, { type WizardChampionship } from "./RegistrationWizard";
 
+/**
+ * `endsAt` ja entra no contrato, mas ainda nao e lido: quem chama e o unico que
+ * sabe quando a pausa termina, e exigir a prop agora impede que a tela nasca
+ * sem ter como cumprir a promessa de que a inscricao volta sozinha.
+ */
 export default function RestOverlay({
   championship, liveCount,
-}: { championship: WizardChampionship; liveCount: number }) {
+}: { championship: WizardChampionship; liveCount: number; endsAt: string | null }) {
   return (
     <div className="relative min-h-screen">
       {/* `inert` alem de aria-hidden: pointer-events-none barra o mouse, mas o Tab
           continuaria entrando num conteudo anunciado como inexistente. */}
       <div inert aria-hidden className="pointer-events-none select-none blur-[4px] opacity-50">
-        <RegistrationWizard championship={championship} liveCount={liveCount} />
+        <RegistrationWizard championship={championship} liveCount={liveCount} sunsetAt={null} />
       </div>
       <div className="fixed inset-0 flex items-center justify-center px-6" style={{ background: "rgba(4,4,7,.55)" }}>
         <div className="max-w-sm w-full rounded-3xl border p-6 text-center"

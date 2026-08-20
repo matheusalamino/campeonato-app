@@ -10,6 +10,8 @@ import NotOpenNotice from "./NotOpenNotice";
 import NotYetNotice from "./NotYetNotice";
 import InscreverHeader from "./InscreverHeader";
 import { registrationGate } from "@/features/registration/registration-gate";
+import { isSabbath, sabbathEndsAt, sabbathStartsAt } from "@/features/registration/sabbath";
+import { getSabbathWindow } from "@/services/public-registration";
 
 export const dynamic = "force-dynamic";
 
@@ -75,17 +77,28 @@ export default async function InscreverPage({ params }: { params: Promise<{ slug
   };
   const liveCount = count ?? 0;
 
-  const gate = registrationGate(champ, new Date());
+  const now = new Date();
+  const sabbathWindow = await getSabbathWindow(now);
+  const paused = isSabbath(now, sabbathWindow);
+  const gate = registrationGate(
+    champ,
+    now,
+    paused ? { endsAt: sabbathEndsAt(now, sabbathWindow) } : null,
+  );
+
+  // O por do sol so interessa a quem esta preenchendo: quem ja esta pausado ve
+  // a tela de repouso, com a contagem regressiva do FIM.
+  const sunsetAt = paused ? null : sabbathStartsAt(now, sabbathWindow);
 
   // O repouso de sabado e uma experiencia modal de tela cheia — sem header.
   if (gate.view === "rest") {
-    return <RestOverlay championship={championship} liveCount={liveCount} />;
+    return <RestOverlay championship={championship} liveCount={liveCount} endsAt={gate.endsAt} />;
   }
 
   let view;
   switch (gate.view) {
     case "wizard":
-      view = <RegistrationWizard championship={championship} liveCount={liveCount} />;
+      view = <RegistrationWizard championship={championship} liveCount={liveCount} sunsetAt={sunsetAt} />;
       break;
     case "not_yet":
       view = <NotYetNotice name={champ.name} opensAt={gate.opensAt} />;

@@ -6,12 +6,15 @@
  * pagina vira burra: chama, faz `switch`, renderiza.
  */
 export type RegistrationGate =
-  | { view: "rest" }
+  | { view: "rest"; endsAt: string | null }
   | { view: "wizard" }
   | { view: "not_open" }
   | { view: "not_yet"; opensAt: string }
   | { view: "ended_by_deadline"; endedAt: string }
   | { view: "ended_by_capacity" };
+
+/** A pausa vigente, quando ha uma. `endsAt` e quando ela termina. */
+export type SabbathPause = { endsAt: string };
 
 export type GateChampionship = {
   status?: string | null;
@@ -33,8 +36,16 @@ function instant(value?: string | null): Date | null {
 export function registrationGate(
   champ: GateChampionship,
   now: Date,
+  sabbath: SabbathPause | null,
 ): RegistrationGate {
-  if (champ.status === "rest") return { view: "rest" };
+  // Antes de tudo, inclusive do prazo e da lotacao: durante o sabado o site nao
+  // grava inscricao nenhuma, entao a pausa e a primeira coisa a ser dita — e a
+  // unica das tres que sabe quando termina.
+  if (sabbath) return { view: "rest", endsAt: sabbath.endsAt };
+
+  // O status continua como override manual, para um feriado ou uma pausa nao
+  // prevista. Sem horario: ninguem sabe quando volta, e prometer seria inventar.
+  if (champ.status === "rest") return { view: "rest", endsAt: null };
 
   // `subscribed` so e setado pela RPC quando a lotacao enche. Por isso ele conta
   // "as vagas acabaram" e o prazo vencido conta "o tempo acabou": a causa vem do

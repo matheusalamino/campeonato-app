@@ -10,6 +10,7 @@ import { computeTicketsTotal } from "@/features/registration/pricing";
 import { skillsFor } from "@/features/registration/skills";
 import { fieldErrorsFrom } from "@/features/registration/field-errors";
 import type { SlotReservation } from "@/features/registration/slot";
+import type { SabbathWindow } from "@/features/registration/sabbath";
 import type { GroupOption } from "@/types/championship";
 
 export type PlayerPrefill = {
@@ -199,6 +200,38 @@ export async function reserveSlot(
   return isKnownReason(result.reason)
     ? { ok: false, reason: result.reason }
     : { ok: false, reason: "error" };
+}
+
+/**
+ * A janela de sabado atual ou a proxima.
+ *
+ * `ends_at >= now` e o filtro certo, e nao "cobre agora": quem chama precisa
+ * distinguir "a tabela funciona e ainda nao e sabado" de "a tabela nao alcanca
+ * este instante". Ver a nota em features/registration/sabbath.ts.
+ *
+ * O `order` por `starts_at` faz parte do contrato junto com o filtro: sem ele a
+ * ordem das linhas e indefinida, e o `limit(1)` traria uma janela qualquer entre
+ * as que sobraram em vez da proxima.
+ *
+ * Falha vira `null`, que aciona a regra conservadora — do lado da observancia,
+ * que e o unico lado aceitavel de errar aqui.
+ */
+export async function getSabbathWindow(now: Date): Promise<SabbathWindow | null> {
+  try {
+    const supabase = createAdminClient();
+    const { data } = await supabase
+      .from("sabbath_windows")
+      .select("starts_at, ends_at")
+      .gte("ends_at", now.toISOString())
+      .order("starts_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (!data) return null;
+    return { startsAt: data.starts_at, endsAt: data.ends_at };
+  } catch {
+    return null;
+  }
 }
 
 export async function getOpenRegistrationChampionship(): Promise<{ slug: string; name: string } | null> {
