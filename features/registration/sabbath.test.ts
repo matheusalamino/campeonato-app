@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isSabbath, sabbathEndsAt, sabbathStartsAt, sunsetAlert, sabbathStatus, announceableEndsAt,
-  sunsetHasPassed, sunsetTimeLabel, clockSkewMs, sameSunsetAlert,
+  sunsetHasPassed, sunsetTimeLabel, clockSkewMs, nextSunsetAlert,
   SUNSET_NOTICE_MINUTES, SUNSET_PAYMENT_CUTOFF_MINUTES, SUNSET_TICK_MS,
   type SabbathWindow,
 } from "./sabbath";
@@ -222,13 +222,15 @@ describe("sunsetAlert", () => {
  * React e nao renderizava nada. Virando objeto, `sunsetAlert` passou a devolver
  * um `{ level: "none" }` NOVO a cada chamada — e o wizard tica a cada meio
  * minuto, com `sunsetAt` nao-nulo em todo instante fora da pausa. Sem esta
- * comparacao, o formulario inteiro reconcilia de domingo a noite a sexta as 17h
+ * comparacao, o formulario inteiro reconcilia do sabado ao entardecer ate a sexta
  * para dizer sempre a mesma coisa.
  *
- * Cobre as duas direcoes: dizer "igual" para alertas diferentes prende a faixa
- * num nivel velho, que e o estrago pior.
+ * Cobre as duas direcoes, e por IDENTIDADE (`toBe`), que e o que o React le:
+ * devolver o proximo quando nada mudou reconcilia o formulario a toa; devolver
+ * o anterior quando o alerta mudou prende a faixa num nivel velho, que e o
+ * estrago pior.
  */
-describe("sameSunsetAlert", () => {
+describe("nextSunsetAlert", () => {
   const inicio = JANELA.startsAt;
 
   it("dois 'nada a anunciar' sao a mesma coisa, mesmo sendo objetos diferentes", () => {
@@ -236,36 +238,34 @@ describe("sameSunsetAlert", () => {
     const b = sunsetAlert(em("2026-08-21T20:19:30.000Z"), inicio);
     // Objetos distintos de proposito: e exatamente o par que o tick produz.
     expect(a).not.toBe(b);
-    expect(sameSunsetAlert(a, b)).toBe(true);
+    // Devolve o ANTERIOR: e a identidade preservada que faz o React nao
+    // reconciliar. `toBe` aqui e identidade, nao igualdade.
+    expect(nextSunsetAlert(a, b)).toBe(a);
   });
 
   it("o mesmo nivel com o mesmo instante e a mesma coisa", () => {
-    expect(sameSunsetAlert(
-      { level: "notice", at: inicio },
-      { level: "notice", at: inicio },
-    )).toBe(true);
+    const anterior = { level: "notice", at: inicio } as const;
+    expect(nextSunsetAlert(anterior, { level: "notice", at: inicio })).toBe(anterior);
   });
 
   it("mudar de nivel NAO e a mesma coisa — nos dois sentidos", () => {
     // Se isto respondesse `true`, a faixa ficaria presa: o corte chegaria sem o
     // texto mudar, e o jogador leria "se for pagar, pague agora" com o QR ja
     // fora do ar.
-    expect(sameSunsetAlert({ level: "none" }, { level: "notice", at: inicio })).toBe(false);
-    expect(sameSunsetAlert({ level: "notice", at: inicio }, { level: "none" })).toBe(false);
-    expect(sameSunsetAlert(
-      { level: "notice", at: inicio },
-      { level: "cutoff", at: inicio },
-    )).toBe(false);
+    const paraNotice = { level: "notice", at: inicio } as const;
+    expect(nextSunsetAlert({ level: "none" }, paraNotice)).toBe(paraNotice);
+    const paraNone = { level: "none" } as const;
+    expect(nextSunsetAlert(paraNotice, paraNone)).toBe(paraNone);
+    const paraCutoff = { level: "cutoff", at: inicio } as const;
+    expect(nextSunsetAlert(paraNotice, paraCutoff)).toBe(paraCutoff);
   });
 
   it("mesmo nivel com OUTRO instante nao e a mesma coisa", () => {
     // Acontece de verdade: um `router.refresh()` que atravessa a pausa traz o
     // por do sol do sabado seguinte. O nivel pode nao mudar, mas a HORA impressa
     // na faixa muda — e sem repintar ela anuncia o por do sol da semana passada.
-    expect(sameSunsetAlert(
-      { level: "notice", at: inicio },
-      { level: "notice", at: "2026-08-28T20:45:00.000Z" },
-    )).toBe(false);
+    const outraJanela = { level: "notice", at: "2026-08-28T20:45:00.000Z" } as const;
+    expect(nextSunsetAlert({ level: "notice", at: inicio }, outraJanela)).toBe(outraJanela);
   });
 });
 

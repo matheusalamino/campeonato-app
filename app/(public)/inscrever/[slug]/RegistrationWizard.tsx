@@ -22,7 +22,7 @@ import { canOpenStep, isSlotVerdict, paymentGate, type SlotReservation } from "@
 import { createLatestOnly } from "@/features/registration/latest-only";
 import { shouldRenewSlot, HEARTBEAT_INTERVAL_MS } from "@/features/registration/slot-keepalive";
 import {
-  sunsetAlert, sunsetHasPassed, sameSunsetAlert, clockSkewMs, SUNSET_TICK_MS,
+  sunsetAlert, sunsetHasPassed, nextSunsetAlert, clockSkewMs, SUNSET_TICK_MS,
   type SunsetAlert, type NextSunset,
 } from "@/features/registration/sabbath";
 import { lookupCpfAction, submitRegistrationAction, reserveSlotAction } from "./actions";
@@ -474,7 +474,7 @@ export default function RegistrationWizard({
       // o formulario inteiro a cada meio minuto — inclusive nos seis dias e meio
       // por semana em que a resposta e sempre "nada a anunciar".
       const proximo = sunsetAlert(agora, nextSunset.at);
-      setSunset((anterior) => (sameSunsetAlert(anterior, proximo) ? anterior : proximo));
+      setSunset((anterior) => nextSunsetAlert(anterior, proximo));
     };
     // Antes do intervalo, e nao so dentro dele: sem esta chamada, quem abre a
     // pagina JA dentro do corte ve o QR do PIX por ate meio minuto.

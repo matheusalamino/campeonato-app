@@ -320,17 +320,23 @@ export function sunsetAlert(now: Date, startsAt: string | null): SunsetAlert {
  * FORA da pausa, entao isso seria de domingo a noite a sexta as 17h, a semana
  * toda, para dizer sempre a mesma coisa: nada a anunciar.
  *
- * A comparacao mora aqui, e nao inline no wizard, porque o wizard e o unico
- * arquivo desta feature que nenhum teste consegue renderizar. Pura, ela custa
- * tres linhas e ganha teste de verdade.
+ * Devolve o ANTERIOR quando nada mudou, e e por isso que o retorno e o alerta
+ * inteiro em vez de um booleano: um predicado obriga o wizard a escrever o
+ * ternario, e ai a unica coisa que separa o certo do desastre e a posicao de um
+ * `!` — dentro do arquivo que nenhum teste consegue renderizar, guardado por
+ * regex. Devolvendo o proprio valor, o ponto de chamada nao tem forma que possa
+ * ser invertida, e a decisao inteira vive aqui, com teste por identidade.
  *
  * Compara o `at` tambem, e nao so o nivel: dentro da mesma janela o instante
- * nao muda, mas depois de um `router.refresh()` que atravessa um sabado ele
- * muda sem o nivel mudar — e ai a faixa PRECISA ser repintada com a hora nova.
+ * nao muda, mas se um `router.refresh()` trouxer outra janela ele muda sem o
+ * nivel mudar — e ai a faixa PRECISA ser repintada com a hora nova.
  */
-export function sameSunsetAlert(a: SunsetAlert, b: SunsetAlert): boolean {
-  if (a.level === "none" || b.level === "none") return a.level === b.level;
-  return a.level === b.level && a.at === b.at;
+export function nextSunsetAlert(anterior: SunsetAlert, proximo: SunsetAlert): SunsetAlert {
+  const iguais =
+    anterior.level === "none" || proximo.level === "none"
+      ? anterior.level === proximo.level
+      : anterior.level === proximo.level && anterior.at === proximo.at;
+  return iguais ? anterior : proximo;
 }
 
 /**

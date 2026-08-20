@@ -58,7 +58,10 @@ describe("a fiacao do sabado na pagina de inscricao", () => {
     const chamadas = [...fonte.matchAll(/registrationGate\(([^)]*)\)/g)];
     expect(chamadas).toHaveLength(1);
 
-    const args = chamadas[0][1].split(",").map((a) => a.trim());
+    // `.filter(Boolean)` pela mesma razao do `paymentGate` no arquivo irmao:
+    // virgula final e reformatacao, e sem isto ela vira um quarto argumento
+    // vazio e mata o teste por motivo nenhum.
+    const args = chamadas[0][1].split(",").map((a) => a.trim()).filter(Boolean);
     expect(args).toHaveLength(3);
     // O terceiro argumento e a pausa. `null` ali abre a inscricao no sabado.
     expect(args[2]).toBe("pause");

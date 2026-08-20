@@ -139,7 +139,12 @@ describe("a fiacao do aviso do por do sol", () => {
     // a semana inteira, e o texto so sumiria no primeiro tick — meio minuto
     // depois, ja lido. Nao ha `tsc` nem eslint para reclamar: e valor legitimo
     // da uniao. O estado inicial e carga, e carga sem teste some.
-    expect(inicial.replace(/\s/g, "").replace(/,$/, "")).toBe('{level:"none"}');
+    // Tira a virgula final do objeto TAMBEM, e nao so a do argumento: quebrar
+    // `{ level: "none" }` em linhas com virgula final e reformatacao pura, e
+    // matar teste em reformatacao e o imposto que este arquivo condena.
+    expect(inicial.replace(/,(?=\s*\})/g, "").replace(/\s/g, "").replace(/,$/, "")).toBe(
+      '{level:"none"}',
+    );
   });
 
   it("a faixa recebe o alerta vivo, e nao uma constante", () => {
@@ -217,30 +222,38 @@ describe("a fiacao do aviso do por do sol", () => {
     // `sabbathStatus` devolve por do sol nao-nulo em todo instante FORA da
     // pausa. Entregar esse objeto direto ao setter reconcilia o wizard inteiro —
     // sete `StepShell`, tres `UploadCard`, o radar, as estrelas e o payload do
-    // PIX com o CRC16 recalculado — a cada meio minuto, de domingo a noite a
+    // PIX com o CRC16 recalculado — a cada meio minuto, do sabado ao entardecer ate a
     // sexta as 17h. Enquanto o alerta era `string`, o React fazia bail-out por
     // `Object.is` e isso nao existia; com objeto, quem faz o bail-out e a
     // comparacao. Sem ela, `sunset` nas deps deste efeito vira loop de render.
-    expect(efeito()).toContain("sameSunsetAlert(");
-    // O setter recebe uma FUNCAO — `(anterior) => ...` —, e nao o alerta cru.
-    const anterior = unico(efeito(), new RegExp(`${setaAlerta}\\(\\s*\\(?\\s*(\\w+)\\s*\\)?\\s*=>`));
+    // A DECISAO nao mora aqui: `nextSunsetAlert` devolve o alerta a usar, e tem
+    // teste por identidade em sabbath.test.ts. Devolver o valor em vez de um
+    // booleano foi de proposito — um predicado obrigaria o ternario aqui, e ai a
+    // diferenca entre o certo e o desastre seria a posicao de um `!`, guardada
+    // por regex, no arquivo que nenhum teste consegue renderizar. Sem forma que
+    // possa ser invertida, o que sobra para prender e a LIGACAO.
+    expect(efeito()).toContain("nextSunsetAlert(");
+    // O setter recebe uma FUNCAO — `(anterior) => ...` —, e nao o alerta cru:
+    // entregar `sunsetAlert(...)` direto e o que reconcilia o wizard inteiro a
+    // cada meio minuto.
+    expect(efeito()).toMatch(new RegExp(`${setaAlerta}\\(\\s*\\(?\\s*\\w+\\s*\\)?\\s*=>`));
     expect(efeito()).not.toMatch(new RegExp(`${setaAlerta}\\(\\s*sunsetAlert\\(`));
-
-    // E o ramo "sao iguais" devolve o ANTERIOR. Invertido, o bail-out faz o
-    // oposto do que promete nos dois lados: troca de objeto quando nada mudou —
-    // o re-render que ele existe para evitar — e prende a faixa no nivel velho
-    // quando o alerta muda de verdade. As duas metades passam no `tsc`.
-    expect(efeito()).toMatch(new RegExp(`sameSunsetAlert\\([^)]*\\)\\s*\\?\\s*${anterior}\\s*:`));
   });
 
   it("na virada quem decide e o servidor: recarrega em vez de se trancar sozinho", () => {
     // A REGRA e o predicado, e ele esta em `sunsetHasPassed` — testado na borda
     // exata. O que se le aqui e so que o refresh esta preso a ele: solto, ou
     // negado, o wizard ou nunca recarrega ou recarrega sempre.
-    // `[^{]*` no lugar de `.*`: o predicado pode nascer quebrado em linhas, mas
-    // nao pode atravessar a chave — o que este teste pega e o `refresh` SOLTO
-    // fora do `if`, e ele continua pego.
-    expect(efeito()).toMatch(/if \(\s*sunsetHasPassed\([^{]*\)\s*\{\s*router\.refresh\(\);\s*return;\s*\}/);
+    // O predicado pode nascer quebrado em linhas, mas a guarda tem que ser ELE,
+    // e nada alem dele. `[^{]*` tolerava quebra de linha e, junto, deixou de
+    // exigir que a condicao terminasse ali: `=== false` (nunca recarrega, o QR
+    // fica na tela depois do por do sol) e `|| skewMs > 0` (recarrega sempre)
+    // passavam a casar, e os dois morriam no padrao anterior. Um nivel de
+    // parenteses balanceado tolera a quebra sem abrir a condicao.
+    const chamada = String.raw`sunsetHasPassed\((?:[^()]|\([^()]*\))*\)`;
+    expect(efeito()).toMatch(
+      new RegExp(`if\\s*\\(\\s*${chamada}\\s*\\)\\s*\\{\\s*router\\.refresh\\(\\);\\s*return;\\s*\\}`),
+    );
   });
 
   it("o tick roda na montagem, e depois no intervalo com nome", () => {
