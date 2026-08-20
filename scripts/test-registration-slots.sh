@@ -3,6 +3,14 @@
 # Roda com: sh scripts/test-registration-slots.sh
 #
 # Cria um campeonato descartavel, exercita os cenarios e apaga tudo no fim.
+#
+# NAO RODE ISTO DURANTE UM SABADO DE VERDADE — do por do sol de sexta ao de
+# sabado a suite falha inteira, e nao por regressao: reserve_registration_slot
+# chama is_sabbath(now()), sem relogio injetavel, entao TODA reserva devolve
+# `sabbath` e uns treze cenarios que nao tem nada a ver com a pausa quebram
+# junto. Os casos de pausa daqui contornam isso com janela temporaria em
+# transacao, mas o resto da suite nao tem como. Se quebrar tudo de uma vez numa
+# sexta a noite, olhe o relogio antes de olhar o codigo.
 set -e
 
 DB="docker exec -i supabase_db_campeonato-app psql -U postgres -d postgres -tA"
