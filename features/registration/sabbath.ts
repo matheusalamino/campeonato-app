@@ -73,9 +73,12 @@ export const SUNSET_PAYMENT_CUTOFF_MINUTES = 10;
  * ate o proprio por do sol. Um tick de uma hora — a edicao de uma tecla —
  * tambem deixaria quem abre a pagina quarenta minutos antes sem faixa nenhuma.
  *
- * A relacao esta assertada em sabbath.test.ts, no espirito do
+ * E precisa ser pequeno SEM SER minusculo: um tick de 250 ms nao muda nada na
+ * tela — a faixa imprime hora de parede, hh:mm — e so gasta bateria acordando o
+ * aparelho quatro vezes por segundo. Os dois lados estao assertados em
+ * sabbath.test.ts, teto e piso, no espirito do
  * `MIN_RENEW_GAP_MS * 2 < HEARTBEAT_INTERVAL_MS`: aqui tambem nao ha nada alem
- * do teste segurando dois numeros que so fazem sentido juntos.
+ * do teste segurando numeros que so fazem sentido juntos.
  */
 export const SUNSET_TICK_MS = 30_000;
 
@@ -269,9 +272,9 @@ export function sabbathStatus(now: Date, window: SabbathWindow | null): SabbathS
  * Aqui isso resolve dois perigos de uma vez, e os dois ja tinham mordido:
  *
  * - O nivel e o instante viajavam como duas `string` a um caractere de
- *   distancia (`sunset` e `sunsetAt`) no mesmo arquivo de 828 linhas. Como
- *   `"cutoff"` E `string`, passar um no lugar do outro compilava, passava no
- *   eslint e so explodia em runtime.
+ *   distancia (`sunset` e `sunsetAt`) no mesmo arquivo de oitocentas linhas.
+ *   Como `"cutoff"` E `string`, passar um no lugar do outro compilava, passava
+ *   no eslint e so explodia em runtime.
  * - A guarda `alert === "none" || !startsAt` no componente lia como redundancia
  *   e convidava a ser "simplificada" pela metade — e sem a primeira metade a
  *   faixa aparece a semana inteira, em todo carregamento. Agora ela nao e
@@ -302,6 +305,32 @@ export function sunsetAlert(now: Date, startsAt: string | null): SunsetAlert {
   if (minutes <= SUNSET_PAYMENT_CUTOFF_MINUTES) return { level: "cutoff", at: startsAt };
   if (minutes <= SUNSET_NOTICE_MINUTES) return { level: "notice", at: startsAt };
   return { level: "none" };
+}
+
+/**
+ * Os dois alertas dizem a MESMA coisa?
+ *
+ * Existe por causa de um efeito colateral de a resposta ter virado objeto:
+ * `sunsetAlert` devolve um `{ level: "none" }` NOVO a cada chamada, e o tick
+ * roda a cada meio minuto. Quando o alerta era `string`, `setSunset("none")`
+ * batia no `Object.is` do React e nao renderizava nada; com objeto, a
+ * identidade muda sempre e o formulario inteiro reconcilia — sete `StepShell`,
+ * tres `UploadCard`, o radar, as estrelas e o payload do PIX com o CRC16
+ * recalculado. E `sabbathStatus` devolve `sunsetAt` nao-nulo em todo instante
+ * FORA da pausa, entao isso seria de domingo a noite a sexta as 17h, a semana
+ * toda, para dizer sempre a mesma coisa: nada a anunciar.
+ *
+ * A comparacao mora aqui, e nao inline no wizard, porque o wizard e o unico
+ * arquivo desta feature que nenhum teste consegue renderizar. Pura, ela custa
+ * tres linhas e ganha teste de verdade.
+ *
+ * Compara o `at` tambem, e nao so o nivel: dentro da mesma janela o instante
+ * nao muda, mas depois de um `router.refresh()` que atravessa um sabado ele
+ * muda sem o nivel mudar — e ai a faixa PRECISA ser repintada com a hora nova.
+ */
+export function sameSunsetAlert(a: SunsetAlert, b: SunsetAlert): boolean {
+  if (a.level === "none" || b.level === "none") return a.level === b.level;
+  return a.level === b.level && a.at === b.at;
 }
 
 /**
@@ -340,13 +369,14 @@ export function sunsetHasPassed(nowMs: number, sunsetAt: string): boolean {
  *
  * - Com `(startsAt: string)` a assinatura tambem aceitava o NIVEL, porque
  *   `SunsetAlert` era subtipo de `string`. `formatSunset(alert)` compilava,
- *   passava no eslint e nos 393 testes, e explodia em runtime.
+ *   passava no eslint e na suite inteira, e explodia em runtime.
  * - `new Intl.DateTimeFormat(...).format(new Date("banana"))` LANCA
  *   `RangeError`. Em render de Client Component sem error boundary isso e tela
  *   branca na pagina de inscricao inteira. As cinco irmas desta feature degradam
- *   (`parseWindow` -> `null`, `sunsetAlert` -> "none", `slotCountdown` ->
- *   `null`, `remainingUntil` -> `done`, `announceableEndsAt` -> `null`); esta
- *   degrada para `null`, e a faixa simplesmente nao aparece.
+ *   (`parseWindow` -> `null`, `sunsetAlert` -> `{ level: "none" }`,
+ *   `slotCountdown` -> `null`, `remainingUntil` -> `done`,
+ *   `announceableEndsAt` -> `null`); esta degrada para `null`, e a faixa
+ *   simplesmente nao aparece.
  *
  * MORA NESTE ARQUIVO pelo mesmo motivo do `announceableEndsAt`: quem decide
  * quando avisar e quem escreve a hora do aviso tem que envelhecer junto — mexer
@@ -390,8 +420,14 @@ export type NextSunset = { at: string; serverNow: string };
  * rede. NAO e um segundo relogio: e a correcao do unico que existe — o tick
  * continua sendo um so, para a faixa e para o bloco de pagamento.
  *
- * Medido UMA vez, na montagem: refazer a medida a cada tick faria a correcao
- * andar junto com a latencia da rede.
+ * Medido uma vez por RENDER DO SERVIDOR, e nao a cada tick — e a diferenca nao
+ * e de precisao, e de funcionamento. `serverNow` e um carimbo PARADO: ele nao
+ * envelhece entre um tick e o outro. Remedindo a cada tick,
+ * `Date.now() + clockSkewMs(serverNow, Date.now())` da sempre o proprio
+ * `serverNow`, e o relogio corrigido CONGELA no instante do render do servidor,
+ * para sempre: a faixa nunca avanca de nivel e o por do sol nunca passa. Quem
+ * traz carimbo novo e o `router.refresh()` — e ai o efeito inteiro roda de novo,
+ * com uma medida nova.
  *
  * Carimbo ilegivel devolve zero, e nao `NaN`. Zero e o comportamento antigo —
  * confiar no aparelho —, que erra as vezes; `NaN` contamina a aritmetica e

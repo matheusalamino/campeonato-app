@@ -22,7 +22,7 @@ import type { SunsetAlert } from "./sabbath";
  *                                  frente dele; a 5 min lia "se for pagar, pague
  *                                  agora" com o QR ja removido. A condicao
  *                                  intacta, e a suite inteira verde.
- *   `alert === "cutoff"` -> `!==`  ->  o mesmo estrago pelo outro lado.
+ *   `alert.level === "cutoff"` -> `!==`  ->  o mesmo estrago pelo outro lado.
  *   as duas regioes live trocadas  ->  o aviso de trinta minutos interrompendo o
  *                                  leitor de tela, e o corte — o unico momento
  *                                  em que algo SOME da tela sozinho — saindo
@@ -99,6 +99,24 @@ describe("SunsetNotice", () => {
 
     expect(educado.indexOf(ABERTURA)).toBeLessThan(educado.indexOf('role="alert"'));
     expect(assertivo.indexOf(ABERTURA)).toBeGreaterThan(assertivo.indexOf('role="alert"'));
+  });
+
+  it("a pausa e DOURADA: o vermelho desta tela e para perda de vaga", () => {
+    // `SlotNotice` fixou a pergunta que classifica: "isso e ma noticia para o
+    // jogador?". A pausa nao e — ela congela o campeonato para todo mundo e tem
+    // hora para voltar. Pintar de alarme a observancia da comunidade dele e o
+    // erro especifico contra o qual o `SlotNotice` argumenta por doze linhas, e
+    // ate aqui nenhum teste o pegava: `redTone` no lugar do `goldTone`, ou os
+    // valores das duas constantes trocados entre si, passavam em tudo.
+    //
+    // As cores estao escritas AQUI de proposito. Importar `goldTone` faria o
+    // teste concordar com qualquer valor que a constante viesse a ter —
+    // inclusive com o vermelho, no dia em que os dois trocassem de lugar.
+    for (const nivel of ["notice", "cutoff"] as const) {
+      const html = faixa({ level: nivel, at: POR_DO_SOL });
+      expect(html).toContain("rgba(230,180,34,.08)");
+      expect(html).not.toContain("rgba(220,38,38");
+    }
   });
 
   it("instante podre nao derruba a pagina de inscricao inteira", () => {

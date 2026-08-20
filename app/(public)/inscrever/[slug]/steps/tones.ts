@@ -3,11 +3,16 @@ import type { CSSProperties } from "react";
 /**
  * Os dois tons das faixas do formulario de inscricao.
  *
- * Existem como constante, e nao como estilo repetido, porque o trio
- * (fundo + borda + tinta do texto) chegou a QUARTA copia: `SlotNotice`, os dois
- * avisos dentro do `RegistrationWizard` e o `SunsetNotice`. A regra desta
- * feature, escrita em `features/registration/countdown.ts`, e que a extracao vem
- * na terceira ocorrencia.
+ * Quem forcou a extracao foi o DOURADO: o trio (fundo + borda + tinta do texto)
+ * chegou a QUARTA copia — `SlotNotice`, os dois avisos dentro do
+ * `RegistrationWizard` e o `SunsetNotice`. A regra desta feature, escrita em
+ * `features/registration/countdown.ts`, e que a extracao vem na terceira
+ * ocorrencia.
+ *
+ * O `redTone` veio junto com UMA ocorrencia so, e por isso nao e o mesmo tipo de
+ * mudanca: ele nao foi extraido, foi MOVIDO para ca. Veio porque os dois tons se
+ * definem um contra o outro — a pergunta que classifica esta logo abaixo, e ela
+ * nao da para ler com metade da resposta em outro arquivo.
  *
  * Nao e capricho de organizacao: as tres cores andam juntas ou nao andam. Mexer
  * no fundo sem mexer na borda deixa a faixa com um contorno que nao pertence a

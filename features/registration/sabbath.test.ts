@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isSabbath, sabbathEndsAt, sabbathStartsAt, sunsetAlert, sabbathStatus, announceableEndsAt,
-  sunsetHasPassed, sunsetTimeLabel, clockSkewMs,
+  sunsetHasPassed, sunsetTimeLabel, clockSkewMs, sameSunsetAlert,
   SUNSET_NOTICE_MINUTES, SUNSET_PAYMENT_CUTOFF_MINUTES, SUNSET_TICK_MS,
   type SabbathWindow,
 } from "./sabbath";
@@ -216,6 +216,60 @@ describe("sunsetAlert", () => {
 });
 
 /**
+ * O bail-out que a uniao custou.
+ *
+ * Enquanto o alerta era `string`, `setSunset("none")` batia no `Object.is` do
+ * React e nao renderizava nada. Virando objeto, `sunsetAlert` passou a devolver
+ * um `{ level: "none" }` NOVO a cada chamada — e o wizard tica a cada meio
+ * minuto, com `sunsetAt` nao-nulo em todo instante fora da pausa. Sem esta
+ * comparacao, o formulario inteiro reconcilia de domingo a noite a sexta as 17h
+ * para dizer sempre a mesma coisa.
+ *
+ * Cobre as duas direcoes: dizer "igual" para alertas diferentes prende a faixa
+ * num nivel velho, que e o estrago pior.
+ */
+describe("sameSunsetAlert", () => {
+  const inicio = JANELA.startsAt;
+
+  it("dois 'nada a anunciar' sao a mesma coisa, mesmo sendo objetos diferentes", () => {
+    const a = sunsetAlert(em("2026-08-21T20:19:00.000Z"), inicio);
+    const b = sunsetAlert(em("2026-08-21T20:19:30.000Z"), inicio);
+    // Objetos distintos de proposito: e exatamente o par que o tick produz.
+    expect(a).not.toBe(b);
+    expect(sameSunsetAlert(a, b)).toBe(true);
+  });
+
+  it("o mesmo nivel com o mesmo instante e a mesma coisa", () => {
+    expect(sameSunsetAlert(
+      { level: "notice", at: inicio },
+      { level: "notice", at: inicio },
+    )).toBe(true);
+  });
+
+  it("mudar de nivel NAO e a mesma coisa — nos dois sentidos", () => {
+    // Se isto respondesse `true`, a faixa ficaria presa: o corte chegaria sem o
+    // texto mudar, e o jogador leria "se for pagar, pague agora" com o QR ja
+    // fora do ar.
+    expect(sameSunsetAlert({ level: "none" }, { level: "notice", at: inicio })).toBe(false);
+    expect(sameSunsetAlert({ level: "notice", at: inicio }, { level: "none" })).toBe(false);
+    expect(sameSunsetAlert(
+      { level: "notice", at: inicio },
+      { level: "cutoff", at: inicio },
+    )).toBe(false);
+  });
+
+  it("mesmo nivel com OUTRO instante nao e a mesma coisa", () => {
+    // Acontece de verdade: um `router.refresh()` que atravessa a pausa traz o
+    // por do sol do sabado seguinte. O nivel pode nao mudar, mas a HORA impressa
+    // na faixa muda — e sem repintar ela anuncia o por do sol da semana passada.
+    expect(sameSunsetAlert(
+      { level: "notice", at: inicio },
+      { level: "notice", at: "2026-08-28T20:45:00.000Z" },
+    )).toBe(false);
+  });
+});
+
+/**
  * A pergunta que leva ao servidor.
  *
  * Nao decide tela: decide RECARREGAR. Por isso as duas direcoes do erro tem
@@ -335,6 +389,20 @@ describe("os numeros do por do sol, e a relacao entre eles", () => {
     // quarenta minutos antes nunca veria a faixa. Nada alem deste teste segura
     // os dois numeros juntos.
     expect(SUNSET_TICK_MS * 4).toBeLessThanOrEqual(SUNSET_PAYMENT_CUTOFF_MINUTES * 60_000);
+  });
+
+  it("e nao cabe TANTAS vezes que vire ruido", () => {
+    // O teto acima nao tem piso: `SUNSET_TICK_MS = 250` passa nele, e poe o
+    // formulario para reavaliar quatro vezes por segundo sem mudar nada na
+    // tela — a faixa imprime hora de PAREDE (hh:mm), entao nada abaixo de um
+    // segundo pode aparecer para o jogador. O que sobra e bateria queimada num
+    // aparelho parado, e o docblock de `SUNSET_TICK_MS` afirmava segurar "a
+    // relacao" segurando um lado so.
+    //
+    // Cem fatias do corte e o limite generoso: entre 4 e 100 cabe qualquer
+    // numero defensavel (30s da 20), e fora disso e engano de tecla — a mesma
+    // forma de erro que o teto pega do outro lado.
+    expect(SUNSET_TICK_MS * 100).toBeGreaterThanOrEqual(SUNSET_PAYMENT_CUTOFF_MINUTES * 60_000);
   });
 });
 

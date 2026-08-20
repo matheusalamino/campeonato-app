@@ -86,7 +86,10 @@ describe("a fiacao do sabado na pagina de inscricao", () => {
     const montagem = [...fonte.matchAll(/const nextSunset = ([^;]*);/g)];
     expect(montagem).toHaveLength(1);
 
-    const expressao = montagem[0][1];
+    // Sem espaco nas pontas: qualquer formatador pode quebrar a expressao em
+    // tres linhas, e o `?` desce junto. O que este teste tem que pegar e o
+    // ternario ter sumido — nao a linha ter virado tres.
+    const expressao = montagem[0][1].trim();
     // O instante e o que `sabbathStatus` calculou — nao um `new Date()` daqui,
     // que reabriria a decisao do sabado fora do modulo que a toma.
     expect(expressao).toMatch(/\bat: sunsetAt\b/);
@@ -94,6 +97,6 @@ describe("a fiacao do sabado na pagina de inscricao", () => {
     // responderem sobre o mesmo instante.
     expect(expressao).toMatch(/\bserverNow: now\.toISOString\(\)/);
     // Sem por do sol nao ha o que carimbar: `null` mantem o par fora do alcance.
-    expect(expressao).toMatch(/^sunsetAt \?/);
+    expect(expressao).toMatch(/^sunsetAt\s*\?/);
   });
 });

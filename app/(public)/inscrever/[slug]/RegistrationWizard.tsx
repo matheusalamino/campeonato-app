@@ -22,7 +22,7 @@ import { canOpenStep, isSlotVerdict, paymentGate, type SlotReservation } from "@
 import { createLatestOnly } from "@/features/registration/latest-only";
 import { shouldRenewSlot, HEARTBEAT_INTERVAL_MS } from "@/features/registration/slot-keepalive";
 import {
-  sunsetAlert, sunsetHasPassed, clockSkewMs, SUNSET_TICK_MS,
+  sunsetAlert, sunsetHasPassed, sameSunsetAlert, clockSkewMs, SUNSET_TICK_MS,
   type SunsetAlert, type NextSunset,
 } from "@/features/registration/sabbath";
 import { lookupCpfAction, submitRegistrationAction, reserveSlotAction } from "./actions";
@@ -435,45 +435,53 @@ export default function RegistrationWizard({
     };
   }, [slot, result, championship.id, latestOnly]);
 
-  const sunsetAt = nextSunset?.at ?? null;
-  const serverNow = nextSunset?.serverNow ?? null;
-
   /*
    * Comeca em "none" e so calcula dentro do efeito, de proposito: computar no
    * render faria o servidor e o cliente chegarem a valores diferentes na virada
    * de um minuto, e a divergencia de hidratacao apareceria justo na faixa que
    * mais precisa ser lida.
    *
-   * As deps sao os dois campos, e nao o objeto: o objeto nasce novo a cada
-   * render do servidor e reiniciaria o intervalo por identidade, nao por
-   * conteudo.
+   * A dep e o OBJETO, e os dois campos sao lidos la dentro. Abri-los aqui em
+   * cima em duas `string | null` — foi o que este efeito fez por um lote — nao
+   * comprava nada: `serverNow` tambem nasce novo a cada render do servidor,
+   * entao `[sunsetAt, serverNow]` mudava exatamente quando `[nextSunset]` muda.
+   * O que custava era o par de ISOs intercambiaveis a espera de alguem trocar
+   * um pelo outro no meio de oitocentas linhas, com o `tsc` calado. Ver
+   * `NextSunset`: os dois campos vem juntos justamente para nao se soltarem.
    */
   useEffect(() => {
-    if (!sunsetAt || !serverNow) return;
+    if (!nextSunset) return;
     /*
-     * A correcao do relogio, medida UMA vez na montagem. Nao e um segundo
-     * relogio: o tick continua sendo um so, e o que muda e de quem e a hora que
-     * ele le. Sem isto, um aparelho alguns minutos errado desligava a faixa e o
-     * corte — e, adiantado, punha a pagina em loop de refresh. Ver `NextSunset`.
+     * A correcao do relogio, medida uma vez por render do SERVIDOR — e nao a
+     * cada tick, o que congelaria o relogio corrigido no carimbo (ver
+     * `clockSkewMs`). Nao e um segundo relogio: o tick continua sendo um so, e o
+     * que muda e de quem e a hora que ele le. Sem isto, um aparelho alguns
+     * minutos errado desligava a faixa e o corte — e, adiantado, punha a pagina
+     * em loop de refresh.
      */
-    const skewMs = clockSkewMs(serverNow, Date.now());
+    const skewMs = clockSkewMs(nextSunset.serverNow, Date.now());
     const tick = () => {
       const agora = new Date(Date.now() + skewMs);
       // Passou do por do sol: quem decide se a pausa comecou e o servidor. O
       // refresh traz a tela de repouso com o horario de volta, em vez de o
       // wizard tentar se trancar sozinho.
-      if (sunsetHasPassed(agora.getTime(), sunsetAt)) {
+      if (sunsetHasPassed(agora.getTime(), nextSunset.at)) {
         router.refresh();
         return;
       }
-      setSunset(sunsetAlert(agora, sunsetAt));
+      // So troca o estado quando o alerta MUDA de fato. `sunsetAlert` devolve
+      // objeto novo a cada chamada, e entregar esse objeto direto reconciliaria
+      // o formulario inteiro a cada meio minuto — inclusive nos seis dias e meio
+      // por semana em que a resposta e sempre "nada a anunciar".
+      const proximo = sunsetAlert(agora, nextSunset.at);
+      setSunset((anterior) => (sameSunsetAlert(anterior, proximo) ? anterior : proximo));
     };
     // Antes do intervalo, e nao so dentro dele: sem esta chamada, quem abre a
     // pagina JA dentro do corte ve o QR do PIX por ate meio minuto.
     tick();
     const id = setInterval(tick, SUNSET_TICK_MS);
     return () => clearInterval(id);
-  }, [sunsetAt, serverNow, router]);
+  }, [nextSunset, router]);
 
   const activeSkills = skillsFor(form.preferred_position);
   const total = computeTicketsTotal({
@@ -576,8 +584,12 @@ export default function RegistrationWizard({
       <h1 className="text-xl font-extrabold text-[var(--gala-gold-2)] mb-1">Inscrição</h1>
       <p className="text-sm text-[var(--gala-ink-dim)] mb-4">{championship.name}</p>
 
-      {/* Antes da faixa da vaga: e a noticia com hora marcada, e ela explica um
-          bloco que some la embaixo, fora do campo de visao a 375px. */}
+      {/* Fica antes da faixa da vaga porque e a noticia com HORA MARCADA: a da
+          vaga descreve um estado, esta marca um prazo, e prazo se le primeiro.
+          E preferencia, nao invariante — nenhum teste segura esta ordem, e nao
+          deveria: quem explica o bloco de pagamento sumido e o
+          `PaymentClosedNotice`, no lugar onde ele sumiu. Esta faixa avisa ANTES,
+          para o jogador nao comecar um PIX que nao vai dar tempo de terminar. */}
       <SunsetNotice alert={sunset} />
 
       <SlotNotice slot={slot} />
