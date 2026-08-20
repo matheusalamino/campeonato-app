@@ -7,11 +7,12 @@
 # NAO RODE ISTO DURANTE UM SABADO DE VERDADE — do por do sol de sexta ao de
 # sabado a suite falha inteira, e nao por regressao: reserve_registration_slot
 # chama is_sabbath(now()), sem relogio injetavel, entao TODA reserva devolve
-# `sabbath`. Medido com uma janela cobrindo now(): 15 das 25 assertivas falham,
-# e as 4 da propria pausa continuam passando, porque montam a janela dentro de
-# uma transacao e nao dependem do relogio de fora. Se quebrar tudo de uma vez
-# numa sexta a noite, olhe o relogio antes de olhar o codigo -- o script avisa
-# em tempo de execucao quando esse for o caso.
+# `sabbath`. Medido com uma janela cobrindo now(): 15 das 28 assertivas falham.
+# Passam os cenarios que montam a janela DENTRO de uma transacao; falham os dois
+# controles ("fora do sabado ..."), que dependem do relogio de fora -- ou seja,
+# ha FALHOU dentro das proprias secoes de sabado, e isso e esperado. Se quebrar
+# tudo de uma vez numa sexta a noite, olhe o relogio antes de olhar o codigo --
+# o script avisa em tempo de execucao quando esse for o caso.
 set -e
 
 DB="docker exec -i supabase_db_campeonato-app psql -U postgres -d postgres -tA"
@@ -52,6 +53,11 @@ preparar() {
 
 # Fotografia da tabela global ANTES de qualquer cenario. A assercao que fecha o
 # ciclo esta no fim do arquivo -- leia o porque la antes de mexer aqui.
+# limpar() ANTES da fotografia, de proposito: ele apaga starts_at >= '2098-01-01',
+# e uma linha de 2098 sobrando de uma execucao abortada sumiria no MEIO da suite.
+# A guarda leria isso como "a suite apagou uma janela" e mandaria o leitor
+# procurar o dano oposto ao que houve. Limpar antes torna a fotografia estavel.
+limpar
 sabbath_linhas_antes=$($DB -c "SELECT count(*) FROM sabbath_windows;")
 sabbath_cobrindo_antes=$($DB -c "SELECT count(*) FROM sabbath_windows WHERE now() BETWEEN starts_at AND ends_at;")
 
@@ -69,8 +75,11 @@ if [ "$($DB -c "SELECT is_sabbath(now());" | tr -d ' ')" = "t" ]; then
   echo "  cenarios sem relacao com a pausa sao ESPERADAS -- elas nao"
   echo "  sao regressao, e nao ha nada para consertar no codigo."
   echo ""
-  echo "  Os cenarios da propria pausa seguem validos: eles montam a"
-  echo "  janela numa transacao e nao dependem do relogio de fora."
+  echo "  Seguem validos os cenarios que montam a janela DENTRO de"
+  echo "  uma transacao. Os dois controles ('fora do sabado ...')"
+  echo "  NAO: eles dependem do relogio de fora e falham agora --"
+  echo "  entao ha FALHOU dentro das proprias secoes de sabado, e"
+  echo "  ali tambem e esperado."
   echo ""
   echo "  Para uma leitura limpa, rode de novo depois do por do sol."
   echo "  Nao existe flag para desligar a trava, e isso e deliberado:"
@@ -185,6 +194,29 @@ checar "fora do sabado a reserva segue normal" "false" "$(echo "$r" | sed 's/.*\
 # A ORDEM das checagens, e nao so a recusa. Um cenario que so verifica "recusou"
 # nao distingue a pausa estar antes ou depois de already_registered — o mesmo CPF
 # nos dois lados, mudando so a janela, e o que fixa isso.
+# A OUTRA metade da ordem, e ela nao tinha assertiva nenhuma: a migration gasta
+# paragrafos explicando por que not_open ganha de sabbath, e nada prendia isso.
+# Mover a checagem de sabado para ANTES da janela passava a suite inteira verde,
+# e um campeonato ENCERRADO passaria a responder "volte apos o por do sol" -- uma
+# promessa falsa, porque voltar no domingo nao abre porta nenhuma.
+#
+# As duas secoes de sabado usam preparar(), que cria o campeonato com datas
+# NULAS; sem mexer na data aqui, "fora da janela" e "e sabado" nunca coincidem e
+# a aresta fica sem cobertura.
+echo "== ordem: not_open ganha de sabbath =="
+preparar
+$DB -c "UPDATE championships SET registration_end_date = now() - interval '1 day' WHERE id='$CHAMP';" > /dev/null
+saida=$($DB <<SQL
+BEGIN;
+INSERT INTO sabbath_windows (starts_at, ends_at)
+VALUES (now() - interval '1 hour', now() + interval '1 hour');
+SELECT reserve_registration_slot('$CHAMP', '99900000604')::text;
+ROLLBACK;
+SQL
+)
+r=$(echo "$saida" | grep '"success"')
+checar "encerrado E no sabado, not_open ganha" "not_open" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
 echo "== a pausa fala antes de already_registered =="
 preparar
 $DB -c "INSERT INTO players (cpf, name) VALUES ('99900000603', 'Ja inscrito A7');" > /dev/null
@@ -312,6 +344,34 @@ r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid', '99900000502',
       '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0}'::jsonb,
       '{\"visao\":4}'::jsonb)::text;")
 checar "sem reserva, fora do prazo recusa" "not_open" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+# =============================================================================
+# Lacuna HERDADA, e nao especifica de uma task: TODOS os cenarios acima rodam
+# como `postgres`, que tem EXECUTE de qualquer jeito. Se as duas linhas de
+# REVOKE sumirem de uma migration, nada acima morde -- a suite passa verde com
+# as RPCs abertas a anon via PostgREST.
+#
+# Este projeto ja teve esse incidente de verdade: reserve_registration_slot
+# nasceu executavel por anon, e qualquer um esgotaria max_players/max_waitlist
+# com CPFs forjados. Vale para as DUAS RPCs do fluxo publico, nao so para a
+# reserva -- por isso as duas estao aqui, e nao uma so.
+#
+# REVOKE FROM PUBLIC sozinho nao fecha: o schema public concede EXECUTE nominal
+# a anon/authenticated por default privileges no momento da criacao. Tem que
+# revogar por nome, e cada migration que faz CREATE OR REPLACE repete as duas
+# linhas -- CREATE OR REPLACE preserva a ACL de funcao existente, mas cria do
+# zero (e aberta) numa baseline squashada.
+# =============================================================================
+echo "== as RPCs publicas nao sao chamaveis por anon =="
+r=$($DB -c "
+  SELECT has_function_privilege('anon','public.reserve_registration_slot(uuid, text)','EXECUTE')::text || '|' ||
+         has_function_privilege('authenticated','public.reserve_registration_slot(uuid, text)','EXECUTE')::text;")
+checar "reserve_registration_slot fechada para anon/authenticated" "false|false" "$(echo "$r" | tr -d ' ')"
+
+r=$($DB -c "
+  SELECT has_function_privilege('anon','public.commit_registration(uuid, uuid, text, jsonb, jsonb)','EXECUTE')::text || '|' ||
+         has_function_privilege('authenticated','public.commit_registration(uuid, uuid, text, jsonb, jsonb)','EXECUTE')::text;")
+checar "commit_registration fechada para anon/authenticated" "false|false" "$(echo "$r" | tr -d ' ')"
 
 limpar
 
