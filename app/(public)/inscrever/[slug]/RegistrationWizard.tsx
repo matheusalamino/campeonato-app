@@ -21,9 +21,11 @@ import { extraTicketsCap } from "@/features/registration/extra-tickets";
 import { canOpenStep, isSlotVerdict, type SlotReservation } from "@/features/registration/slot";
 import { createLatestOnly } from "@/features/registration/latest-only";
 import { shouldRenewSlot, HEARTBEAT_INTERVAL_MS } from "@/features/registration/slot-keepalive";
+import { sunsetAlert, type SunsetAlert } from "@/features/registration/sabbath";
 import { lookupCpfAction, submitRegistrationAction, reserveSlotAction } from "./actions";
 import StepShell from "./steps/StepShell";
 import SlotNotice from "./steps/SlotNotice";
+import SunsetNotice from "./steps/SunsetNotice";
 import SkillStars from "./steps/SkillStars";
 import UploadCard from "./steps/UploadCard";
 import PixPayment from "./steps/PixPayment";
@@ -63,12 +65,12 @@ const inputOk = "border-white/10 focus:border-[var(--gala-gold-2)]";
 const inputError = "border-red-400/70 focus:border-red-400";
 
 /**
- * `sunsetAt` ja entra no contrato, mas ainda nao e lido: o wizard nao calcula o
- * por do sol, recebe. A pagina manda o proximo; o `RestOverlay` manda `null`,
- * porque o wizard borrado ao fundo dele nao tem ninguem para avisar.
+ * O wizard nao calcula o por do sol, recebe. A pagina manda o proximo; o
+ * `RestOverlay` manda `null`, porque o wizard borrado ao fundo dele nao tem
+ * ninguem para avisar.
  */
 export default function RegistrationWizard({
-  championship, liveCount,
+  championship, liveCount, sunsetAt,
 }: { championship: WizardChampionship; liveCount: number; sunsetAt: string | null }) {
   const router = useRouter();
   const [form, setForm] = useState({ ...EMPTY });
@@ -77,6 +79,12 @@ export default function RegistrationWizard({
   const [looking, setLooking] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [slot, setSlot] = useState<SlotReservation | null>(null);
+  /**
+   * O quanto o por do sol ja aperta. Um relogio so para os dois consumidores:
+   * a faixa e o bloco de pagamento. Dois relogios divergiriam, e o jogador
+   * leria "faltam 12 minutos" com o QR ja escondido.
+   */
+  const [sunset, setSunset] = useState<SunsetAlert>("none");
   /**
    * O CPF que a reserva viva conhece — nao o que estiver no campo agora.
    *
@@ -422,6 +430,32 @@ export default function RegistrationWizard({
     };
   }, [slot, result, championship.id, latestOnly]);
 
+  /*
+   * Comeca em "none" e so calcula dentro do efeito, de proposito: computar no
+   * render faria o servidor e o cliente chegarem a valores diferentes na virada
+   * de um minuto, e a divergencia de hidratacao apareceria justo na faixa que
+   * mais precisa ser lida.
+   */
+  useEffect(() => {
+    if (!sunsetAt) return;
+    const tick = () => {
+      // Passou do por do sol: quem decide se a pausa comecou e o servidor. O
+      // refresh traz a tela de repouso com o horario de volta, em vez de o
+      // wizard tentar se trancar sozinho — o relogio daqui e o do aparelho do
+      // jogador, e ele pode estar errado nos dois sentidos.
+      if (Date.parse(sunsetAt) <= Date.now()) {
+        router.refresh();
+        return;
+      }
+      setSunset(sunsetAlert(new Date(), sunsetAt));
+    };
+    tick();
+    // Trinta segundos, como o Countdown: a faixa fala em minutos, e meio minuto
+    // de atraso na virada e coberto pelo refresh.
+    const id = setInterval(tick, 30_000);
+    return () => clearInterval(id);
+  }, [sunsetAt, router]);
+
   const activeSkills = skillsFor(form.preferred_position);
   const total = computeTicketsTotal({
     basePrice: championship.base_price,
@@ -444,14 +478,23 @@ export default function RegistrationWizard({
         })
       : null;
   /*
-   * Mesma primeira linha de `canOpenStep`: sem reserva ainda nao ha veredito, e
-   * com reserva ok nada muda. A guarda de navegacao atrasa exatamente uma
-   * transicao — a renovacao dispara depois do `setStep` —, entao o jogador
-   * aterrissa neste passo com a recusa ja na mao e o QR ainda no lugar. No
-   * celular e o QR que esta no campo de visao, nao a faixa: ele paga, e so o
-   * "Revisar" o para, com o dinheiro ja fora.
+   * Dois gatilhos, um mecanismo so — a peca nova desta feature e o segundo
+   * termo, nao um bloco paralelo que tambem esconde o QR.
+   *
+   * O primeiro e o do A4. Mesma primeira linha de `canOpenStep`: sem reserva
+   * ainda nao ha veredito, e com reserva ok nada muda. A guarda de navegacao
+   * atrasa exatamente uma transicao — a renovacao dispara depois do `setStep`
+   * —, entao o jogador aterrissa neste passo com a recusa ja na mao e o QR
+   * ainda no lugar. No celular e o QR que esta no campo de visao, nao a faixa:
+   * ele paga, e so o "Revisar" o para, com o dinheiro ja fora.
+   *
+   * O segundo e o do por do sol, e chega pela mesma porta: dez minutos e tempo
+   * insuficiente para trocar para o app do banco, pagar, tirar print e subir,
+   * entao quem comeca agora paga e e recusado — dinheiro gasto e vaga travada
+   * ate sabado a noite. Isto NAO move a borda do calculo: a pausa continua
+   * exata no por do sol, e "cutoff" so muda o que a tela mostra antes dela.
    */
-  const slotAllowsPayment = !slot || slot.ok;
+  const slotAllowsPayment = (!slot || slot.ok) && sunset !== "cutoff";
 
   function setSkill(skill: string, v: number) {
     setForm((p) => ({ ...p, skills: { ...p.skills, [skill]: v } }));
@@ -525,6 +568,10 @@ export default function RegistrationWizard({
       )}
       <h1 className="text-xl font-extrabold text-[var(--gala-gold-2)] mb-1">Inscrição</h1>
       <p className="text-sm text-[var(--gala-ink-dim)] mb-4">{championship.name}</p>
+
+      {/* Antes da faixa da vaga: e a noticia com hora marcada, e a unica que
+          chega sozinha sem o jogador ter tocado em nada. */}
+      <SunsetNotice alert={sunset} startsAt={sunsetAt} />
 
       <SlotNotice slot={slot} />
 
@@ -736,11 +783,28 @@ export default function RegistrationWizard({
           ) : (
             /* Sumir sem dizer nada leria como tela quebrada: a 375px a faixa do
                topo esta fora do campo de visao — e por isso mesmo que o QR
-               precisou sair daqui. */
+               precisou sair daqui.
+
+               Duas historias, como o ClosedNotice do A5: a vaga e o por do sol
+               escondem o mesmo bloco por motivos diferentes, e uma frase so
+               mentiria em um dos dois casos — no corte do por do sol, afirmar
+               que a vaga nao esta confirmada e falso, e manda o jogador procurar
+               um problema que ele nao tem. A vaga vem primeiro porque ela e a
+               recusa mais dura: sem vaga nao ha inscricao, com ou sem sol. */
             total > 0 && (
               <div className="rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3 text-xs leading-relaxed text-[var(--gala-ink-dim)]">
-                O pagamento fica indisponível enquanto sua vaga não estiver confirmada.
-                O aviso no topo da página explica o motivo. Não pague nada até lá.
+                {slot && !slot.ok ? (
+                  <>
+                    O pagamento fica indisponível enquanto sua vaga não estiver confirmada.
+                    O aviso no topo da página explica o motivo. Não pague nada até lá.
+                  </>
+                ) : (
+                  <>
+                    O pagamento fecha alguns minutos antes do pôr do sol, para ninguém pagar e ser
+                    recusado. As inscrições voltam após o pôr do sol de sábado — e o pagamento
+                    volta com elas.
+                  </>
+                )}
               </div>
             )
           )}
