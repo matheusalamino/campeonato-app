@@ -18,14 +18,19 @@ import { summarizeErrors } from "@/features/registration/error-summary";
 import { SHIRT_SIZES, CUSTOM_SHIRT_SIZE } from "@/features/registration/shirt-sizes";
 import { radarDataFrom, hasAnyRating } from "@/features/registration/radar";
 import { extraTicketsCap } from "@/features/registration/extra-tickets";
-import { canOpenStep, isSlotVerdict, type SlotReservation } from "@/features/registration/slot";
+import { canOpenStep, isSlotVerdict, paymentGate, type SlotReservation } from "@/features/registration/slot";
 import { createLatestOnly } from "@/features/registration/latest-only";
 import { shouldRenewSlot, HEARTBEAT_INTERVAL_MS } from "@/features/registration/slot-keepalive";
-import { sunsetAlert, type SunsetAlert } from "@/features/registration/sabbath";
+import {
+  sunsetAlert, sunsetHasPassed, clockSkewMs, SUNSET_TICK_MS,
+  type SunsetAlert, type NextSunset,
+} from "@/features/registration/sabbath";
 import { lookupCpfAction, submitRegistrationAction, reserveSlotAction } from "./actions";
 import StepShell from "./steps/StepShell";
 import SlotNotice from "./steps/SlotNotice";
 import SunsetNotice from "./steps/SunsetNotice";
+import PaymentClosedNotice from "./steps/PaymentClosedNotice";
+import { goldTone } from "./steps/tones";
 import SkillStars from "./steps/SkillStars";
 import UploadCard from "./steps/UploadCard";
 import PixPayment from "./steps/PixPayment";
@@ -65,13 +70,13 @@ const inputOk = "border-white/10 focus:border-[var(--gala-gold-2)]";
 const inputError = "border-red-400/70 focus:border-red-400";
 
 /**
- * O wizard nao calcula o por do sol, recebe. A pagina manda o proximo; o
- * `RestOverlay` manda `null`, porque o wizard borrado ao fundo dele nao tem
- * ninguem para avisar.
+ * O wizard nao calcula o por do sol, recebe — e recebe junto o relogio do
+ * servidor, que e o que decide. A pagina manda o proximo; o `RestOverlay` manda
+ * `null`, porque o wizard borrado ao fundo dele nao tem ninguem para avisar.
  */
 export default function RegistrationWizard({
-  championship, liveCount, sunsetAt,
-}: { championship: WizardChampionship; liveCount: number; sunsetAt: string | null }) {
+  championship, liveCount, nextSunset,
+}: { championship: WizardChampionship; liveCount: number; nextSunset: NextSunset | null }) {
   const router = useRouter();
   const [form, setForm] = useState({ ...EMPTY });
   const [step, setStep] = useState(1);
@@ -81,10 +86,10 @@ export default function RegistrationWizard({
   const [slot, setSlot] = useState<SlotReservation | null>(null);
   /**
    * O quanto o por do sol ja aperta. Um relogio so para os dois consumidores:
-   * a faixa e o bloco de pagamento. Dois relogios divergiriam, e o jogador
-   * leria "faltam 12 minutos" com o QR ja escondido.
+   * a faixa e o bloco de pagamento. Com dois, a tela poderia dizer que ainda da
+   * tempo de pagar com o QR ja fora do ar — ou o contrario, pior.
    */
-  const [sunset, setSunset] = useState<SunsetAlert>("none");
+  const [sunset, setSunset] = useState<SunsetAlert>({ level: "none" });
   /**
    * O CPF que a reserva viva conhece — nao o que estiver no campo agora.
    *
@@ -430,31 +435,45 @@ export default function RegistrationWizard({
     };
   }, [slot, result, championship.id, latestOnly]);
 
+  const sunsetAt = nextSunset?.at ?? null;
+  const serverNow = nextSunset?.serverNow ?? null;
+
   /*
    * Comeca em "none" e so calcula dentro do efeito, de proposito: computar no
    * render faria o servidor e o cliente chegarem a valores diferentes na virada
    * de um minuto, e a divergencia de hidratacao apareceria justo na faixa que
    * mais precisa ser lida.
+   *
+   * As deps sao os dois campos, e nao o objeto: o objeto nasce novo a cada
+   * render do servidor e reiniciaria o intervalo por identidade, nao por
+   * conteudo.
    */
   useEffect(() => {
-    if (!sunsetAt) return;
+    if (!sunsetAt || !serverNow) return;
+    /*
+     * A correcao do relogio, medida UMA vez na montagem. Nao e um segundo
+     * relogio: o tick continua sendo um so, e o que muda e de quem e a hora que
+     * ele le. Sem isto, um aparelho alguns minutos errado desligava a faixa e o
+     * corte — e, adiantado, punha a pagina em loop de refresh. Ver `NextSunset`.
+     */
+    const skewMs = clockSkewMs(serverNow, Date.now());
     const tick = () => {
+      const agora = new Date(Date.now() + skewMs);
       // Passou do por do sol: quem decide se a pausa comecou e o servidor. O
       // refresh traz a tela de repouso com o horario de volta, em vez de o
-      // wizard tentar se trancar sozinho — o relogio daqui e o do aparelho do
-      // jogador, e ele pode estar errado nos dois sentidos.
-      if (Date.parse(sunsetAt) <= Date.now()) {
+      // wizard tentar se trancar sozinho.
+      if (sunsetHasPassed(agora.getTime(), sunsetAt)) {
         router.refresh();
         return;
       }
-      setSunset(sunsetAlert(new Date(), sunsetAt));
+      setSunset(sunsetAlert(agora, sunsetAt));
     };
+    // Antes do intervalo, e nao so dentro dele: sem esta chamada, quem abre a
+    // pagina JA dentro do corte ve o QR do PIX por ate meio minuto.
     tick();
-    // Trinta segundos, como o Countdown: a faixa fala em minutos, e meio minuto
-    // de atraso na virada e coberto pelo refresh.
-    const id = setInterval(tick, 30_000);
+    const id = setInterval(tick, SUNSET_TICK_MS);
     return () => clearInterval(id);
-  }, [sunsetAt, router]);
+  }, [sunsetAt, serverNow, router]);
 
   const activeSkills = skillsFor(form.preferred_position);
   const total = computeTicketsTotal({
@@ -478,23 +497,11 @@ export default function RegistrationWizard({
         })
       : null;
   /*
-   * Dois gatilhos, um mecanismo so — a peca nova desta feature e o segundo
-   * termo, nao um bloco paralelo que tambem esconde o QR.
-   *
-   * O primeiro e o do A4. Mesma primeira linha de `canOpenStep`: sem reserva
-   * ainda nao ha veredito, e com reserva ok nada muda. A guarda de navegacao
-   * atrasa exatamente uma transicao — a renovacao dispara depois do `setStep`
-   * —, entao o jogador aterrissa neste passo com a recusa ja na mao e o QR
-   * ainda no lugar. No celular e o QR que esta no campo de visao, nao a faixa:
-   * ele paga, e so o "Revisar" o para, com o dinheiro ja fora.
-   *
-   * O segundo e o do por do sol, e chega pela mesma porta: dez minutos e tempo
-   * insuficiente para trocar para o app do banco, pagar, tirar print e subir,
-   * entao quem comeca agora paga e e recusado — dinheiro gasto e vaga travada
-   * ate sabado a noite. Isto NAO move a borda do calculo: a pausa continua
-   * exata no por do sol, e "cutoff" so muda o que a tela mostra antes dela.
+   * Dois gatilhos, um mecanismo so, e a regra mora em `paymentGate` — pura e
+   * testada. Aqui sobra a pergunta, e a razao volta junto com a resposta para o
+   * aviso de baixo nao ter que reconstrui-la.
    */
-  const slotAllowsPayment = (!slot || slot.ok) && sunset !== "cutoff";
+  const payment = paymentGate(slot, sunset);
 
   function setSkill(skill: string, v: number) {
     setForm((p) => ({ ...p, skills: { ...p.skills, [skill]: v } }));
@@ -569,9 +576,9 @@ export default function RegistrationWizard({
       <h1 className="text-xl font-extrabold text-[var(--gala-gold-2)] mb-1">Inscrição</h1>
       <p className="text-sm text-[var(--gala-ink-dim)] mb-4">{championship.name}</p>
 
-      {/* Antes da faixa da vaga: e a noticia com hora marcada, e a unica que
-          chega sozinha sem o jogador ter tocado em nada. */}
-      <SunsetNotice alert={sunset} startsAt={sunsetAt} />
+      {/* Antes da faixa da vaga: e a noticia com hora marcada, e ela explica um
+          bloco que some la embaixo, fora do campo de visao a 375px. */}
+      <SunsetNotice alert={sunset} />
 
       <SlotNotice slot={slot} />
 
@@ -724,8 +731,7 @@ export default function RegistrationWizard({
           </p>
 
           {form.shirt_size === CUSTOM_SHIRT_SIZE && (
-            <div className="rounded-2xl px-3 py-3 text-xs leading-relaxed"
-                 style={{ background: "rgba(230,180,34,.08)", border: "1px solid rgba(230,180,34,.25)", color: "var(--gala-ink)" }}>
+            <div className="rounded-2xl px-3 py-3 text-xs leading-relaxed" style={goldTone}>
               Combinado! Antes de mandar produzir, a gente fala com você no WhatsApp
               pra acertar as medidas da sua camiseta.
             </div>
@@ -736,8 +742,7 @@ export default function RegistrationWizard({
         </StepShell>
 
         <StepShell index={stepNumber(6, minor)} title="Ingressos & pagamento" open={step === 6} done={!!done[6]} onToggle={() => open(6)}>
-          <div className="rounded-2xl px-3 py-3 text-xs leading-relaxed"
-               style={{ background: "rgba(230,180,34,.08)", border: "1px solid rgba(230,180,34,.25)", color: "var(--gala-ink)" }}>
+          <div className="rounded-2xl px-3 py-3 text-xs leading-relaxed" style={goldTone}>
             Sua inscrição já inclui <b>2 ingressos</b> para a Noite de Gala: o seu e o de um
             acompanhante. Precisa de mais? Cada ingresso adicional é cobrado à parte abaixo.
           </div>
@@ -770,9 +775,10 @@ export default function RegistrationWizard({
           <UploadCard icon="📷" label="Foto de perfil (3x4)" hint="Toque para enviar" required bucket="registration-photos"
                       value={form.profile_photo_link} onChange={(u) => set("profile_photo_link", u)} />
           {err("profile_photo_link")}
-          {/* Some junto com o QR: anexar comprovante sem vaga e tao inutil quanto
-              pagar sem vaga, e um upload aceito faz o pagamento parecer valido. */}
-          {slotAllowsPayment ? (
+          {/* O comprovante some junto com o QR: anexar comprovante sem poder
+              pagar e tao inutil quanto pagar sem vaga, e um upload aceito faz o
+              pagamento parecer valido. */}
+          {payment.open ? (
             <>
               {pixPayload && <PixPayment payload={pixPayload} amount={total} />}
               {total > 0 && (
@@ -781,32 +787,7 @@ export default function RegistrationWizard({
               )}
             </>
           ) : (
-            /* Sumir sem dizer nada leria como tela quebrada: a 375px a faixa do
-               topo esta fora do campo de visao — e por isso mesmo que o QR
-               precisou sair daqui.
-
-               Duas historias, como o ClosedNotice do A5: a vaga e o por do sol
-               escondem o mesmo bloco por motivos diferentes, e uma frase so
-               mentiria em um dos dois casos — no corte do por do sol, afirmar
-               que a vaga nao esta confirmada e falso, e manda o jogador procurar
-               um problema que ele nao tem. A vaga vem primeiro porque ela e a
-               recusa mais dura: sem vaga nao ha inscricao, com ou sem sol. */
-            total > 0 && (
-              <div className="rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3 text-xs leading-relaxed text-[var(--gala-ink-dim)]">
-                {slot && !slot.ok ? (
-                  <>
-                    O pagamento fica indisponível enquanto sua vaga não estiver confirmada.
-                    O aviso no topo da página explica o motivo. Não pague nada até lá.
-                  </>
-                ) : (
-                  <>
-                    O pagamento fecha alguns minutos antes do pôr do sol, para ninguém pagar e ser
-                    recusado. As inscrições voltam após o pôr do sol de sábado — e o pagamento
-                    volta com elas.
-                  </>
-                )}
-              </div>
-            )
+            total > 0 && <PaymentClosedNotice reason={payment.reason} />
           )}
           {err("payment_receipt_link")}
           <button onClick={() => advance(6)} className="w-full rounded-xl py-3 font-bold text-[#050507]"

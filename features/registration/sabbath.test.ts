@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   isSabbath, sabbathEndsAt, sabbathStartsAt, sunsetAlert, sabbathStatus, announceableEndsAt,
+  sunsetHasPassed, sunsetTimeLabel, clockSkewMs,
+  SUNSET_NOTICE_MINUTES, SUNSET_PAYMENT_CUTOFF_MINUTES, SUNSET_TICK_MS,
   type SabbathWindow,
 } from "./sabbath";
 
@@ -180,30 +182,159 @@ describe("sunsetAlert", () => {
   const inicio = JANELA.startsAt; // sexta 17h50
 
   it("fica calado a 31 minutos", () => {
-    expect(sunsetAlert(em("2026-08-21T20:19:00.000Z"), inicio)).toBe("none");
+    expect(sunsetAlert(em("2026-08-21T20:19:00.000Z"), inicio)).toEqual({ level: "none" });
   });
 
-  it("avisa a 30 minutos em ponto", () => {
-    expect(sunsetAlert(em("2026-08-21T20:20:00.000Z"), inicio)).toBe("notice");
+  it("avisa a 30 minutos em ponto, e leva o instante junto", () => {
+    // O instante viaja DENTRO do alerta desde a T10: e o que impede a faixa de
+    // ter um nivel para apertar e nenhuma hora para mostrar.
+    expect(sunsetAlert(em("2026-08-21T20:20:00.000Z"), inicio))
+      .toEqual({ level: "notice", at: inicio });
   });
 
   it("ainda so avisa a 11 minutos", () => {
-    expect(sunsetAlert(em("2026-08-21T20:39:00.000Z"), inicio)).toBe("notice");
+    expect(sunsetAlert(em("2026-08-21T20:39:00.000Z"), inicio))
+      .toEqual({ level: "notice", at: inicio });
   });
 
   it("corta o pagamento a 10 minutos em ponto", () => {
     // Dez minutos e tempo insuficiente para trocar para o app do banco, pagar,
     // tirar print e subir. E a porta do "pagou e foi recusado".
-    expect(sunsetAlert(em("2026-08-21T20:40:00.000Z"), inicio)).toBe("cutoff");
+    expect(sunsetAlert(em("2026-08-21T20:40:00.000Z"), inicio))
+      .toEqual({ level: "cutoff", at: inicio });
   });
 
   it("continua cortando depois do por do sol", () => {
-    expect(sunsetAlert(em("2026-08-21T21:00:00.000Z"), inicio)).toBe("cutoff");
+    expect(sunsetAlert(em("2026-08-21T21:00:00.000Z"), inicio))
+      .toEqual({ level: "cutoff", at: inicio });
   });
 
   it("fica calado sem inicio conhecido e com inicio ilegivel", () => {
-    expect(sunsetAlert(em("2026-08-21T20:40:00.000Z"), null)).toBe("none");
-    expect(sunsetAlert(em("2026-08-21T20:40:00.000Z"), "banana")).toBe("none");
+    expect(sunsetAlert(em("2026-08-21T20:40:00.000Z"), null)).toEqual({ level: "none" });
+    expect(sunsetAlert(em("2026-08-21T20:40:00.000Z"), "banana")).toEqual({ level: "none" });
+  });
+});
+
+/**
+ * A pergunta que leva ao servidor.
+ *
+ * Nao decide tela: decide RECARREGAR. Por isso as duas direcoes do erro tem
+ * pesos diferentes e as duas estao aqui — cedo demais poe a pagina em loop de
+ * refresh, tarde demais deixa o formulario aberto depois da pausa comecar.
+ */
+describe("sunsetHasPassed", () => {
+  const inicio = JANELA.startsAt; // sexta 17h50
+  const t = (iso: string) => new Date(iso).getTime();
+
+  it("no instante exato do por do sol ja passou", () => {
+    // Borda INCLUSIVA, igual a de `isSabbath`: naquele milissegundo a pausa ja
+    // vale no servidor, e a tela que corresponde a isso e a de repouso. Trocar
+    // por `>` deixaria um tick inteiro de formulario aberto dentro da pausa.
+    expect(sunsetHasPassed(t(inicio), inicio)).toBe(true);
+  });
+
+  it("um milissegundo antes ainda nao passou", () => {
+    // E esta e a outra direcao: com `<=` invertido para o outro lado, ou com a
+    // comparacao trocada de sinal, TODO carregamento recarregaria a pagina.
+    expect(sunsetHasPassed(t(inicio) - 1, inicio)).toBe(false);
+  });
+
+  it("muito depois continua passado", () => {
+    expect(sunsetHasPassed(t(inicio) + 3 * 60 * 60_000, inicio)).toBe(true);
+  });
+
+  it("instante ilegivel responde que NAO passou", () => {
+    // Responder `true` aqui mandaria recarregar a cada tick, e o servidor
+    // devolveria exatamente a mesma pagina: loop de refresh a cada meio minuto.
+    expect(sunsetHasPassed(t(inicio) + 60_000, "banana")).toBe(false);
+    expect(sunsetHasPassed(t(inicio) + 60_000, "")).toBe(false);
+  });
+});
+
+/**
+ * O relogio de quem sabe as horas.
+ *
+ * O wizard roda no aparelho do jogador. Antes desta correcao ele comparava o por
+ * do sol com `Date.now()`, e um celular dez minutos errado desligava a faixa e o
+ * corte nos DOIS sentidos.
+ */
+describe("clockSkewMs", () => {
+  it("mede o quanto o aparelho esta atrasado em relacao ao servidor", () => {
+    const servidor = "2026-08-21T20:30:00.000Z";
+    const aparelho = new Date("2026-08-21T20:20:00.000Z").getTime(); // 10 min atras
+    expect(clockSkewMs(servidor, aparelho)).toBe(10 * 60_000);
+  });
+
+  it("mede tambem o aparelho ADIANTADO, com sinal negativo", () => {
+    // Este e o caso que punha a pagina em loop de refresh: o aparelho achava que
+    // o por do sol ja tinha passado, o servidor discordava, e a tela recarregava
+    // a mesma coisa a cada tick.
+    const servidor = "2026-08-21T20:30:00.000Z";
+    const aparelho = new Date("2026-08-21T20:45:00.000Z").getTime();
+    expect(clockSkewMs(servidor, aparelho)).toBe(-15 * 60_000);
+  });
+
+  it("relogios iguais nao corrigem nada", () => {
+    const servidor = "2026-08-21T20:30:00.000Z";
+    expect(clockSkewMs(servidor, new Date(servidor).getTime())).toBe(0);
+  });
+
+  it("carimbo ilegivel devolve zero, e nao NaN", () => {
+    // `NaN` contaminaria a aritmetica do tick e desligaria a faixa e o corte
+    // SEMPRE, calado. Zero e o comportamento antigo — confiar no aparelho —, que
+    // erra as vezes em vez de errar sempre.
+    expect(clockSkewMs("banana", 1_000)).toBe(0);
+    expect(clockSkewMs("", 1_000)).toBe(0);
+  });
+});
+
+/**
+ * A hora que a faixa imprime.
+ *
+ * O fuso e a promessa central da frase, e a suite roda com TZ=UTC (ver
+ * vitest.config.ts): qualquer leitura pelo fuso da MAQUINA sairia com tres horas
+ * a mais, e o jogador leria que tem tempo de sobra quando nao tem.
+ */
+describe("sunsetTimeLabel", () => {
+  it("escreve a hora de Brasilia, e nao a de UTC", () => {
+    // 2026-08-21T20:50Z e 17:50 em Brasilia.
+    expect(sunsetTimeLabel({ level: "notice", at: JANELA.startsAt })).toBe("17:50");
+    expect(sunsetTimeLabel({ level: "cutoff", at: JANELA.startsAt })).toBe("17:50");
+  });
+
+  it("escreve tambem um por do sol que ja e outro dia em UTC", () => {
+    // 2026-08-21 21:10 em Brasilia = 2026-08-22 00:10 UTC.
+    expect(sunsetTimeLabel({ level: "cutoff", at: "2026-08-22T00:10:00.000Z" })).toBe("21:10");
+  });
+
+  it("sem alerta nao ha hora a escrever", () => {
+    expect(sunsetTimeLabel({ level: "none" })).toBeNull();
+  });
+
+  it("instante podre devolve null, e NAO lanca", () => {
+    // `Intl.DateTimeFormat().format(new Date("banana"))` lanca RangeError, e em
+    // render de Client Component sem error boundary isso e tela branca na pagina
+    // de inscricao inteira. Degrada como as cinco irmas desta feature.
+    expect(() => sunsetTimeLabel({ level: "cutoff", at: "banana" })).not.toThrow();
+    expect(sunsetTimeLabel({ level: "cutoff", at: "banana" })).toBeNull();
+    expect(sunsetTimeLabel({ level: "notice", at: "" })).toBeNull();
+  });
+});
+
+describe("os numeros do por do sol, e a relacao entre eles", () => {
+  it("o aviso comeca antes do corte", () => {
+    // Invertidos, o corte nunca aconteceria: `sunsetAlert` testa o corte
+    // primeiro, e com o corte maior que o aviso o nivel "notice" some da uniao.
+    expect(SUNSET_PAYMENT_CUTOFF_MINUTES).toBeLessThan(SUNSET_NOTICE_MINUTES);
+  });
+
+  it("o tick cabe varias vezes no estado mais curto que ele nao pode pular", () => {
+    // Os dez minutos do corte sao a janela mais estreita. Um tick maior que ela
+    // — `SUNSET_TICK_MS` trocado por uma hora, a edicao de uma tecla — deixaria
+    // o QR do PIX na tela ate o proprio por do sol, e quem abrisse a pagina
+    // quarenta minutos antes nunca veria a faixa. Nada alem deste teste segura
+    // os dois numeros juntos.
+    expect(SUNSET_TICK_MS * 4).toBeLessThanOrEqual(SUNSET_PAYMENT_CUTOFF_MINUTES * 60_000);
   });
 });
 
@@ -250,10 +381,14 @@ describe("sabbathStatus — a decisao da pagina num lugar so", () => {
      * Esta assercao existe para nomear o unico ponto EXECUTAVEL em que aquele
      * filtro pode ser falseado. Ele nao e a unica dependencia — o docblock de
      * `isSabbath` declara a mesma precondicao —, mas e a unica que roda, ja
-     * que `services/**` esta fora do vitest. Com uma janela vencida o `sunsetAt` aponta para
-     * tras, e `sunsetAlert` responderia "cutoff" para sempre — o bloco de
-     * pagamento sumiria do formulario e nunca mais voltaria. Quem mexer no
-     * filtro da consulta quebra isto aqui, e nao la.
+     * que `services/**` esta fora do vitest.
+     *
+     * O estrago mudou de forma na T10 e ficou pior. Com uma janela vencida o
+     * `sunsetAt` aponta para tras, entao `sunsetHasPassed` responde `true` em
+     * todo tick e o formulario manda `router.refresh()` a cada meio minuto —
+     * enquanto o servidor re-renderiza exatamente a mesma pagina, porque para
+     * ele a pausa nao comecou. A pagina de inscricao vira um loop de recarga.
+     * Quem mexer no filtro da consulta quebra isto aqui, e nao la.
      */
     expect(sabbathStatus(em("2026-08-22T20:51:00.001Z"), JANELA))
       .toEqual({ pause: null, sunsetAt: JANELA.startsAt });

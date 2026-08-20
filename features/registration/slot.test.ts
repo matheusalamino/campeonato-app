@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { canOpenStep, isSlotVerdict, type SlotReservation } from "./slot";
+import { canOpenStep, isSlotVerdict, paymentGate, type SlotReservation } from "./slot";
+import type { SunsetAlert } from "./sabbath";
 import { PAYMENT_STEP, UNIFORM_STEP } from "./field-steps";
 
 const RESERVADA: SlotReservation = {
@@ -114,5 +115,53 @@ describe("isSlotVerdict", () => {
     expect(isSlotVerdict({ ok: false, reason: "not_open" })).toBe(true);
     expect(isSlotVerdict({ ok: false, reason: "not_found" })).toBe(true);
     expect(isSlotVerdict({ ok: false, reason: "already_registered" })).toBe(true);
+  });
+});
+
+/**
+ * O gatilho do pagamento, com os dois motivos que o desligam.
+ *
+ * Era uma expressao solta no wizard, e o unico teste possivel de la procurava
+ * pedaco de texto: `(...) || true` passava, e um parenteses movido tambem.
+ * Aqui a regra e chamavel, entao afrouxa-la nao tem como passar calado.
+ */
+describe("paymentGate", () => {
+  const CALADO: SunsetAlert = { level: "none" };
+  const AVISO: SunsetAlert = { level: "notice", at: "2026-08-21T20:50:00.000Z" };
+  const CORTE: SunsetAlert = { level: "cutoff", at: "2026-08-21T20:50:00.000Z" };
+
+  it("antes do CPF, sem veredito e sem sol, o pagamento aparece", () => {
+    expect(paymentGate(null, CALADO)).toEqual({ open: true });
+  });
+
+  it("com a vaga reservada e o sol longe, o pagamento aparece", () => {
+    expect(paymentGate(RESERVADA, CALADO)).toEqual({ open: true });
+  });
+
+  it("o AVISO de trinta minutos nao fecha nada", () => {
+    // Fechar em "notice" custaria trinta minutos de pagamento por semana a quem
+    // ainda tem tempo de sobra para pagar — e o aviso existe justamente para
+    // dizer "se for pagar, pague agora".
+    expect(paymentGate(null, AVISO)).toEqual({ open: true });
+    expect(paymentGate(RESERVADA, AVISO)).toEqual({ open: true });
+  });
+
+  it("o CORTE fecha, e a razao e o sol", () => {
+    // Dez minutos e tempo insuficiente para trocar para o app do banco, pagar,
+    // tirar print e subir: quem comeca agora paga e e recusado.
+    expect(paymentGate(null, CORTE)).toEqual({ open: false, reason: "sunset" });
+    expect(paymentGate(RESERVADA, CORTE)).toEqual({ open: false, reason: "sunset" });
+  });
+
+  it("sem vaga fecha, e a razao e a vaga", () => {
+    expect(paymentGate(ESGOTOU, CALADO)).toEqual({ open: false, reason: "slot" });
+    expect(paymentGate(FALHOU, CALADO)).toEqual({ open: false, reason: "slot" });
+  });
+
+  it("com os dois motivos, a VAGA e a que fala", () => {
+    // Sem vaga nao ha inscricao, com ou sem sol: e a recusa mais dura, e a que
+    // continua valendo depois que o sabado passar. Invertida a ordem, quem
+    // perdeu a vaga leria que e so esperar o por do sol e voltar.
+    expect(paymentGate(ESGOTOU, CORTE)).toEqual({ open: false, reason: "slot" });
   });
 });

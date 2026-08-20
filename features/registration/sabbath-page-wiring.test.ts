@@ -10,11 +10,17 @@ import { join } from "node:path";
  * do fluxo onde uma edicao de uma palavra abre a inscricao no sabado sem
  * quebrar nada. As tres que importam:
  *
- *   registrationGate(champ, now, pause)  ->  ...now, null)   abre no sabado
- *   endsAt={gate.endsAt}                 ->  endsAt={null}   perde a hora
- *   sunsetAt={sunsetAt}                  ->  sunsetAt={null} mata o aviso
+ *   registrationGate(champ, now, pause)  ->  ...now, null)     abre no sabado
+ *   endsAt={gate.endsAt}                 ->  endsAt={null}     perde a hora
+ *   nextSunset={nextSunset}              ->  nextSunset={null} mata o aviso
  *
  * As tres passam no `tsc`, porque `null` e valor legitimo nos tres lugares.
+ *
+ * E uma quarta, que a T10 acrescentou: o `serverNow` que viaja junto com o por
+ * do sol. Sem ele o wizard compara o por do sol com o relogio do APARELHO do
+ * jogador, e alguns minutos de erro desligam a faixa e o corte do pagamento —
+ * ou poem a pagina em loop de refresh. Tirar o campo do objeto nem chega ao
+ * `tsc` como null: ele simplesmente para de existir.
  *
  * Le a pagina como texto pelo mesmo motivo que wizard-steps.test.ts le o
  * wizard: o projeto nao tem jsdom nem Testing Library (vitest roda com
@@ -68,11 +74,26 @@ describe("a fiacao do sabado na pagina de inscricao", () => {
 
   it("todo RegistrationWizard da pagina recebe o por do sol calculado", () => {
     // So a pagina: o `RestOverlay` renderiza um wizard borrado com
-    // `sunsetAt={null}` de proposito, e aquilo esta certo.
+    // `nextSunset={null}` de proposito, e aquilo esta certo.
     const achados = tags("RegistrationWizard");
     expect(achados.length).toBeGreaterThan(0);
-    expect(achados.map((t) => prop(t, "sunsetAt"))).toEqual(
-      achados.map(() => "sunsetAt"),
+    expect(achados.map((t) => prop(t, "nextSunset"))).toEqual(
+      achados.map(() => "nextSunset"),
     );
+  });
+
+  it("o por do sol viaja com o relogio do servidor, e nao sozinho", () => {
+    const montagem = [...fonte.matchAll(/const nextSunset = ([^;]*);/g)];
+    expect(montagem).toHaveLength(1);
+
+    const expressao = montagem[0][1];
+    // O instante e o que `sabbathStatus` calculou — nao um `new Date()` daqui,
+    // que reabriria a decisao do sabado fora do modulo que a toma.
+    expect(expressao).toMatch(/\bat: sunsetAt\b/);
+    // E o carimbo e o MESMO `now` que decidiu a pausa e o gate, para os tres
+    // responderem sobre o mesmo instante.
+    expect(expressao).toMatch(/\bserverNow: now\.toISOString\(\)/);
+    // Sem por do sol nao ha o que carimbar: `null` mantem o par fora do alcance.
+    expect(expressao).toMatch(/^sunsetAt \?/);
   });
 });

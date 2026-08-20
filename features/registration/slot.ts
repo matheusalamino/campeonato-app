@@ -1,4 +1,5 @@
 import { PAYMENT_STEP } from "./field-steps";
+import type { SunsetAlert } from "./sabbath";
 
 /**
  * Razoes de recusa que cabem inteiras no nome, sem dado nenhum junto.
@@ -81,6 +82,55 @@ export function canOpenStep(
   if (target <= 1) return true;
   if (target === PAYMENT_STEP) return false;
   return done[target] === true;
+}
+
+/**
+ * Por que o bloco de pagamento — QR do PIX e envio do comprovante — nao esta na
+ * tela.
+ *
+ * Uniao discriminada, como o `RegistrationGate`: fechado sem razao nao existe, e
+ * quem mostra o aviso nao precisa reconstruir o motivo a partir dos mesmos dois
+ * argumentos. Foi assim que a primeira versao errou — o texto assumia a vaga, e
+ * no corte do por do sol afirmava algo falso.
+ */
+export type PaymentClosedReason = "slot" | "sunset";
+
+export type PaymentGate =
+  | { open: true }
+  | { open: false; reason: PaymentClosedReason };
+
+/**
+ * O bloco de pagamento pode aparecer?
+ *
+ * Dois gatilhos, um mecanismo so — o por do sol entrou como um segundo termo, e
+ * nao como um bloco paralelo que tambem esconde o QR.
+ *
+ * O primeiro e o do A4. Mesma primeira linha de `canOpenStep`: sem reserva ainda
+ * nao ha veredito, e com reserva ok nada muda. A guarda de navegacao atrasa
+ * exatamente uma transicao — a renovacao dispara depois do `setStep` —, entao o
+ * jogador aterrissa no passo com a recusa ja na mao e o QR ainda no lugar. No
+ * celular e o QR que esta no campo de visao, nao a faixa: ele paga, e so o
+ * "Revisar" o para, com o dinheiro ja fora.
+ *
+ * O segundo e o do por do sol, e chega pela mesma porta: dez minutos e tempo
+ * insuficiente para trocar para o app do banco, pagar, tirar print e subir,
+ * entao quem comeca agora paga e e recusado — dinheiro gasto e vaga travada ate
+ * sabado a noite. Isto NAO move a borda do calculo: a pausa continua exata no
+ * por do sol, e "cutoff" so muda o que a tela mostra antes dela.
+ *
+ * A VAGA VEM PRIMEIRO quando os dois valem, porque ela e a recusa mais dura: sem
+ * vaga nao ha inscricao, com ou sem sol.
+ *
+ * Puro e testado de verdade porque, escrito no wizard como expressao solta, o
+ * unico teste possivel era procurar pedaco de texto — e `(...) || true` passava.
+ */
+export function paymentGate(
+  reservation: SlotReservation | null,
+  sunset: SunsetAlert,
+): PaymentGate {
+  if (reservation && !reservation.ok) return { open: false, reason: "slot" };
+  if (sunset.level === "cutoff") return { open: false, reason: "sunset" };
+  return { open: true };
 }
 
 /**

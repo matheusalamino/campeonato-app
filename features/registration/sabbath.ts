@@ -1,4 +1,4 @@
-import { brasiliaInputToIso, brasiliaParts } from "@/lib/datetime-br";
+import { brasiliaInputToIso, brasiliaParts, CHAMPIONSHIP_TIME_ZONE } from "@/lib/datetime-br";
 
 /**
  * Uma janela de repouso, vinda de `sabbath_windows`.
@@ -62,6 +62,22 @@ const SATURDAY = 6;
 export const SUNSET_NOTICE_MINUTES = 30;
 /** A quantos minutos do por do sol o bloco de pagamento some. */
 export const SUNSET_PAYMENT_CUTOFF_MINUTES = 10;
+
+/**
+ * De quanto em quanto tempo o formulario reavalia o por do sol.
+ *
+ * Meio minuto e resolucao de sobra para uma faixa que mostra HORA ABSOLUTA — ela
+ * nao conta minutos, entao meio minuto de atraso nao aparece no texto. O que o
+ * numero precisa ser e PEQUENO em relacao ao corte: os dez minutos do corte sao
+ * o estado mais curto que um tick nao pode pular, e quem o pula ve o QR na tela
+ * ate o proprio por do sol. Um tick de uma hora — a edicao de uma tecla —
+ * tambem deixaria quem abre a pagina quarenta minutos antes sem faixa nenhuma.
+ *
+ * A relacao esta assertada em sabbath.test.ts, no espirito do
+ * `MIN_RENEW_GAP_MS * 2 < HEARTBEAT_INTERVAL_MS`: aqui tambem nao ha nada alem
+ * do teste segurando dois numeros que so fazem sentido juntos.
+ */
+export const SUNSET_TICK_MS = 30_000;
 
 /** O texto e montado aqui dentro, nunca vem de fora: `undefined` seria bug nosso. */
 function brasiliaAt(date: string, hhmm: string): string {
@@ -243,7 +259,27 @@ export function sabbathStatus(now: Date, window: SabbathWindow | null): SabbathS
   return { pause: null, sunsetAt: sabbathStartsAt(now, window) };
 }
 
-export type SunsetAlert = "none" | "notice" | "cutoff";
+/**
+ * O quanto o por do sol ja aperta — e, quando aperta, a que horas ele e.
+ *
+ * Uniao discriminada pelo mesmo motivo do `SabbathStatus` logo acima: a
+ * combinacao proibida — apertar sem saber a hora — deixa de ser coisa que um
+ * comentario pede e passa a ser coisa que o compilador recusa.
+ *
+ * Aqui isso resolve dois perigos de uma vez, e os dois ja tinham mordido:
+ *
+ * - O nivel e o instante viajavam como duas `string` a um caractere de
+ *   distancia (`sunset` e `sunsetAt`) no mesmo arquivo de 828 linhas. Como
+ *   `"cutoff"` E `string`, passar um no lugar do outro compilava, passava no
+ *   eslint e so explodia em runtime.
+ * - A guarda `alert === "none" || !startsAt` no componente lia como redundancia
+ *   e convidava a ser "simplificada" pela metade — e sem a primeira metade a
+ *   faixa aparece a semana inteira, em todo carregamento. Agora ela nao e
+ *   opiniao: sem estreitar o nivel nao ha `at` para formatar.
+ */
+export type SunsetAlert =
+  | { level: "none" }
+  | { level: "notice" | "cutoff"; at: string };
 
 /**
  * O aviso do por do sol no formulario.
@@ -252,16 +288,124 @@ export type SunsetAlert = "none" | "notice" | "cutoff";
  * as 17h50, sobe o comprovante, e e recusado as 18h05. Isto NAO move a borda do
  * calculo — a pausa continua exata no por do sol; o que muda e o que a tela
  * mostra antes dela.
+ *
+ * Depois do por do sol continua respondendo "cutoff", e nao um quarto estado:
+ * quem decide que a pausa comecou e o servidor, e a pergunta que leva ate ele e
+ * `sunsetHasPassed`, logo abaixo.
  */
 export function sunsetAlert(now: Date, startsAt: string | null): SunsetAlert {
-  if (!startsAt) return "none";
+  if (!startsAt) return { level: "none" };
   const target = Date.parse(startsAt);
-  if (Number.isNaN(target)) return "none";
+  if (Number.isNaN(target)) return { level: "none" };
 
   const minutes = (target - now.getTime()) / 60_000;
-  if (minutes <= SUNSET_PAYMENT_CUTOFF_MINUTES) return "cutoff";
-  if (minutes <= SUNSET_NOTICE_MINUTES) return "notice";
-  return "none";
+  if (minutes <= SUNSET_PAYMENT_CUTOFF_MINUTES) return { level: "cutoff", at: startsAt };
+  if (minutes <= SUNSET_NOTICE_MINUTES) return { level: "notice", at: startsAt };
+  return { level: "none" };
+}
+
+/**
+ * O por do sol ja aconteceu, no relogio que `nowMs` carrega?
+ *
+ * Separada de `sunsetAlert` porque a resposta nao muda a tela: ela manda
+ * RECARREGAR, para o servidor dizer se a pausa comecou. O wizard nao se tranca
+ * sozinho — o relogio do aparelho pode estar errado nos dois sentidos, e quem
+ * tem a janela de `sabbath_windows` na mao e o servidor.
+ *
+ * Borda inclusiva, igual a de `isSabbath`: no instante exato do por do sol a
+ * pausa ja vale, e a tela que corresponde a isso e a de repouso. Isto NAO move a
+ * borda do calculo — repete deste lado a que ja existe la.
+ *
+ * Instante ilegivel responde `false`, e nao `true`, pela mesma disciplina das
+ * irmas deste arquivo. E aqui errar para `true` teria forma propria: cada tick
+ * mandaria recarregar, o servidor re-renderizaria exatamente a mesma pagina, e o
+ * jogador ficaria num loop de refresh a cada meio minuto.
+ */
+export function sunsetHasPassed(nowMs: number, sunsetAt: string): boolean {
+  const target = Date.parse(sunsetAt);
+  if (Number.isNaN(target)) return false;
+  return nowMs >= target;
+}
+
+/**
+ * "17:50" — a hora do por do sol em Brasilia, ou `null` quando nao ha o que
+ * anunciar.
+ *
+ * O FUSO e a promessa central desta frase: o por do sol e um fato de Brasilia,
+ * nao do aparelho. Impresso em UTC, o aviso diria uma hora que nao existe para
+ * quem le e viraria armadilha — o jogador acharia que ainda tem horas de sobra.
+ *
+ * Recebe o alerta INTEIRO, e nao o instante solto, por dois motivos que
+ * `announceableEndsAt` logo abaixo ja ensinou:
+ *
+ * - Com `(startsAt: string)` a assinatura tambem aceitava o NIVEL, porque
+ *   `SunsetAlert` era subtipo de `string`. `formatSunset(alert)` compilava,
+ *   passava no eslint e nos 393 testes, e explodia em runtime.
+ * - `new Intl.DateTimeFormat(...).format(new Date("banana"))` LANCA
+ *   `RangeError`. Em render de Client Component sem error boundary isso e tela
+ *   branca na pagina de inscricao inteira. As cinco irmas desta feature degradam
+ *   (`parseWindow` -> `null`, `sunsetAlert` -> "none", `slotCountdown` ->
+ *   `null`, `remainingUntil` -> `done`, `announceableEndsAt` -> `null`); esta
+ *   degrada para `null`, e a faixa simplesmente nao aparece.
+ *
+ * MORA NESTE ARQUIVO pelo mesmo motivo do `announceableEndsAt`: quem decide
+ * quando avisar e quem escreve a hora do aviso tem que envelhecer junto — mexer
+ * nos minutos la em cima e quebrar o texto aqui e a mesma edicao. E o formatador
+ * e justamente a parte que nao precisa de React nenhum para ser testada com um
+ * instante conhecido.
+ */
+export function sunsetTimeLabel(alert: SunsetAlert): string | null {
+  if (alert.level === "none") return null;
+  const instant = new Date(alert.at);
+  if (Number.isNaN(instant.getTime())) return null;
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: CHAMPIONSHIP_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(instant);
+}
+
+/**
+ * O proximo por do sol como a PAGINA entrega ao formulario: o instante, e o
+ * relogio de quem sabe as horas.
+ *
+ * `serverNow` e o `new Date()` do render do servidor — o mesmo que decidiu se a
+ * pausa ja vale. Sem ele o formulario comparava o por do sol com o relogio do
+ * APARELHO, e um celular alguns minutos errado desligava a faixa e o corte nos
+ * dois sentidos: adiantado, o `router.refresh()` disparava a cada tick para
+ * sempre, porque o servidor re-renderizava a mesma tela; atrasado, o QR ficava
+ * na frente do jogador nos minutos reais antes da pausa.
+ *
+ * Os dois campos vem num objeto so, e nao como duas props `string`, porque lado
+ * a lado seriam dois ISOs intercambiaveis pelo `tsc` — trocar um pelo outro
+ * compila e produz lixo silencioso. E `null` quando nao ha por do sol a anunciar
+ * mantem a outra combinacao proibida (instante sem relogio) fora do alcance.
+ */
+export type NextSunset = { at: string; serverNow: string };
+
+/**
+ * O quanto o relogio do aparelho esta atrasado em relacao ao do servidor.
+ *
+ * Some com `Date.now()` para dar a hora do servidor sem uma segunda rodada de
+ * rede. NAO e um segundo relogio: e a correcao do unico que existe — o tick
+ * continua sendo um so, para a faixa e para o bloco de pagamento.
+ *
+ * Medido UMA vez, na montagem: refazer a medida a cada tick faria a correcao
+ * andar junto com a latencia da rede.
+ *
+ * Carimbo ilegivel devolve zero, e nao `NaN`. Zero e o comportamento antigo —
+ * confiar no aparelho —, que erra as vezes; `NaN` contamina a aritmetica e
+ * desliga a faixa e o corte SEMPRE, calado.
+ *
+ * O erro que sobra e o tempo entre o render do servidor e a montagem no
+ * aparelho (rede + hidratacao), e ele cai para o lado seguro: o formulario se
+ * acha um pouco mais cedo do que e, entao avisa e recarrega um instante depois
+ * — nunca antes de o servidor concordar.
+ */
+export function clockSkewMs(serverNow: string, deviceNowMs: number): number {
+  const stamped = Date.parse(serverNow);
+  if (Number.isNaN(stamped)) return 0;
+  return stamped - deviceNowMs;
 }
 
 /**

@@ -58,8 +58,8 @@ export default function RestOverlay({
       {/* `inert` alem de aria-hidden: pointer-events-none barra o mouse, mas o Tab
           continuaria entrando num conteudo anunciado como inexistente. */}
       <div inert aria-hidden className="pointer-events-none select-none blur-[4px] opacity-50">
-        {/* `sunsetAt={null}` de proposito: durante a pausa nao ha por do sol a avisar. */}
-        <RegistrationWizard championship={championship} liveCount={liveCount} sunsetAt={null} />
+        {/* `nextSunset={null}` de proposito: durante a pausa nao ha por do sol a avisar. */}
+        <RegistrationWizard championship={championship} liveCount={liveCount} nextSunset={null} />
       </div>
 
       {/* O overlay e o proprio container de rolagem. Centralizar com `flex

@@ -95,6 +95,12 @@ export default async function InscreverPage({ params }: { params: Promise<{ slug
   const { pause, sunsetAt } = sabbathStatus(now, sabbathWindow);
   const gate = registrationGate(champ, now, pause);
 
+  // O instante vai com o relogio que o calculou. O wizard tica no aparelho do
+  // jogador, e o aparelho pode estar minutos errado nos dois sentidos — sem o
+  // carimbo daqui, a faixa e o corte do pagamento erram junto com ele. Ver
+  // `NextSunset` em features/registration/sabbath.ts.
+  const nextSunset = sunsetAt ? { at: sunsetAt, serverNow: now.toISOString() } : null;
+
   // O repouso de sabado e uma experiencia modal de tela cheia — sem header.
   if (gate.view === "rest") {
     return <RestOverlay championship={championship} liveCount={liveCount} endsAt={gate.endsAt} />;
@@ -103,7 +109,7 @@ export default async function InscreverPage({ params }: { params: Promise<{ slug
   let view;
   switch (gate.view) {
     case "wizard":
-      view = <RegistrationWizard championship={championship} liveCount={liveCount} sunsetAt={sunsetAt} />;
+      view = <RegistrationWizard championship={championship} liveCount={liveCount} nextSunset={nextSunset} />;
       break;
     case "not_yet":
       view = <NotYetNotice name={champ.name} opensAt={gate.opensAt} />;
