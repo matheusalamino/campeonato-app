@@ -4,10 +4,11 @@ import type { SunsetAlert } from "./sabbath";
 /**
  * Razoes de recusa que cabem inteiras no nome, sem dado nenhum junto.
  *
- * Tem nome proprio, em vez de continuar solta dentro da uniao, porque o servico
- * amarra a ela a tabela de razoes que aceita da RPC — e sem esse elo tirar uma
- * razao de la nao quebra nada: o type guard so fica mais estreito, a atribuicao
- * continua valida, e a razao perdida vira `error` na tela de quem a recebeu.
+ * Tem nome proprio, em vez de continuar solta dentro da uniao, porque
+ * `RPC_REASONS` — logo abaixo — amarra a ela a tabela de razoes que aceitamos da
+ * RPC, e sem esse elo tirar uma razao de la nao quebra nada: o type guard so
+ * fica mais estreito, a atribuicao continua valida, e a razao perdida vira
+ * `error` na tela de quem a recebeu.
  *
  * `sabbath` e a pausa de sabado, do por do sol de sexta ao de sabado —
  * observancia religiosa da comunidade, e nao configuracao de campeonato. Vem
@@ -39,6 +40,88 @@ export type SlotReservation =
   | { ok: false; reason: SimpleRefusalReason }
   | { ok: false; reason: "all_reserved"; retryAt: string | null }
   | { ok: false; reason: "error" };
+
+/**
+ * Razoes que a RPC declara no seu COMMENT, fora `all_reserved`, que tem forma
+ * propria.
+ *
+ * O `Record<SimpleRefusalReason, true>` e o guarda, e nao enfeite: e ele que
+ * amarra esta tabela a uniao nos DOIS sentidos — chave a mais nao existe na
+ * uniao e o literal e recusado; chave a menos e propriedade faltando e o `tsc`
+ * cobra pelo nome. O sentido que faz estrago e o segundo: `isKnownReason` e type
+ * guard, entao tirar uma razao daqui apenas o estreita,
+ * `{ ok: false, reason: result.reason }` continua atribuivel, nada falha — e a
+ * razao perdida passa a chegar na tela como `error`, que convida a tentar de
+ * novo. Para `sabbath` isso seria convidar a insistir durante 24h de pausa.
+ *
+ * Uma lista PELADA (`["not_found", ...]`, o estado de antes) cobre so o primeiro
+ * sentido. Uma lista com guarda de exaustividade cobre os dois — isto foi
+ * medido, e nao suposto, e o `Record` nao e o unico jeito de fechar a porta. Ele
+ * ficou por tres motivos menores e somados: o erro do `tsc` pousa na propria
+ * tabela e NOMEIA a chave que falta, em vez de apontar para uma linha de guarda
+ * longe dela; nao sobra linha inerte nem `void` para explicar a quem ler
+ * depois; e sao seis linhas a menos.
+ */
+const RPC_REASONS: Record<SimpleRefusalReason, true> = {
+  not_found: true,
+  not_open: true,
+  already_registered: true,
+  full: true,
+  sabbath: true,
+};
+
+function isKnownReason(value: unknown): value is SimpleRefusalReason {
+  // `Object.hasOwn`, e nao `value in RPC_REASONS`: `in` aceita `toString`,
+  // `constructor`, `valueOf`, `hasOwnProperty` e `__proto__`, que vem do
+  // prototipo. E o estrago nao seria "lixo com a frase errada": `noticeFor` nao
+  // tem `case` para nenhum deles, cai no fim do `switch` e devolve `undefined`,
+  // entao as DUAS regioes live saem VAZIAS — a faixa desaparece inteira e o
+  // jogador fica com os passos trancados por `canOpenStep` e zero explicacao na
+  // tela. Nao lanca, nao quebra hidratacao, nao deixa rastro.
+  return typeof value === "string" && Object.hasOwn(RPC_REASONS, value);
+}
+
+/**
+ * A resposta de `reserve_registration_slot` traduzida para o tipo da tela.
+ *
+ * Mora aqui, ao lado da uniao com que e casada, e nao no servico que faz a
+ * chamada. `services/public-registration.ts` importa `server-only`, que nem esta
+ * no `node_modules` — o Next o resolve no build —, e `vitest.config.ts` inclui
+ * `lib/**`, `features/**` e `scripts/**`, entao um teste escrito la nao rodaria e
+ * exportar a traducao de la nao a tornaria testavel. Trazer a traducao para ca
+ * torna, sem tocar em config nenhuma: e o mesmo remedio que esta branch ja
+ * escolheu para `announceableEndsAt` e para `paymentGate`, pelo mesmo motivo.
+ *
+ * `null` cobre os dois jeitos de a chamada nao dar resposta — erro do PostgREST,
+ * rede, timeout; ou corpo vazio. Nenhum dos dois diz se ha vaga, e por isso os
+ * dois viram `error` e nao `not_found`, como era antes: ver `SlotReservation`.
+ */
+export function reservationFromRpc(payload: unknown): SlotReservation {
+  const result = payload as {
+    success?: boolean;
+    reason?: unknown;
+    is_waitlist?: boolean;
+    expires_at?: string;
+    retry_at?: string | null;
+  } | null;
+
+  if (!result) return { ok: false, reason: "error" };
+
+  if (result.success) {
+    return { ok: true, isWaitlist: !!result.is_waitlist, expiresAt: result.expires_at! };
+  }
+  if (result.reason === "all_reserved") {
+    return { ok: false, reason: "all_reserved", retryAt: result.retry_at ?? null };
+  }
+  // O `as` que estava aqui carimbava qualquer string vinda do JSON como uma das
+  // razoes da tabela, entao uma razao nova na RPC — ou uma resposta malformada —
+  // seria renderizada como um veredito que ninguem deu. Razao que nao esta na
+  // lista e resposta que nao entendemos, e nao ha lotacao a declarar: `error`
+  // convida a tentar de novo, que e a unica resposta honesta.
+  return isKnownReason(result.reason)
+    ? { ok: false, reason: result.reason }
+    : { ok: false, reason: "error" };
+}
 
 /**
  * Se a navegacao do wizard pode levar o jogador ao passo `target`.

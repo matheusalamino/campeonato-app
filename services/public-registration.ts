@@ -9,7 +9,8 @@ import { makeRegistrationSchema } from "@/features/registration/schema";
 import { computeTicketsTotal } from "@/features/registration/pricing";
 import { skillsFor } from "@/features/registration/skills";
 import { fieldErrorsFrom } from "@/features/registration/field-errors";
-import type { SlotReservation, SimpleRefusalReason } from "@/features/registration/slot";
+import { reservationFromRpc, type SlotReservation } from "@/features/registration/slot";
+import { commitRefusal } from "@/features/registration/commit-refusal";
 import type { SabbathWindow } from "@/features/registration/sabbath";
 import type { GroupOption } from "@/types/championship";
 
@@ -150,39 +151,18 @@ export async function checkLookupRateLimit(ip: string): Promise<boolean> {
 }
 
 /**
- * Razoes que a RPC declara no seu COMMENT, fora `all_reserved`, que tem forma
- * propria.
- *
- * O `Record<SimpleRefusalReason, true>` e o guarda, e nao enfeite: e ele que
- * amarra esta tabela a uniao nos DOIS sentidos — chave a mais nao existe na
- * uniao e o literal e recusado; chave a menos e propriedade faltando e o `tsc`
- * cobra pelo nome. Uma lista solta so cobra o primeiro sentido, e e o segundo
- * que faz estrago: `isKnownReason` e type guard, entao tirar uma razao daqui
- * apenas o estreita, `{ ok: false, reason: result.reason }` continua atribuivel,
- * nada falha — e a razao perdida passa a chegar na tela como `error`, que
- * convida a tentar de novo. Para `sabbath` isso seria convidar a insistir
- * durante 24h de pausa.
- */
-const RPC_REASONS: Record<SimpleRefusalReason, true> = {
-  not_found: true,
-  not_open: true,
-  already_registered: true,
-  full: true,
-  sabbath: true,
-};
-
-function isKnownReason(value: unknown): value is SimpleRefusalReason {
-  // `Object.hasOwn`, e nao `value in RPC_REASONS`: `in` acha `toString` e
-  // `constructor` no prototipo e carimbaria lixo do JSON como razao conhecida.
-  return typeof value === "string" && Object.hasOwn(RPC_REASONS, value);
-}
-
-/**
  * Reserva a vaga do jogador enquanto ele preenche.
  *
  * A decisao de principal ou espera acontece dentro da funcao do banco, sob lock
  * da linha do campeonato — e a unica forma de contar e classificar sem que
  * outra transacao insira no meio.
+ *
+ * A traducao da resposta mora em `reservationFromRpc`, e nao aqui: nenhum teste
+ * roda dentro de `services/**` (ver o docblock dela), e a razao que atravessa
+ * este ponto — `sabbath` — nao pode virar `error` calada, porque `error` convida
+ * a tentar de novo e a pausa dura 24h. Aqui sobra a chamada; a unica decisao que
+ * ficou e o `error ? null : data`, e os dois lados dele significam a mesma
+ * coisa: nao houve resposta.
  */
 export async function reserveSlot(
   championshipId: string,
@@ -193,34 +173,7 @@ export async function reserveSlot(
     p_championship_id: championshipId,
     p_cpf: normalizeCpf(cpf),
   });
-
-  // A chamada nao completou: nada aqui diz se ha vaga. Devolver `not_found`,
-  // como era antes, transformava PostgREST fora do ar em "campeonato esgotado"
-  // na tela do jogador.
-  if (error || !data) return { ok: false, reason: "error" };
-
-  const result = data as {
-    success: boolean;
-    reason?: string;
-    is_waitlist?: boolean;
-    expires_at?: string;
-    retry_at?: string | null;
-  };
-
-  if (result.success) {
-    return { ok: true, isWaitlist: !!result.is_waitlist, expiresAt: result.expires_at! };
-  }
-  if (result.reason === "all_reserved") {
-    return { ok: false, reason: "all_reserved", retryAt: result.retry_at ?? null };
-  }
-  // O `as` que estava aqui carimbava qualquer string vinda do JSON como uma das
-  // razoes da tabela, entao uma razao nova na RPC — ou uma resposta malformada —
-  // seria renderizada como um veredito que ninguem deu. Razao que nao esta na
-  // lista e resposta que nao entendemos, e nao ha lotacao a declarar: `error`
-  // convida a tentar de novo, que e a unica resposta honesta.
-  return isKnownReason(result.reason)
-    ? { ok: false, reason: result.reason }
-    : { ok: false, reason: "error" };
+  return reservationFromRpc(error ? null : data);
 }
 
 /**
@@ -475,37 +428,12 @@ export async function submitRegistration(
     is_waitlist?: boolean;
   };
 
-  if (!result.success) {
-    // Primeiro porque na RPC a pausa vem logo depois de achar o campeonato e
-    // antes de qualquer outra recusa, e ler os ramos na ordem dela ajuda quem
-    // for conferir — nao porque o codigo dependa disso: a RPC devolve uma razao
-    // so, entao estes `if` sao mutuamente exclusivos e trocar a ordem nao muda
-    // resposta nenhuma.
-    //
-    // Sem "tente novamente em instantes", que e o que as outras recusas dizem:
-    // a pausa vai ate o por do sol de sabado, e convidar a insistir por 24h e
-    // pior do que nao dizer nada. O que o jogador precisa saber e que nada foi
-    // gravado — ele acabou de tocar em "Enviar", possivelmente ja com o PIX
-    // pago — e onde esta o horario da volta, que quem sabe dizer e a tela de
-    // repouso, do outro lado do recarregamento.
-    if (result.reason === "sabbath") {
-      return {
-        ok: false,
-        error:
-          "As inscrições entraram em repouso para o sábado e sua inscrição não foi gravada. Recarregue a página para ver o horário da volta.",
-      };
-    }
-    if (result.reason === "already_registered") {
-      return { ok: false, error: "Você já está inscrito neste campeonato.", alreadyRegistered: true };
-    }
-    if (result.reason === "reservation_expired") {
-      return {
-        ok: false,
-        error: "Sua vaga expirou e as inscrições lotaram. Fale com a organização.",
-      };
-    }
-    return { ok: false, error: "As inscrições não estão abertas para este campeonato." };
-  }
+  // A escada de `if` que estava aqui virou tabela em `commit-refusal.ts`, e o
+  // motivo e o mesmo de `reservationFromRpc`: escrita neste arquivo, ela era
+  // invisivel nos dois sentidos — o ramo do sabado podia ser apagado, ou o
+  // literal virar `"sabath"`, e os tres portoes passavam verdes. La o `tsc`
+  // recusa as duas coisas, e o teste le as frases.
+  if (!result.success) return { ok: false, ...commitRefusal(result.reason) };
 
   return { ok: true, registrationId: result.registration_id!, isWaitlist: !!result.is_waitlist };
 }
