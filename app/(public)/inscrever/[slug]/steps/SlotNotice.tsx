@@ -3,23 +3,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { SlotReservation } from "@/features/registration/slot";
 import { slotCountdown } from "@/features/registration/slot-keepalive";
+import { goldTone, redTone } from "./tones";
 
 /** Hora local no formato 14h37, para o jogador saber quando voltar. */
 function formatLocalTime(iso: string): string {
   const d = new Date(iso);
   return `${String(d.getHours()).padStart(2, "0")}h${String(d.getMinutes()).padStart(2, "0")}`;
 }
-
-const goldTone = {
-  background: "rgba(230,180,34,.08)",
-  border: "1px solid rgba(230,180,34,.25)",
-  color: "var(--gala-ink)",
-};
-const redTone = {
-  background: "rgba(220,38,38,.10)",
-  border: "1px solid rgba(220,38,38,.35)",
-  color: "var(--gala-ink)",
-};
 
 /**
  * O texto da faixa e o tom em que ele entra.
