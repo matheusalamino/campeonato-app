@@ -8,7 +8,7 @@
 # sabado a suite falha inteira, e nao por regressao: reserve_registration_slot e
 # commit_registration chamam is_sabbath(now()), sem relogio injetavel, entao
 # TODA reserva e TODO commit devolvem `sabbath`. Medido com uma janela cobrindo
-# now(): 18 das 32 assertivas falham. Passam os cenarios que montam a janela
+# now(): 18 das 33 assertivas falham. Passam os cenarios que montam a janela
 # DENTRO de uma transacao; falham os QUATRO controles que dependem do relogio de
 # fora ("fora do sabado a reserva segue normal", "fora do sabado o ja inscrito
 # ouve already_registered", "sem sabado, a mesma reserva grava" e "fora do
@@ -400,23 +400,41 @@ saida=$($DB <<SQL
 BEGIN;
 INSERT INTO sabbath_windows (starts_at, ends_at)
 VALUES (now() - interval '1 hour', now() + interval '1 hour');
+SELECT 'ANTES=' || count(*) FROM championship_registrations WHERE championship_id = '$CHAMP';
 SELECT commit_registration('$CHAMP', '$pid', '99900000701',
   '{"group_affiliation":"G","shirt_size":"M","profile_photo_link":"http://x/y.jpg","tickets_total":0}'::jsonb,
   '{"visao":4}'::jsonb)::text;
+SELECT 'DEPOIS=' || count(*) FROM championship_registrations WHERE championship_id = '$CHAMP';
 ROLLBACK;
 SQL
 )
 r=$(echo "$saida" | grep '"success"')
 checar "o sabado recusa mesmo com reserva viva" "sabbath" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
 
-# NAO acrescente aqui um "e nao gravou nada" contando championship_registrations:
-# foi tentado e removido. O ROLLBACK desfaz o INSERT de qualquer jeito, entao a
-# contagem da 0 mesmo quando a funcao GRAVOU -- medido com a checagem de sabado
-# movida para dentro do IF NOT v_had_reservation: o commit devolveu
-# registration_id e a contagem passou verde assim mesmo. Assertiva que nao
-# consegue falhar so infla o placar. Quem quiser cobrir isso precisa ler a
-# contagem DENTRO da transacao, antes do ROLLBACK.
+# A ESCRITA, e nao a string. A assertiva acima le a `reason` que voltou: ela
+# prova que a funcao DISSE nao. Esta prova que ela NAO ESCREVEU, e e a segunda
+# que a observancia exige -- com a checagem de sabado movida para o FIM da
+# funcao, a de cima passa verde enquanto a inscricao E GRAVADA durante o sabado,
+# e o ROLLBACK apaga o rastro antes que alguem veja.
 #
+# Por isso as contagens sao lidas DENTRO da transacao, entre a chamada e o
+# ROLLBACK. E a unica leitura que morde: de fora, depois do ROLLBACK, ela da 0
+# mesmo quando a funcao gravou. Isso nao e teoria -- foi tentado assim, passou
+# verde sob um mutante que gravava, e a assertiva foi removida por nao morder.
+#
+# Delta, e nao absoluto: preparar() pode deixar linha por outro motivo, e um
+# numero absoluto quebraria por algo alheio a esta regra.
+antes=$(echo "$saida" | sed -n 's/^ANTES=//p')
+depois=$(echo "$saida" | sed -n 's/^DEPOIS=//p')
+if [ -z "$antes" ] || [ -z "$depois" ]; then
+  # Sem ON_ERROR_STOP o psql sai 0 mesmo com erro de SQL, entao contagem vazia
+  # chegaria aqui como delta 0 e a assertiva passaria a nao medir nada.
+  echo "  FALHOU as contagens dentro da transacao nao voltaram (ANTES=[$antes] DEPOIS=[$depois])"
+  falhou=1
+else
+  checar "o sabado nao grava nada, e nao so responde nao" "0" "$((depois - antes))"
+fi
+
 # E o controle: a mesma reserva, o mesmo instante, sem a janela. Se este falhar,
 # o cenario acima esta passando por outro motivo.
 r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid', '99900000701',
