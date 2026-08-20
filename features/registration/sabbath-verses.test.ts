@@ -9,10 +9,9 @@ describe("SABBATH_VERSES", () => {
     expect(SABBATH_VERSES).toHaveLength(10);
   });
 
-  it("nao tem referencia repetida nem texto vazio", () => {
+  it("nao tem referencia repetida", () => {
     const refs = SABBATH_VERSES.map((v) => v.reference);
     expect(new Set(refs).size).toBe(10);
-    for (const v of SABBATH_VERSES) expect(v.text.length).toBeGreaterThan(20);
   });
 });
 
@@ -31,20 +30,30 @@ describe("a integridade dos dez textos", () => {
    *
    * QUANDO QUEBRAR: nao atualize o numero primeiro. Confira se a mudanca foi de
    * proposito, confira o texto novo contra a fonte com o usuario, e so entao
-   * recalcule.
+   * recalcule. O hash nao substitui essa conferencia — ele pega a alteracao
+   * acidental; quem recalcular sem conferir passa verde do mesmo jeito.
    */
   const IMPRESSAO_DIGITAL = "c4a4fc981750ce6572a9e915ff0ae3f3ee1a453810e6719d737aacbb7c12d262";
 
   it("bate com a impressao digital do conteudo conferido", () => {
     const canonico = SABBATH_VERSES.map((v) => `${v.reference}\n${v.text}`).join("\n");
-    expect(createHash("sha256").update(canonico, "utf8").digest("hex")).toBe(IMPRESSAO_DIGITAL);
+    expect(
+      createHash("sha256").update(canonico, "utf8").digest("hex"),
+      "o conteudo dos versiculos mudou; confira contra a fonte antes de atualizar o numero",
+    ).toBe(IMPRESSAO_DIGITAL);
   });
 
   // As tres abaixo nao acrescentam garantia sobre o hash: existem para DIZER o
   // que quebrou, porque um hash diferente sozinho nao aponta nada.
 
   it("mantem toda referencia no formato Livro capitulo:versiculo", () => {
-    for (const v of SABBATH_VERSES) expect(v.reference).toMatch(/^\p{Lu}\p{L}+ \d+:\d+(-\d+)?$/u);
+    // Aceita as tres formas que o canone tem, e nao so a dos dez de hoje:
+    // "Atos 16:13", "1 Corintios 16:2" e "Cantares de Salomao 2:1". Estreitar
+    // no formato simples faria um decimo primeiro versiculo de Corintios
+    // falhar aqui, longe da causa.
+    for (const v of SABBATH_VERSES) {
+      expect(v.reference).toMatch(/^(?:[123] )?\p{Lu}\p{L}+(?: \p{L}+)* \d+:\d+(?:-\d+)?$/u);
+    }
   });
 
   it("mantem a acentuacao dos cinco livros que a tem", () => {
@@ -57,6 +66,8 @@ describe("a integridade dos dez textos", () => {
   it("mantem a acentuacao e o corpo dos dez textos", () => {
     for (const v of SABBATH_VERSES) {
       expect(v.text).toMatch(/[áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ]/);
+      // 60 e piso contra truncamento, nao medida de nada: o mais curto hoje e
+      // Hebreus 4:9, com 62 caracteres.
       expect(v.text.length).toBeGreaterThanOrEqual(60);
     }
   });
