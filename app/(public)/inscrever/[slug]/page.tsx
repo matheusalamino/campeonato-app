@@ -10,7 +10,7 @@ import NotOpenNotice from "./NotOpenNotice";
 import NotYetNotice from "./NotYetNotice";
 import InscreverHeader from "./InscreverHeader";
 import { registrationGate } from "@/features/registration/registration-gate";
-import { isSabbath, sabbathEndsAt, sabbathStartsAt } from "@/features/registration/sabbath";
+import { sabbathView } from "@/features/registration/sabbath";
 import { getSabbathWindow } from "@/services/public-registration";
 
 export const dynamic = "force-dynamic";
@@ -77,18 +77,12 @@ export default async function InscreverPage({ params }: { params: Promise<{ slug
   };
   const liveCount = count ?? 0;
 
+  // A decisao do sabado mora inteira em `sabbathView`, e nao aqui: montada a
+  // mao nesta pagina, ela nao teria teste nenhum — este e o unico trecho do
+  // fluxo que a suite nao alcanca.
   const now = new Date();
-  const sabbathWindow = await getSabbathWindow(now);
-  const paused = isSabbath(now, sabbathWindow);
-  const gate = registrationGate(
-    champ,
-    now,
-    paused ? { endsAt: sabbathEndsAt(now, sabbathWindow) } : null,
-  );
-
-  // O por do sol so interessa a quem esta preenchendo: quem ja esta pausado ve
-  // a tela de repouso, com a contagem regressiva do FIM.
-  const sunsetAt = paused ? null : sabbathStartsAt(now, sabbathWindow);
+  const { pause, sunsetAt } = sabbathView(now, await getSabbathWindow(now));
+  const gate = registrationGate(champ, now, pause);
 
   // O repouso de sabado e uma experiencia modal de tela cheia — sem header.
   if (gate.view === "rest") {

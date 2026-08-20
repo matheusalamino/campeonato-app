@@ -198,6 +198,35 @@ export function sabbathStartsAt(now: Date, window: SabbathWindow | null): string
   return brasiliaAt(date, SABBATH_FALLBACK_START);
 }
 
+/** O que a pagina precisa saber sobre a pausa: o veredito e o proximo por do sol. */
+export type SabbathView = { pause: { endsAt: string } | null; sunsetAt: string | null };
+
+/**
+ * A decisao inteira da pagina sobre o sabado, num lugar so.
+ *
+ * Existe porque a alternativa nao tem rede. Montada a mao no Server Component,
+ * a regra vira tres expressoes soltas que nenhum teste alcanca — e a pior delas
+ * passa no `tsc` sem reclamar: chamar `sabbathEndsAt` sem antes perguntar
+ * `isSabbath` faz o gate devolver `rest` para TODO campeonato, em qualquer dia,
+ * e a inscricao morre calada.
+ *
+ * `sunsetAt` e null durante a pausa, e essa e a invariante que esta funcao
+ * existe para guardar: quem ja esta pausado ve a tela de repouso, com a
+ * contagem do FIM; o por do sol so interessa a quem ainda esta preenchendo.
+ *
+ * Ela tambem fecha aqui dentro a precondicao que os docblocks de
+ * `sabbathEndsAt` e `sabbathStartsAt` avisam depender de quem chama. Com esta
+ * funcao no meio, deixa de depender: `sabbathEndsAt` so e alcancado depois de
+ * `isSabbath` dizer `true`, e o ramo em que os dois discordam durante a pausa
+ * fica inalcancavel por construcao, nao por disciplina de quem chama.
+ */
+export function sabbathView(now: Date, window: SabbathWindow | null): SabbathView {
+  if (isSabbath(now, window)) {
+    return { pause: { endsAt: sabbathEndsAt(now, window) }, sunsetAt: null };
+  }
+  return { pause: null, sunsetAt: sabbathStartsAt(now, window) };
+}
+
 export type SunsetAlert = "none" | "notice" | "cutoff";
 
 /**

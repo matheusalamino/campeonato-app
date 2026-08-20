@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  isSabbath, sabbathEndsAt, sabbathStartsAt, sunsetAlert,
+  isSabbath, sabbathEndsAt, sabbathStartsAt, sunsetAlert, sabbathView,
   type SabbathWindow,
 } from "./sabbath";
 
@@ -204,5 +204,79 @@ describe("sunsetAlert", () => {
   it("fica calado sem inicio conhecido e com inicio ilegivel", () => {
     expect(sunsetAlert(em("2026-08-21T20:40:00.000Z"), null)).toBe("none");
     expect(sunsetAlert(em("2026-08-21T20:40:00.000Z"), "banana")).toBe("none");
+  });
+});
+
+/*
+ * A pagina nao decide nada sozinha, e estes testes sao a razao.
+ *
+ * As tres expressoes que montavam esta decisao viviam no Server Component, que
+ * a suite nao alcanca: quatro mutacoes passavam no `tsc` E nos testes. A pior
+ * — usar o fim do sabado sem antes perguntar se e sabado — devolvia `rest` para
+ * todo campeonato, em qualquer dia, e matava a inscricao em definitivo.
+ */
+describe("sabbathView — a decisao da pagina num lugar so", () => {
+  it("pausado: entrega o fim da pausa e CALA o por do sol", () => {
+    // O sunsetAt null e a invariante. Quem ja esta pausado ve a tela de
+    // repouso, com a contagem do FIM; avisar do por do sol que ja passou seria
+    // contar a hora errada.
+    expect(sabbathView(em("2026-08-22T05:00:00.000Z"), JANELA))
+      .toEqual({ pause: { endsAt: JANELA.endsAt }, sunsetAt: null });
+  });
+
+  it("nao pausado com janela futura: sem pausa, e com o por do sol da janela", () => {
+    // Sexta 17h30 em Brasilia, vinte minutos antes do por do sol.
+    expect(sabbathView(em("2026-08-21T20:30:00.000Z"), JANELA))
+      .toEqual({ pause: null, sunsetAt: JANELA.startsAt });
+  });
+
+  it("no instante exato do inicio ja pausa, e o por do sol some", () => {
+    expect(sabbathView(em(JANELA.startsAt), JANELA))
+      .toEqual({ pause: { endsAt: JANELA.endsAt }, sunsetAt: null });
+  });
+
+  it("no instante exato do fim ainda pausa", () => {
+    expect(sabbathView(em(JANELA.endsAt), JANELA))
+      .toEqual({ pause: { endsAt: JANELA.endsAt }, sunsetAt: null });
+  });
+
+  it("uma janela VENCIDA devolve um inicio no passado — o filtro da consulta e que impede", () => {
+    /*
+     * Nao e alcancavel em producao, e vale saber por que: `getSabbathWindow`
+     * filtra `ends_at >= now`, entao uma janela vencida nunca chega aqui.
+     *
+     * Esta assercao existe para nomear o UNICO ponto em que este modulo ainda
+     * depende daquele filtro. Com uma janela vencida o `sunsetAt` aponta para
+     * tras, e `sunsetAlert` responderia "cutoff" para sempre — o bloco de
+     * pagamento sumiria do formulario e nunca mais voltaria. Quem mexer no
+     * filtro da consulta quebra isto aqui, e nao la.
+     */
+    expect(sabbathView(em("2026-08-22T20:51:00.001Z"), JANELA))
+      .toEqual({ pause: null, sunsetAt: JANELA.startsAt });
+  });
+
+  it("sem janela, num dia comum: nao pausa e nao ha o que avisar", () => {
+    // Terca, 18/08/2026.
+    expect(sabbathView(em("2026-08-18T15:00:00.000Z"), null))
+      .toEqual({ pause: null, sunsetAt: null });
+  });
+
+  it("sem janela, numa sexta de manha: a regra conservadora sabe o inicio", () => {
+    // Sexta 10h em Brasilia; o fallback comeca as 17h = 20h UTC.
+    expect(sabbathView(em("2026-08-21T13:00:00.000Z"), null))
+      .toEqual({ pause: null, sunsetAt: "2026-08-21T20:00:00.000Z" });
+  });
+
+  it("sem janela, num sabado de manha: a regra conservadora pausa ate 20h30", () => {
+    // Sabado 02h em Brasilia; o fallback termina as 20h30 = 23h30 UTC.
+    expect(sabbathView(em("2026-08-22T05:00:00.000Z"), null))
+      .toEqual({ pause: { endsAt: "2026-08-22T23:30:00.000Z" }, sunsetAt: null });
+  });
+
+  it("janela podre pausa pela regra conservadora, e nao vaza o inicio podre", () => {
+    // Invertida: `parseWindow` recusa, e o sabado a noite cai no fallback.
+    const invertida: SabbathWindow = { startsAt: JANELA.endsAt, endsAt: JANELA.startsAt };
+    expect(sabbathView(em("2026-08-22T05:00:00.000Z"), invertida))
+      .toEqual({ pause: { endsAt: "2026-08-22T23:30:00.000Z" }, sunsetAt: null });
   });
 });

@@ -205,21 +205,48 @@ export async function reserveSlot(
 /**
  * A janela de sabado atual ou a proxima.
  *
+ * Usa o client anon, e nao o service-role: a migration da T2 abriu
+ * `SELECT TO anon, authenticated USING (true)` de proposito, e ler janela de
+ * sabado nao exige privilegio nenhum. Mesma razao da vizinha
+ * `getOpenRegistrationChampionship`, logo abaixo.
+ *
  * `ends_at >= now` e o filtro certo, e nao "cobre agora": quem chama precisa
  * distinguir "a tabela funciona e ainda nao e sabado" de "a tabela nao alcanca
  * este instante". Ver a nota em features/registration/sabbath.ts.
  *
- * O `order` por `starts_at` faz parte do contrato junto com o filtro: sem ele a
- * ordem das linhas e indefinida, e o `limit(1)` traria uma janela qualquer entre
- * as que sobraram em vez da proxima.
+ * ATENCAO — ESTAS LINHAS SAO CARGA ESTRUTURAL E NAO TEM TESTE.
+ *
+ * `vitest.config.ts` inclui `lib/**`, `features/**` e `scripts/**`; `services/**`
+ * esta de fora, entao um teste escrito aqui nem rodaria. Nada segura o `gte`, a
+ * coluna filtrada, o `ascending`, o `limit` ou o `try/catch`. Duas edicoes
+ * erram para o LADO PROIBIDO sem quebrar teste nenhum:
+ *
+ *   1. filtrar `starts_at` em vez de `ends_at`;
+ *   2. inverter o `ascending`.
+ *
+ * As duas fazem a consulta devolver uma janela FUTURA durante o sabado.
+ * `isSabbath` entao responde "nao e sabado" — porque janela futura significa
+ * exatamente isso — e o site ABRE a inscricao no sabado, caladamente, sem nunca
+ * chegar na regra conservadora. A unica defesa hoje e revisao humana: quem for
+ * editar esta consulta precisa ler isto ANTES de editar.
+ *
+ * O que ESTA contido: trocar o mapeamento (`startsAt: data.ends_at`) sempre
+ * produz uma janela com `end < start`, e a guarda de janela invertida em
+ * `parseWindow` joga isso na regra conservadora. Aquela guarda foi acrescentada
+ * por causa desta consulta, e funciona.
+ *
+ * O `.order` e contrato em principio, mas hoje e infalsificavel em teste:
+ * removido, ou trocado por `ends_at`, as variantes coincidem — a ordem fisica
+ * das linhas e o fato de as janelas nao se sobreporem escondem a diferenca
+ * neste dado. Fica porque a coincidencia e do dado, nao da regra.
  *
  * Falha vira `null`, que aciona a regra conservadora — do lado da observancia,
  * que e o unico lado aceitavel de errar aqui.
  */
 export async function getSabbathWindow(now: Date): Promise<SabbathWindow | null> {
   try {
-    const supabase = createAdminClient();
-    const { data } = await supabase
+    const supabase = await createClient();
+    const { data, error } = await supabase
       .from("sabbath_windows")
       .select("starts_at, ends_at")
       .gte("ends_at", now.toISOString())
@@ -227,9 +254,21 @@ export async function getSabbathWindow(now: Date): Promise<SabbathWindow | null>
       .limit(1)
       .maybeSingle();
 
+    // Consulta quebrada e tabela esgotada caem as duas na regra conservadora,
+    // mas nao sao a mesma coisa: a segunda e o fim previsto da tabela, a
+    // primeira e defeito que ninguem notaria — a pausa viraria estimada para
+    // sempre e a tela nunca acusaria. O projeto nao tem infraestrutura de log,
+    // entao o console do servidor e o sinal disponivel; ficar calado aqui seria
+    // escolha errada, e nao esquecimento.
+    if (error) {
+      console.error("[sabbath] consulta a sabbath_windows falhou:", error.message);
+      return null;
+    }
+
     if (!data) return null;
     return { startsAt: data.starts_at, endsAt: data.ends_at };
-  } catch {
+  } catch (cause) {
+    console.error("[sabbath] consulta a sabbath_windows lancou:", cause);
     return null;
   }
 }
