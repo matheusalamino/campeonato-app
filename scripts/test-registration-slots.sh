@@ -27,6 +27,7 @@ limpar() {
     DELETE FROM registration_slot_reservations WHERE championship_id = '$CHAMP';
     DELETE FROM players WHERE cpf LIKE '999%';
     DELETE FROM championships WHERE id = '$CHAMP';
+    DELETE FROM sabbath_windows WHERE starts_at >= '2098-01-01';
   " > /dev/null
 }
 
@@ -120,6 +121,87 @@ r=$($DB -c "
   SELECT reserve_registration_slot('$CHAMP', '99900000406')::text;
   COMMIT;" | grep '"success"')
 checar "no instante do encerramento ainda reserva" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+echo "== pausa de sabado =="
+preparar
+# A janela temporaria entra e sai na MESMA transacao: sabbath_windows e global,
+# sem vinculo com campeonato, entao uma linha esquecida aqui pausaria o site de
+# verdade. O ROLLBACK e a limpeza.
+saida=$($DB <<SQL
+BEGIN;
+INSERT INTO sabbath_windows (starts_at, ends_at)
+VALUES (now() - interval '1 hour', now() + interval '1 hour');
+SELECT reserve_registration_slot('$CHAMP', '99900000601')::text;
+ROLLBACK;
+SQL
+)
+# BEGIN, INSERT e ROLLBACK tambem saem no stdout; so a linha do resultado tem o JSON.
+r=$(echo "$saida" | grep '"success"')
+checar "durante o sabado a reserva e recusada" "sabbath" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+# Fora da janela, com a tabela funcionando, nada muda.
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000602')::text;")
+checar "fora do sabado a reserva segue normal" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+# A ORDEM das checagens, e nao so a recusa. Um cenario que so verifica "recusou"
+# nao distingue a pausa estar antes ou depois de already_registered — o mesmo CPF
+# nos dois lados, mudando so a janela, e o que fixa isso.
+echo "== a pausa fala antes de already_registered =="
+preparar
+$DB -c "INSERT INTO players (cpf, name) VALUES ('99900000603', 'Ja inscrito A7');" > /dev/null
+pid=$($DB -c "SELECT id FROM players WHERE cpf='99900000603';")
+$DB -c "INSERT INTO championship_registrations (championship_id, player_id) VALUES ('$CHAMP', '$pid');" > /dev/null
+# Controle: fora do sabado este CPF realmente cai no already_registered. Sem ele,
+# o caso seguinte passaria mesmo com o CPF nao inscrito, e nao provaria ordem.
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000603')::text;")
+checar "fora do sabado o ja inscrito ouve already_registered" "already_registered" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+saida=$($DB <<SQL
+BEGIN;
+INSERT INTO sabbath_windows (starts_at, ends_at)
+VALUES (now() - interval '1 hour', now() + interval '1 hour');
+SELECT reserve_registration_slot('$CHAMP', '99900000603')::text;
+ROLLBACK;
+SQL
+)
+r=$(echo "$saida" | grep '"success"')
+checar "no sabado a pausa ganha do ja inscrito" "sabbath" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+echo "== is_sabbath: bordas exatas =="
+# As DUAS linhas temporarias importam. A de dezembro/2098 nao e enfeite: sem ela,
+# o teste de "um segundo depois do fim" nao teria linha alcancando aquele
+# instante, cairia na regra conservadora, e uma borda quebrada continuaria
+# devolvendo `true` pelo motivo errado.
+saida=$($DB <<'SQL'
+BEGIN;
+INSERT INTO sabbath_windows (starts_at, ends_at) VALUES
+  ('2098-06-05 17:40:00-03', '2098-06-06 17:40:00-03'),
+  ('2098-12-25 18:00:00-03', '2098-12-26 18:00:00-03');
+SELECT is_sabbath('2098-06-05 17:39:59-03')::text || '|' ||
+       is_sabbath('2098-06-05 17:40:00-03')::text || '|' ||
+       is_sabbath('2098-06-06 17:40:00-03')::text || '|' ||
+       is_sabbath('2098-06-06 17:40:01-03')::text;
+ROLLBACK;
+SQL
+)
+# Nem BEGIN, nem "INSERT 0 2", nem ROLLBACK tem barra vertical.
+r=$(echo "$saida" | grep '|' | tr -d ' ')
+# 05/06/2098 e quinta e 06/06 e sexta de proposito: a linha manda, o dia da
+# semana nao. Se a janela deixasse de mandar, a regra conservadora chamaria a
+# sexta 17:40 de sabado e o terceiro campo continuaria `true` por engano.
+checar "a janela manda, com as bordas inclusivas" "false|true|true|false" "$r"
+
+echo "== is_sabbath: a regra conservadora =="
+# 2099 fica alem da ultima linha da tabela — e la que a regra conservadora vive.
+# 02/01/2099 e uma sexta; 03/01 um sabado; 30/12/2098 uma terca.
+r=$($DB -c "
+  SELECT is_sabbath('2099-01-02 16:59:00-03')::text || '|' ||
+         is_sabbath('2099-01-02 17:00:00-03')::text || '|' ||
+         is_sabbath('2099-01-03 20:30:00-03')::text || '|' ||
+         is_sabbath('2099-01-03 20:31:00-03')::text || '|' ||
+         is_sabbath('2098-12-30 18:00:00-03')::text;
+")
+checar "sexta 17h a sabado 20h30 quando a tabela acaba" "false|true|true|false|false" "$(echo "$r" | tr -d ' ')"
 
 echo "== concorrencia: duas transacoes disputando a ultima vaga =="
 preparar
