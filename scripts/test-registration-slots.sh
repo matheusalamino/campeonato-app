@@ -5,12 +5,14 @@
 # Cria um campeonato descartavel, exercita os cenarios e apaga tudo no fim.
 #
 # NAO RODE ISTO DURANTE UM SABADO DE VERDADE — do por do sol de sexta ao de
-# sabado a suite falha inteira, e nao por regressao: reserve_registration_slot
-# chama is_sabbath(now()), sem relogio injetavel, entao TODA reserva devolve
-# `sabbath`. Medido com uma janela cobrindo now(): 15 das 28 assertivas falham.
-# Passam os cenarios que montam a janela DENTRO de uma transacao; falham os dois
-# controles ("fora do sabado ..."), que dependem do relogio de fora -- ou seja,
-# ha FALHOU dentro das proprias secoes de sabado, e isso e esperado. Se quebrar
+# sabado a suite falha inteira, e nao por regressao: reserve_registration_slot e
+# commit_registration chamam is_sabbath(now()), sem relogio injetavel, entao
+# TODA reserva e TODO commit devolvem `sabbath`. Medido com uma janela cobrindo
+# now(): 17 das 30 assertivas falham. Passam os cenarios que montam a janela
+# DENTRO de uma transacao; falham os TRES controles que dependem do relogio de
+# fora ("fora do sabado a reserva segue normal", "fora do sabado o ja inscrito
+# ouve already_registered" e "sem sabado, a mesma reserva grava") -- ou seja, ha
+# FALHOU dentro das proprias secoes de sabado, e isso e esperado. Se quebrar
 # tudo de uma vez numa sexta a noite, olhe o relogio antes de olhar o codigo --
 # o script avisa em tempo de execucao quando esse for o caso.
 set -e
@@ -78,10 +80,11 @@ if [ "$($DB -c "SELECT is_sabbath(now());" | tr -d ' ')" = "t" ]; then
   echo "==============================================================="
   echo "  ATENCAO: is_sabbath(now()) ESTA VERDADEIRO AGORA."
   echo ""
-  echo "  reserve_registration_slot chama is_sabbath(now()) e nao tem"
-  echo "  relogio injetavel, entao TODA reserva devolve 'sabbath'. As"
-  echo "  falhas em cenarios sem relacao com a pausa sao ESPERADAS --"
-  echo "  nao sao regressao, e nao ha o que consertar no codigo."
+  echo "  reserve_registration_slot e commit_registration chamam"
+  echo "  is_sabbath(now()) e nao tem relogio injetavel, entao TODA"
+  echo "  reserva e TODO commit devolvem 'sabbath'. As falhas em"
+  echo "  cenarios sem relacao com a pausa sao ESPERADAS -- nao sao"
+  echo "  regressao, e nao ha o que consertar no codigo."
   echo ""
   if [ -n "$janela" ]; then
     echo "  Quem esta pausando (horario de Brasilia):"
@@ -101,10 +104,12 @@ if [ "$($DB -c "SELECT is_sabbath(now());" | tr -d ' ')" = "t" ]; then
   fi
   echo ""
   echo "  Seguem validos os cenarios que montam a janela DENTRO de"
-  echo "  uma transacao. Os dois controles ('fora do sabado ...')"
-  echo "  NAO: eles dependem do relogio de fora e falham agora --"
-  echo "  entao ha FALHOU dentro das proprias secoes de sabado, e"
-  echo "  ali tambem e esperado."
+  echo "  uma transacao. Os TRES controles que leem o relogio de"
+  echo "  fora NAO ('fora do sabado a reserva segue normal', 'fora"
+  echo "  do sabado o ja inscrito ouve already_registered' e 'sem"
+  echo "  sabado, a mesma reserva grava'): falham agora, entao ha"
+  echo "  FALHOU dentro das proprias secoes de sabado, e ali"
+  echo "  tambem e esperado."
   echo ""
   echo "  Se a janela acima for mesmo um sabado, rode de novo depois"
   echo "  do por do sol. Nao existe flag para desligar a trava, e isso"
@@ -370,6 +375,50 @@ r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid', '99900000502',
       '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0}'::jsonb,
       '{\"visao\":4}'::jsonb)::text;")
 checar "sem reserva, fora do prazo recusa" "not_open" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+# A INVERSAO. O cenario "reserva viva atravessa o prazo", duas secoes acima,
+# provou que reserva viva passa pelo PRAZO. Este prova que ela NAO passa pelo
+# SABADO — sao duas checagens vizinhas na mesma funcao, com regras opostas, e
+# este par e a unica coisa que mantem a diferenca viva. Mover a checagem de
+# sabado para dentro do IF NOT v_had_reservation "por consistencia" mata ESTE
+# cenario e deixa aquele passando; se os dois morrerem, ou nenhum, o par nao
+# esta medindo o que promete.
+#
+# A janela temporaria entra e sai na MESMA transacao: sabbath_windows e global,
+# sem vinculo com campeonato, entao uma linha esquecida aqui pausaria o site de
+# verdade. O ROLLBACK e a limpeza.
+echo "== reserva viva NAO atravessa o sabado =="
+preparar
+$DB -c "INSERT INTO players (cpf, name) VALUES ('99900000701', 'Sabado A6');" > /dev/null
+pid=$($DB -c "SELECT id FROM players WHERE cpf='99900000701';")
+$DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000701');" > /dev/null
+saida=$($DB <<SQL
+BEGIN;
+INSERT INTO sabbath_windows (starts_at, ends_at)
+VALUES (now() - interval '1 hour', now() + interval '1 hour');
+SELECT commit_registration('$CHAMP', '$pid', '99900000701',
+  '{"group_affiliation":"G","shirt_size":"M","profile_photo_link":"http://x/y.jpg","tickets_total":0}'::jsonb,
+  '{"visao":4}'::jsonb)::text;
+ROLLBACK;
+SQL
+)
+r=$(echo "$saida" | grep '"success"')
+checar "o sabado recusa mesmo com reserva viva" "sabbath" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+# NAO acrescente aqui um "e nao gravou nada" contando championship_registrations:
+# foi tentado e removido. O ROLLBACK desfaz o INSERT de qualquer jeito, entao a
+# contagem da 0 mesmo quando a funcao GRAVOU -- medido com a checagem de sabado
+# movida para dentro do IF NOT v_had_reservation: o commit devolveu
+# registration_id e a contagem passou verde assim mesmo. Assertiva que nao
+# consegue falhar so infla o placar. Quem quiser cobrir isso precisa ler a
+# contagem DENTRO da transacao, antes do ROLLBACK.
+#
+# E o controle: a mesma reserva, o mesmo instante, sem a janela. Se este falhar,
+# o cenario acima esta passando por outro motivo.
+r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid', '99900000701',
+      '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0}'::jsonb,
+      '{\"visao\":4}'::jsonb)::text;")
+checar "sem sabado, a mesma reserva grava" "true" "$(echo "$r" | sed 's/.*\"success\" : \([a-z]*\).*/\1/')"
 
 # =============================================================================
 # Lacuna HERDADA, e nao especifica de uma task: TODOS os cenarios acima rodam
