@@ -3,28 +3,42 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * Tres fatos da tela de repouso, lidos como texto.
+ * Cinco fatos da tela de repouso, lidos como texto, em quatro casos.
  *
  * Nao e um teste de renderizacao disfarcado: o que a tela MOSTRA — o versiculo,
  * o horario de volta, a contagem — ja tem dono testado de verdade
- * (`verseForSabbath`, `sabbathStatus`, `registrationGate`) ou aparece na hora se
- * quebrar. O que este arquivo tranca e o oposto: os tres fatos cuja perda e
- * INVISIVEL. Nenhum deles muda um pixel, nenhum quebra o `tsc`, nenhum derruba a
- * suite — e os tres so aparecem quando ja custaram alguma coisa a alguem.
+ * (`verseForSabbath`, `announceableEndsAt`, `registrationGate`) ou aparece na
+ * hora se quebrar. O que este arquivo tranca e o oposto: os fatos cujo DANO e
+ * invisivel.
+ *
+ * "Dano invisivel", e nao "mudanca invisivel" — a diferenca importa para quem
+ * for decidir se um `it` novo pertence aqui. O quinto fato abaixo MUDA pixel:
+ * o botao some e o video aparece no lugar dele. O que ninguem ve e o estrago —
+ * um request ao Google com o IP de quem so queria saber quando a inscricao
+ * volta. Nenhum dos cinco quebra o `tsc`, nenhum derruba a suite, e todos so
+ * aparecem quando ja custaram alguma coisa a alguem.
  *
  *   `inert` no wizard borrado   ->  o Tab entra num formulario anunciado como
  *                                   inexistente, e so quem navega por teclado
  *                                   descobre.
+ *   `rel="noopener noreferrer"` ->  a aba aberta ganha acesso a `window.opener`.
+ *                                   O navegador moderno ja implica `noopener`
+ *                                   em `target="_blank"`, entao o dano hoje e
+ *                                   o `noreferrer`: o canal passa a receber de
+ *                                   onde a pessoa veio.
  *   `youtube-nocookie`          ->  trocado por `youtube.com`, a privacidade
  *                                   some em silencio, com o video funcionando
  *                                   igual.
  *   ausencia de thumbnail       ->  uma capa do dominio de imagens do YouTube
  *                                   entrega o IP do visitante ANTES do clique e
  *                                   transforma a fachada em fachada so no nome.
+ *   fachada comeca fechada      ->  `useState(true)` monta o iframe no primeiro
+ *                                   paint, e o "antes do clique" acima deixa de
+ *                                   existir sem que nada reclame.
  *
  * Le como texto pelo mesmo motivo de wizard-steps.test.ts e
  * sabbath-page-wiring.test.ts: o projeto nao tem jsdom nem Testing Library
- * (vitest roda com environment "node"), e montar essa infra para conferir tres
+ * (vitest roda com environment "node"), e montar essa infra para conferir
  * atributos escritos no proprio arquivo seria desproporcional.
  */
 const OVERLAY = join(process.cwd(), "app/(public)/inscrever/[slug]/RestOverlay.tsx");

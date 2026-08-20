@@ -2,7 +2,7 @@ import RegistrationWizard, { type WizardChampionship } from "./RegistrationWizar
 import Countdown from "./steps/Countdown";
 import SabbathVideo from "./steps/SabbathVideo";
 import { verseForSabbath } from "@/features/registration/sabbath-verses";
-import { announceableEndsAt } from "@/features/registration/sabbath-return";
+import { announceableEndsAt } from "@/features/registration/sabbath";
 import { CHAMPIONSHIP_TIME_ZONE } from "@/lib/datetime-br";
 
 // A amostra entre aspas e texto de UI, e por isso mantem os acentos; a prosa
@@ -74,7 +74,7 @@ export default function RestOverlay({
           <div className="w-full max-w-sm rounded-3xl border p-6 text-center"
                style={{ background: "#0d0d11", borderColor: "rgba(230,180,34,.35)" }}>
             <div className="text-4xl" aria-hidden="true">🌅</div>
-            <h2 className="my-3 text-lg font-extrabold text-[var(--gala-gold-2)]">Inscrições em repouso</h2>
+            <h1 className="my-3 text-lg font-extrabold text-[var(--gala-gold-2)]">Inscrições em repouso</h1>
 
             <p className="text-sm leading-relaxed text-[var(--gala-ink-dim)]">
               Nossa comunidade é Adventista do Sétimo Dia e guarda o sábado, do pôr do sol de sexta

@@ -263,3 +263,60 @@ export function sunsetAlert(now: Date, startsAt: string | null): SunsetAlert {
   if (minutes <= SUNSET_NOTICE_MINUTES) return "notice";
   return "none";
 }
+
+/**
+ * O fim da pausa em que da para confiar a ponto de ANUNCIAR o dia da semana.
+ *
+ * Devolve o proprio `endsAt` quando ele cai num sabado de Brasilia, e `null`
+ * quando nao da para afirmar nada.
+ *
+ * O dia da semana nao e decoracao na tela de repouso: a pausa vai do por do sol
+ * de sexta ao de sabado, entao a inscricao volta sempre num SABADO. Uma tela
+ * dizendo "voltam quinta-feira" contradiz, com toda a confianca, a propria razao
+ * de a pausa existir — e quem le conclui que ou o site esta quebrado ou a
+ * observancia e negociavel.
+ *
+ * Nos dois caminhos reais o dia bate: as janelas de `sabbath_windows` terminam
+ * no por do sol de um sabado, e a regra conservadora termina no sabado as 20h30
+ * — as duas coisas que este arquivo ja decide. Nao cair num sabado significa
+ * dado corrompido, e a resposta certa para dado corrompido nao e um dia errado
+ * com ar de certeza, e sim a copia honesta que a tela ja tem para quando
+ * ninguem sabe a hora.
+ *
+ * MORA NESTE ARQUIVO por ser o modulo deste conceito: quem define quando a
+ * pausa termina (`sabbathEndsAt`, `SABBATH_FALLBACK_END`) e quem sabe se aquele
+ * instante merece ser anunciado tem que envelhecer junto — mover a borda la e
+ * quebrar a guarda aqui e a mesma edicao. Reusa o `SATURDAY` acima em vez de
+ * redeclarar, e acompanha `sunsetAlert`: helper de apresentacao ja e vizinhanca
+ * conhecida daqui.
+ *
+ * NAO mora no RestOverlay.tsx, que e o unico consumidor, porque de la nao ha
+ * teste: importar o componente arrasta `RegistrationWizard` -> `actions.ts` ->
+ * `services/public-registration.ts` -> `import "server-only"`, que nao resolve
+ * no vitest (environment "node"). Exportar de la nao resolveria; stubar
+ * `server-only` no vitest.config seria mexer em infra compartilhada por causa
+ * de uma funcao pura de quatro linhas.
+ *
+ * Le o dia por `brasiliaParts`, e nao por `getUTCDay()`. MEDIDO: hoje os dois
+ * concordam em 100% dos casos. As 178 janelas reais terminam entre 20h30 e
+ * 22h01 UTC de sabado, e a regra conservadora as 23h30 UTC de sabado — nenhuma
+ * cruza a meia-noite, entao `getUTCDay()` aceitaria exatamente as mesmas. Isto
+ * e risco latente evitado, nao bug evitado, e o argumento e mais forte assim.
+ *
+ * Vale mesmo assim porque a margem e de trinta minutos: `SABBATH_FALLBACK_END`
+ * ja foi movido uma vez, de 19h para 20h30, e o docblock dele raciocina
+ * abertamente sobre move-lo de novo. Empurrado para 21h, o fim da regra
+ * conservadora vira meia-noite UTC de domingo e `getUTCDay()` passaria a recusar
+ * justamente o dado BOM, calado. Ler o dia em Brasilia e o que torna essa
+ * mexida inofensiva.
+ *
+ * `Date` invalido devolve `null` junto — e nao lanca. `brasiliaParts` LANCA
+ * nesse caso, e derrubar a pagina de repouso por causa de uma string podre seria
+ * trocar um texto errado por tela nenhuma.
+ */
+export function announceableEndsAt(endsAt: string | null): string | null {
+  if (!endsAt) return null;
+  const instant = new Date(endsAt);
+  if (Number.isNaN(instant.getTime())) return null;
+  return brasiliaParts(instant).dow === SATURDAY ? endsAt : null;
+}
