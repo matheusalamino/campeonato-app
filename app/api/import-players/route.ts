@@ -69,10 +69,12 @@ function parseSkillRating(value?: string | null): number | null {
  * (Goleiro vs linha).
  */
 function selfEvalRowsFromCsv(row: CSVRow): { skill: string; rating: number }[] {
-  // O canonico, e nao a celula crua: `GOL` e `' goleiro '` sao goleiro na
+  // O canonico, e nao a celula crua: `Goleiro` e `' goleiro '` sao goleiro na
   // planilha e NAO eram goleiro para este `===`, entao o import lia as 6
   // colunas de LINHA para um goleiro e gravava a autoavaliacao errada.
-  const isGk = normalizePreferredPosition(row["Posição"]).position === "Goleiro";
+  //
+  // O canonico virou CODIGO na 20260821010000, entao o alvo do `===` e `GOL`.
+  const isGk = normalizePreferredPosition(row["Posição"]).position === "GOL";
 
   const spec = isGk
     ? (
@@ -152,12 +154,13 @@ export async function POST(req: Request) {
 
         if (!shirtName) throw new Error("Nome não informado");
 
-        // A CHECK `players_preferred_position_known` (20260820010000) so aceita
-        // os quatro canonicos ou null. Sem esta traducao a linha estourava com
-        // erro cru do Postgres na cara do admin.
+        // A CHECK `players_preferred_position_known` (20260821010000) so aceita
+        // os quatro codigos canonicos ou null. Sem esta traducao a linha
+        // estourava com erro cru do Postgres na cara do admin -- e a planilha
+        // traz PALAVRA, que so vira codigo passando por aqui.
         //
         // Desconhecido ABORTA A LINHA em vez de gravar null: a cota de goleiro
-        // do A6 conta `Goleiro` contra o resto, entao um `Goleir0` que virasse
+        // do A6 conta o goleiro contra o resto, entao um `Goleir0` que virasse
         // null passaria a contar como jogador de linha, e a trava de capacidade
         // erraria calada. O `throw` aqui e o idioma da casa -- cai no catch da
         // linha, entra em `errors[]` com numero de linha, e o import CONTINUA.

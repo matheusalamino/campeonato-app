@@ -21,45 +21,80 @@ describe("normalizePreferredPosition", () => {
     }
   });
 
+  it("o canonico e o codigo, e nao a palavra", () => {
+    expect(CANONICAL_POSITIONS).toEqual(["GOL", "ZAG", "MEI", "ATA"]);
+  });
+
+  it("a palavra por extenso entra como apelido e sai como codigo", () => {
+    // O CSV aceita celula arbitraria, e o dado dos tres ambientes esta 100% em
+    // palavra. Se a palavra deixasse de ser apelido, todo import de planilha
+    // antiga passaria a recusar linha.
+    for (const [palavra, codigo] of [
+      ["Goleiro", "GOL"], ["Zagueiro", "ZAG"], ["Meia", "MEI"], ["Atacante", "ATA"],
+    ] as const) {
+      expect(normalizePreferredPosition(palavra).position).toBe(codigo);
+    }
+  });
+
+  it("lateral e volante caem em MEI", () => {
+    // Decisao do usuario: o campeonato e de futsal, e o corredor e a ala.
+    for (const raw of ["Lateral", "lateral", "Volante", "vol", "LAT", "VOL"]) {
+      expect(normalizePreferredPosition(raw).position).toBe("MEI");
+    }
+  });
+
+  it("celula com nome de membro de Object nao vira funcao", () => {
+    // `POSITION_ALIASES[key]` alcanca o prototipo: uma celula de planilha com a
+    // palavra `constructor` produzia `{ kind: "mapped", position: <function> }`,
+    // e a funcao ia para o insert.
+    for (const veneno of ["constructor", "toString", "valueOf", "hasOwnProperty"]) {
+      const r = normalizePreferredPosition(veneno);
+      expect(r.kind).toBe("unrecognized");
+      expect(typeof r.position).not.toBe("function");
+    }
+  });
+
   // Vocabulario de futsal. NAO existe em dado real: producao (80) e staging (82)
   // estao 100% canonicos, medido em 2026-08-21. Vinha do seed local, ja alinhado.
   // Fica coberto porque o CSV de import aceita celula arbitraria.
   it("converte o vocabulario de futsal para canonico", () => {
-    expect(pos("Fixo")).toBe("Zagueiro");
-    expect(pos("Ala Esquerda")).toBe("Meia");
-    expect(pos("Ala Direita")).toBe("Meia");
-    expect(pos("Pivo")).toBe("Atacante");
-    expect(pos("Goleiro")).toBe("Goleiro");
+    expect(pos("Fixo")).toBe("ZAG");
+    expect(pos("Ala Esquerda")).toBe("MEI");
+    expect(pos("Ala Direita")).toBe("MEI");
+    expect(pos("Pivo")).toBe("ATA");
+    expect(pos("Goleiro")).toBe("GOL");
   });
 
-  it("converte os seis codigos de lib/public/types.ts", () => {
-    expect(pos("GOL")).toBe("Goleiro");
-    expect(pos("ZAG")).toBe("Zagueiro");
-    expect(pos("MEI")).toBe("Meia");
-    expect(pos("ATA")).toBe("Atacante");
-    expect(pos("VOL")).toBe("Meia");
-    expect(pos("LAT")).toBe("Meia");
+  // LAT e VOL sao os dois codigos de POSITION_LABELS que a CHECK nao aceita:
+  // precisam de um canonico de chegada, e os outros quatro passam por identidade.
+  it("os codigos de POSITION_LABELS entram, inclusive LAT e VOL", () => {
+    expect(pos("GOL")).toBe("GOL");
+    expect(pos("ZAG")).toBe("ZAG");
+    expect(pos("MEI")).toBe("MEI");
+    expect(pos("ATA")).toBe("ATA");
+    expect(pos("VOL")).toBe("MEI");
+    expect(pos("LAT")).toBe("MEI");
   });
 
   it("converte as palavras largas que a CHECK nao aceita", () => {
-    expect(pos("Volante")).toBe("Meia");
-    expect(pos("Lateral")).toBe("Meia");
+    expect(pos("Volante")).toBe("MEI");
+    expect(pos("Lateral")).toBe("MEI");
   });
 
   // O caso que a CHECK rejeitaria e que a cota contaria errado: um goleiro
-  // com espaco sobrando na celula nao e goleiro para `=== "Goleiro"`.
+  // com espaco sobrando na celula nao casa com igualdade exata em lugar nenhum.
   it("tolera espaco sobrando e caixa trocada", () => {
-    expect(pos("  goleiro  ")).toBe("Goleiro");
-    expect(pos("GOLEIRO")).toBe("Goleiro");
-    expect(pos("gOlEiRo")).toBe("Goleiro");
-    expect(pos(" Ala  Esquerda ")).toBe("Meia");
+    expect(pos("  goleiro  ")).toBe("GOL");
+    expect(pos("GOLEIRO")).toBe("GOL");
+    expect(pos("gOlEiRo")).toBe("GOL");
+    expect(pos(" Ala  Esquerda ")).toBe("MEI");
   });
 
   it("tolera acento e separador que a planilha manda", () => {
-    expect(pos("Pivô")).toBe("Atacante");
-    expect(pos("pivô")).toBe("Atacante");
-    expect(pos("Ala-Esquerda")).toBe("Meia");
-    expect(pos("ala_direita")).toBe("Meia");
+    expect(pos("Pivô")).toBe("ATA");
+    expect(pos("pivô")).toBe("ATA");
+    expect(pos("Ala-Esquerda")).toBe("MEI");
+    expect(pos("ala_direita")).toBe("MEI");
   });
 
   // `-` entra aqui, e nao no grupo do desconhecido: em planilha o traco e o
@@ -147,14 +182,14 @@ describe("normalizePreferredPosition", () => {
   });
 
   // Esta e a UNICA rede de vitest sobre esta DDL, e o valor que ela protege e
-  // `'Goleiro'` -- o unico que a cota do A6 precisa exato, porque ela conta
-  // `Goleiro` contra todo o resto.
+  // `'GOL'` -- o unico que a cota do A6 precisa exato, porque ela conta o
+  // goleiro contra todo o resto.
   //
   // A versao anterior lia o SQL CRU e casava a PRIMEIRA ocorrencia do texto no
-  // arquivo. Mutacao medida que atravessou os 495 testes: apagar `'Goleiro'` da
-  // DDL na linha ~124 E deixar um comentario `--` sete linhas acima com a lista
-  // velha inteira. O `match` achava a PROSA, comparava a prosa com o codigo, e
-  // dava verde sobre uma CHECK que passou a recusar goleiro.
+  // arquivo. Mutacao medida que atravessou os 495 testes: apagar o goleiro da
+  // DDL E deixar um comentario `--` acima com a lista velha inteira. O `match`
+  // achava a PROSA, comparava a prosa com o codigo, e dava verde sobre uma
+  // CHECK que passou a recusar goleiro.
   //
   // Sao duas defesas, e cada uma sozinha nao basta:
   //  - `semComentarioSql` mata o chamariz em comentario;
@@ -163,7 +198,7 @@ describe("normalizePreferredPosition", () => {
   //    exemplo em string), porque prende o casamento ao constraint que importa.
   it("a lista canonica do codigo e exatamente a da CHECK no banco", () => {
     const bruto = readFileSync(
-      resolve(process.cwd(), "supabase/migrations/20260820010000_capacity_formula_columns.sql"),
+      resolve(process.cwd(), "supabase/migrations/20260821010000_position_vocabulary_codes.sql"),
       "utf8",
     );
     const sql = semComentarioSql(bruto);

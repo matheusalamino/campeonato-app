@@ -6,30 +6,36 @@
  * gravavam fora desses quatro valores. O mais grave era o CSV
  * (`app/api/import-players/route.ts`), que gravava a celula CRUA da planilha.
  *
- * A cota de goleiro do A6 conta `Goleiro` contra tudo que nao e `Goleiro`, e por
- * isso a normalizacao importa mais do que parece: `' goleiro '` com espaco
- * sobrando nao e goleiro para nenhum dos oito detectores `=== "Goleiro"` do
- * codigo, e passaria a contar como jogador de linha.
+ * CODIGOS, e nao palavras. Esta e a virada do bloco A8, e a migration
+ * 20260821010000_position_vocabulary_codes.sql converteu a coluna junto: o
+ * banco guarda GOL/ZAG/MEI/ATA e a palavra por extenso existe SO na exibicao,
+ * por POSITION_LABELS em `lib/public/types.ts`.
  *
- * PALAVRAS, e nao codigos, de proposito. O terreno ja foi pisado: a migration
- * 20260615000000 subiu comparando `preferred_position = 'GOL'` e a SEGUINTE
- * consertou na direcao das palavras, com o motivo escrito no cabecalho
- * ("gravado por extenso"). A unificacao em enum de codigos e o bloco A8.
+ * O terreno ja foi pisado na outra direcao, e o registro fica para nao voltar
+ * atras por engano: a migration 20260615000000 subiu comparando
+ * `preferred_position = 'GOL'` quando a coluna guardava palavra, e a SEGUINTE
+ * consertou na direcao das palavras. O que faltava la era converter o DADO;
+ * e o que a 20260821010000 faz.
+ *
+ * A cota de goleiro do A6 conta o goleiro contra tudo que nao e goleiro, e por
+ * isso a normalizacao importa mais do que parece: `' goleiro '` com espaco
+ * sobrando nao casa com nenhum detector de igualdade exata do codigo, e
+ * passaria a contar como jogador de linha.
  *
  * ALCANCE, e leia isto antes de "limpar" a tabela de aliases: futsal (`Fixo`,
  * `Ala Esquerda`, `Ala Direita`, `Pivo`), `Lateral` e `Volante` NAO EXISTEM em
- * dado real. Medido em 2026-08-21: producao tem 80 jogadores e staging 82, e nos
- * dois os 100% estao nos quatro canonicos — zero futsal, zero codigo, zero nulo.
- * O futsal vinha do SEED local, que foi alinhado aos canonicos no mesmo bloco.
+ * dado real. Medido em 2026-08-21 nos tres ambientes: local 64 jogadores,
+ * staging 82 e producao 80, todos 100% nos quatro canonicos de entao (as
+ * palavras) — zero futsal, zero nulo. Essas palavras seguem sendo APELIDO aqui
+ * exatamente por isso: e o que toda planilha antiga traz.
  *
  * Entao isto NAO e traducao de legado vivo, e sim defesa de entrada: o CSV de
  * `app/api/import-players/route.ts` aceita celula arbitraria de planilha, e e
- * dali que vocabulario alheio entra. Os aliases ficam por isso, e nao porque ha
- * linha no banco esperando conversao.
+ * dali que vocabulario alheio entra.
  */
 
 /** Os quatro valores da CHECK. Um teste prende esta lista ao SQL. */
-export const CANONICAL_POSITIONS = ["Goleiro", "Zagueiro", "Meia", "Atacante"] as const;
+export const CANONICAL_POSITIONS = ["GOL", "ZAG", "MEI", "ATA"] as const;
 
 export type CanonicalPosition = (typeof CANONICAL_POSITIONS)[number];
 
@@ -64,53 +70,52 @@ function fold(raw: string): string {
 }
 
 /**
- * Chaves em forma dobrada (`fold`), valores canonicos.
+ * Chaves em forma dobrada (`fold`), valores canonicos (os codigos).
  *
  * Os grupos, e a razao de cada um:
- *  - identidade: as quatro palavras canonicas, mais os SEIS codigos de
- *    POSITION_LABELS em `lib/public/types.ts` — GOL, ZAG, LAT, VOL, MEI e ATA.
- *    Sao seis, e nao quatro: `LAT` e `VOL` estao la junto com os outros, e por
- *    isso `lateral`/`volante` e `lat`/`vol` entram por esta porta, e nao por
- *    extrapolacao. O que eles tem de diferente e so o destino — POSITION_LABELS
- *    tem seis rotulos e a CHECK aceita quatro valores, entao os dois excedentes
- *    precisam de um canonico de chegada (ambos `Meia`; a decisao do `lateral`
- *    esta anotada no proprio mapa abaixo).
+ *  - identidade: os quatro codigos canonicos, mais as quatro PALAVRAS por
+ *    extenso. As palavras nao sao ornamento: e nelas que todo o dado historico
+ *    dos tres ambientes estava, e e o que a planilha do CSV continua trazendo.
+ *    Tirar a palavra daqui faria todo import antigo recusar linha.
+ *  - excedentes de POSITION_LABELS: `LAT` e `VOL` sao codigos de rotulo que a
+ *    CHECK nao aceita, entao precisam de um canonico de chegada (ambos `MEI`;
+ *    a decisao do `lateral` esta anotada no proprio mapa abaixo).
  *  - futsal: vocabulario que NAO existe em dado real (ver ALCANCE acima); entra
  *    so por planilha. O fixo e o
  *    defensor; as alas sao o corredor, meio-campo na taxonomia de quatro; o pivo
  *    e o homem de referencia a frente.
  *  - `ala` sozinho: a UNICA extrapolacao deste mapa, e segura — as DUAS alas
- *    listadas concordam em `Meia`, entao nao ha o que desempatar.
+ *    listadas concordam em `MEI`, entao nao ha o que desempatar.
  */
 export const POSITION_ALIASES: Record<string, CanonicalPosition> = {
-  goleiro: "Goleiro",
-  gol: "Goleiro",
-  zagueiro: "Zagueiro",
-  zag: "Zagueiro",
-  meia: "Meia",
-  mei: "Meia",
-  atacante: "Atacante",
-  ata: "Atacante",
+  goleiro: "GOL",
+  gol: "GOL",
+  zagueiro: "ZAG",
+  zag: "ZAG",
+  meia: "MEI",
+  mei: "MEI",
+  atacante: "ATA",
+  ata: "ATA",
 
-  fixo: "Zagueiro",
-  "ala esquerda": "Meia",
-  "ala direita": "Meia",
-  ala: "Meia",
-  pivo: "Atacante",
+  fixo: "ZAG",
+  "ala esquerda": "MEI",
+  "ala direita": "MEI",
+  ala: "MEI",
+  pivo: "ATA",
 
-  volante: "Meia",
-  vol: "Meia",
+  volante: "MEI",
+  vol: "MEI",
 
   // DECIDIDO pelo usuario em 2026-08-21, e nao mais em aberto. Foi o unico
-  // mapeamento genuinamente discutivel: `Zagueiro` pela leitura brasileira de
-  // campo, onde o lateral e defensor.
+  // mapeamento genuinamente discutivel: `ZAG` pela leitura brasileira de campo,
+  // onde o lateral e defensor.
   //
-  // Ganhou `Meia`, e a razao e que o campeonato e de FUTSAL. No futsal o
-  // corredor e a ala, e `Ala Esquerda`/`Ala Direita` ja vao para `Meia` logo
-  // acima — mandar `Lateral` para `Zagueiro` colocaria o mesmo papel em dois
+  // Ganhou `MEI`, e a razao e que o campeonato e de FUTSAL. No futsal o
+  // corredor e a ala, e `Ala Esquerda`/`Ala Direita` ja vao para `MEI` logo
+  // acima — mandar `Lateral` para `ZAG` colocaria o mesmo papel em dois
   // destinos diferentes dependendo da palavra usada.
-  lateral: "Meia",
-  lat: "Meia",
+  lateral: "MEI",
+  lat: "MEI",
 };
 
 /**
@@ -138,7 +143,12 @@ export function normalizePreferredPosition(
   // `unrecognized` e o admin ve o aviso em vez de perder o dado em silencio.
   if (!/[a-z0-9]/.test(key)) return { kind: "empty", position: null };
 
-  const canonical = POSITION_ALIASES[key];
+  // `POSITION_ALIASES[key]` sozinho alcanca o prototipo de Object: uma celula
+  // com `constructor` voltava truthy e virava `position: <function Object>` no
+  // insert. O guarda de propriedade propria fecha isso.
+  const canonical = Object.hasOwn(POSITION_ALIASES, key)
+    ? POSITION_ALIASES[key]
+    : undefined;
   if (canonical) return { kind: "mapped", position: canonical };
 
   return { kind: "unrecognized", position: null, raw };

@@ -145,15 +145,15 @@ export function useGoalkeeper(championshipId: string | null) {
           .eq("championship_id", championshipId),
         supabase
           .from("championship_registrations")
-          .select("id, profile_photo_link, players(id, name, position)")
+          .select("id, profile_photo_link, players(id, name, preferred_position)")
           .eq("championship_id", championshipId),
       ]);
 
       // Goalkeeper reg ids: position-based (GOL/Goleiro) + anyone with saves
       const gkRegIds = new Set<string>();
       for (const reg of regsRes.data ?? []) {
-        const playersRel = reg.players as { position: string | null } | { position: string | null }[] | null;
-        const pos = (Array.isArray(playersRel) ? playersRel[0]?.position : playersRel?.position) ?? null;
+        const playersRel = reg.players as { preferred_position: string | null } | { preferred_position: string | null }[] | null;
+        const pos = (Array.isArray(playersRel) ? playersRel[0]?.preferred_position : playersRel?.preferred_position) ?? null;
         if (pos && GK_POSITIONS.has(pos)) gkRegIds.add(reg.id);
       }
       for (const save of savesRes.data ?? []) gkRegIds.add(save.registration_id);

@@ -1067,10 +1067,17 @@ r=$($DB -c "
                          'waitlist_goalkeepers','waitlist_outfield');")
 checar "as cinco colunas do formato existem" "5" "$(echo "$r" | tr -d ' ')"
 
-# NOT VALID e deliberado: producao esta 15 migrations atras e vai receber este
-# CHECK sobre 80 jogadores vivos, onde VALIDATE varre a tabela e pode abortar.
+# VALIDADA, e a inversao e deliberada. O NOT VALID da 20260820010000 existia
+# porque aquele CHECK caia sobre 80 jogadores vivos de origem desconhecida, e
+# VALIDATE podia abortar o deploy. A 20260821010000 NORMALIZA o dado no proprio
+# corpo da migration antes de recriar o CHECK, entao nao ha mais linha de origem
+# desconhecida para varrer -- validar saiu de graca. E aqui abortar e o desfecho
+# BOM: valor que ninguem mapeou tem de aparecer no deploy, e nao meses depois.
+#
+# A assertiva e por convalidated, e nao pelo texto da DDL, de proposito: e o
+# banco que responde, entao ela morre se alguem devolver o NOT VALID.
 r=$($DB -c "SELECT convalidated::text FROM pg_constraint WHERE conname = 'players_preferred_position_known';")
-checar "a CHECK da posicao segue NOT VALID" "false" "$(echo "$r" | tr -d ' ')"
+checar "a CHECK da posicao entrou VALIDADA" "true" "$(echo "$r" | tr -d ' ')"
 
 # As cinco colunas guardam numero, e a aritmetica sobre elas fecha nos mesmos
 # 80/8/72/5 que derivedCapacity devolve para o formato de 2026.
