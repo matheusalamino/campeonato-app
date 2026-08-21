@@ -48,6 +48,8 @@ export function ChampionshipForm({
     max_players: initial?.max_players != null ? String(initial.max_players) : "",
     max_waitlist_players:
       initial?.max_waitlist_players != null ? String(initial.max_waitlist_players) : "0",
+    max_extra_tickets:
+      initial?.max_extra_tickets != null ? String(initial.max_extra_tickets) : "4",
     status: (initial?.status as ChampionshipStatus) ?? "draft",
     registration_image_url: initial?.registration_image_url ?? "",
     base_price: initial?.base_price != null ? String(initial.base_price) : "",
@@ -73,7 +75,8 @@ export function ChampionshipForm({
       gala_night_date: emptyToUndef(form.gala_night_date),
       tournament_start_date: emptyToUndef(form.tournament_start_date),
       max_players: emptyToUndef(form.max_players),
-      max_waitlist_players: form.max_waitlist_players,
+      max_waitlist_players: emptyToUndef(form.max_waitlist_players),
+      max_extra_tickets: emptyToUndef(form.max_extra_tickets),
       status: form.status,
       registration_image_url: emptyToUndef(form.registration_image_url),
       base_price: emptyToUndef(form.base_price),
@@ -240,6 +243,17 @@ export function ChampionshipForm({
             />
             <FieldError errors={errors} name="max_waitlist_players" />
           </div>
+        </div>
+        <div>
+          <label className={labelClass}>Máximo de ingressos extras por inscrição</label>
+          <input
+            type="number"
+            min={0}
+            className={inputClass}
+            value={form.max_extra_tickets}
+            onChange={(e) => set("max_extra_tickets", e.target.value)}
+          />
+          <FieldError errors={errors} name="max_extra_tickets" />
         </div>
       </section>
 

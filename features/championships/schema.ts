@@ -6,7 +6,7 @@ export const championshipStatusSchema = z.enum(CHAMPIONSHIP_STATUS);
 
 const optionalDate = z.coerce.date().optional();
 
-const baseChampionshipObject = z.object({
+export const baseChampionshipObject = z.object({
   name: z.string().trim().min(1, "Nome é obrigatório"),
   season: z.string().trim().optional(),
   description: z.string().trim().optional(),
@@ -16,6 +16,7 @@ const baseChampionshipObject = z.object({
   tournament_start_date: optionalDate,
   max_players: z.coerce.number().int().positive().optional(),
   max_waitlist_players: z.coerce.number().int().min(0).default(0),
+  max_extra_tickets: z.coerce.number().int().min(0).default(4),
   status: championshipStatusSchema.default("draft"),
   registration_image_url: z.string().trim().url().optional().or(z.literal("")).transform((v) => v || undefined),
   base_price: z.coerce.number().min(0).optional(),

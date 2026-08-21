@@ -6,6 +6,7 @@ import { MIN_AGE, isBelowMinimumAge } from "./age-policy";
 import { groupRequiresInviteCode } from "./groups";
 import { skillsFor } from "./skills";
 import { SHIRT_SIZES } from "./shirt-sizes";
+import { extraTicketsCap } from "./extra-tickets";
 import type { GroupOption } from "@/types/championship";
 
 const rating = z.coerce.number().int().min(1).max(5);
@@ -23,7 +24,11 @@ const decimalBR = (message: string) =>
     z.number({ message }).positive(message),
   );
 
-export function makeRegistrationSchema(groupOptions: GroupOption[]) {
+export function makeRegistrationSchema(
+  groupOptions: GroupOption[],
+  maxExtraTickets?: number | null,
+) {
+  const cap = extraTicketsCap(maxExtraTickets);
   return z
     .object({
       championship_slug: z.string().min(1),
@@ -49,6 +54,13 @@ export function makeRegistrationSchema(groupOptions: GroupOption[]) {
       pix_txid: z.string().trim().max(25).optional().default(""),
     })
     .superRefine((data, ctx) => {
+      if (data.extra_tickets_count > cap) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["extra_tickets_count"],
+          message: `Máximo de ${cap} ingressos extras por inscrição`,
+        });
+      }
       if (groupRequiresInviteCode(groupOptions, data.group_affiliation) && !data.invite_code) {
         ctx.addIssue({
           code: "custom",

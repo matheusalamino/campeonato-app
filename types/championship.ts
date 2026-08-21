@@ -52,6 +52,7 @@ export interface Championship {
   tournament_start_date?: string | null;
   max_players?: number | null;
   max_waitlist_players?: number | null;
+  max_extra_tickets?: number | null;
   slug?: string | null;
   registration_image_url?: string | null;
   base_price?: number | null;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatPhoneBR, formatHeightM, heightToMask, heightMaskToNumeric } from "./masks";
+import { formatPhoneBR, formatHeightM, heightToMask, heightMaskToNumeric, formatBRL } from "./masks";
 
 describe("formatPhoneBR", () => {
   it("returns empty for empty/no digits", () => {
@@ -40,5 +40,26 @@ describe("height number conversions", () => {
   it("converts a mask back to a numeric string", () => {
     expect(heightMaskToNumeric("1,80")).toBe("1.80");
     expect(Number(heightMaskToNumeric("1,80"))).toBe(1.8);
+  });
+});
+
+describe("formatBRL", () => {
+  it("formats a whole number with two decimal places", () => {
+    expect(formatBRL(50)).toBe("R$ 50,00");
+  });
+  it("formats cents", () => {
+    expect(formatBRL(40.5)).toBe("R$ 40,50");
+  });
+  it("formats zero", () => {
+    expect(formatBRL(0)).toBe("R$ 0,00");
+  });
+  it("groups thousands with a plain ASCII period, not a non-breaking space", () => {
+    // Intl's "currency" style would use U+00A0 (a non-breaking space) between
+    // "R$" and the digits instead of the plain space this file writes by hand.
+    // Written as an escape, not the raw character, so this line does not repeat
+    // the exact confusion it is guarding against.
+    const result = formatBRL(1234.5);
+    expect(result).toBe("R$ 1.234,50");
+    expect(result.includes("\u00A0")).toBe(false);
   });
 });

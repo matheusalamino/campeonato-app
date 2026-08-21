@@ -1,10 +1,10 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { GroupOption } from "@/types/championship";
 import { isValidCpf, formatCpf } from "@/lib/cpf";
-import { formatPhoneBR, formatHeightM, heightToMask } from "@/lib/masks";
+import { formatPhoneBR, formatHeightM, heightToMask, formatBRL } from "@/lib/masks";
 import { BR_STATES } from "@/lib/br-states";
 import { groupRequiresInviteCode } from "@/features/registration/groups";
 import { skillsFor, SKILL_LABELS } from "@/features/registration/skills";
@@ -17,8 +17,13 @@ import { errorsForStep, firstStepWithError, stepNumber, AUTHORIZATION_STEP, UNIF
 import { summarizeErrors } from "@/features/registration/error-summary";
 import { SHIRT_SIZES, CUSTOM_SHIRT_SIZE } from "@/features/registration/shirt-sizes";
 import { radarDataFrom, hasAnyRating } from "@/features/registration/radar";
-import { lookupCpfAction, submitRegistrationAction } from "./actions";
+import { extraTicketsCap } from "@/features/registration/extra-tickets";
+import { canOpenStep, isSlotVerdict, type SlotReservation } from "@/features/registration/slot";
+import { createLatestOnly } from "@/features/registration/latest-only";
+import { shouldRenewSlot, HEARTBEAT_INTERVAL_MS } from "@/features/registration/slot-keepalive";
+import { lookupCpfAction, submitRegistrationAction, reserveSlotAction } from "./actions";
 import StepShell from "./steps/StepShell";
+import SlotNotice from "./steps/SlotNotice";
 import SkillStars from "./steps/SkillStars";
 import UploadCard from "./steps/UploadCard";
 import PixPayment from "./steps/PixPayment";
@@ -29,6 +34,7 @@ export type WizardChampionship = {
   id: string; name: string; slug: string;
   base_price: number | null; extra_ticket_price: number | null;
   max_players: number | null; registration_image_url: string | null;
+  max_extra_tickets: number | null;
   registration_group_options: GroupOption[];
   pix_key: string | null;
   pix_merchant_name: string | null;
@@ -44,6 +50,13 @@ const EMPTY = {
   profile_photo_link: "", payment_receipt_link: "", legal_authorization_link: "",
 };
 
+/**
+ * Recusa de navegacao precisa ser dita. A faixa no topo ja explica qual e o
+ * caso; sem este aviso o jogador toca o cabecalho do passo, nada acontece, e
+ * ele conclui que o formulario travou — entao insiste em vez de ler a faixa.
+ */
+const BLOCKED_BY_SLOT = "Não é possível seguir agora. Veja o aviso no topo da página.";
+
 const inputBase =
   "w-full rounded-xl px-3 py-3 text-base bg-white/5 border text-[var(--gala-ink)] outline-none";
 const inputOk = "border-white/10 focus:border-[var(--gala-gold-2)]";
@@ -58,13 +71,49 @@ export default function RegistrationWizard({
   const [done, setDone] = useState<Record<number, boolean>>({});
   const [looking, setLooking] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [slot, setSlot] = useState<SlotReservation | null>(null);
+  /**
+   * O CPF que a reserva viva conhece — nao o que estiver no campo agora.
+   *
+   * O passo 1 continua reabrivel de proposito, entao o campo pode estar no meio
+   * de uma correcao quando o heartbeat bate. Renovar `form.cpf` ali criaria uma
+   * segunda reserva para um CPF pela metade, gastando vaga de gente de verdade.
+   */
+  const reservedCpf = useRef("");
+  /** Ultimo sinal de vida do jogador: toque, tecla, ou volta para a aba. */
+  const lastActivity = useRef(Date.now());
+  /** Quando a ultima renovacao foi disparada, para o piso entre duas. */
+  const lastRenew = useRef(0);
 
   const isFull = championship.max_players != null && liveCount >= championship.max_players;
+  // Mesma fonte de verdade da faixa. `isFull` soma principal + espera e por isso
+  // prometia lista de espera a quem tinha vaga principal garantida; a reserva
+  // sabe qual das duas e este CPF. Antes do CPF nao ha reserva, e o aviso geral
+  // do campeonato ainda e o melhor palpite disponivel.
+  const waitlisted = slot ? slot.ok && slot.isWaitlist : isFull;
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((p) => ({ ...p, [k]: v }));
   }
-  const open = (n: number) => setStep((s) => (s === n ? 0 : n));
+  // Toda reserva passa por aqui, para que uma resposta atrasada nunca
+  // sobrescreva um veredito mais novo agora que a reserva comanda a navegacao.
+  const [latestOnly] = useState(createLatestOnly);
+
+  /**
+   * Abrir (ou fechar) um passo pelo cabecalho do accordion.
+   *
+   * O botao continua clicavel de proposito: desabilita-lo devolveria silencio,
+   * e silencio foi o que fez o jogador insistir. Ele clica, ouve o porque e le
+   * a faixa.
+   */
+  const open = (n: number) => {
+    const target = step === n ? 0 : n;
+    if (!canOpenStep(target, slot, done)) {
+      toast.error(BLOCKED_BY_SLOT);
+      return;
+    }
+    setStep(target);
+  };
 
   const minor = form.birth_date ? isMinor(form.birth_date) : false;
 
@@ -99,12 +148,28 @@ export default function RegistrationWizard({
 
   /** Roda o schema completo e recorta so o que pertence ao passo pedido. */
   function stepErrors(from: number) {
-    const parsed = makeRegistrationSchema(championship.registration_group_options)
-      .safeParse(buildPayload());
+    const parsed = makeRegistrationSchema(
+      championship.registration_group_options,
+      championship.max_extra_tickets,
+    ).safeParse(buildPayload());
     return parsed.success ? {} : errorsForStep(from, fieldErrorsFrom(parsed.error));
   }
 
-  function advance(from: number) {
+  /**
+   * `reservation` existe porque `setSlot` so aparece no render seguinte: quando
+   * o jogador tenta de novo depois de uma falha de rede, a reserva boa acaba de
+   * nascer e o `slot` do escopo ainda carrega o veredito velho. Sem receber a
+   * nova aqui, a guarda leria o antigo e prenderia justamente quem se salvou.
+   */
+  function advance(from: number, reservation: SlotReservation | null = slot) {
+    // Sem menor de idade, o passo da carta nao existe e e pulado.
+    const next = from + 1 === AUTHORIZATION_STEP && !minor ? from + 2 : from + 1;
+    // Antes da validacao, de proposito: mandar quem esta sem vaga consertar
+    // campos que nao vao lhe servir para nada e cruel e faz perder tempo.
+    if (!canOpenStep(next, reservation, done)) {
+      toast.error(BLOCKED_BY_SLOT);
+      return;
+    }
     const found = stepErrors(from);
     if (Object.keys(found).length) {
       setErrors((prev) => ({ ...prev, ...found }));
@@ -119,9 +184,39 @@ export default function RegistrationWizard({
       return next;
     });
     setDone((d) => ({ ...d, [from]: true }));
-    // Sem menor de idade, o passo da carta nao existe e e pulado.
-    const next = from + 1 === AUTHORIZATION_STEP && !minor ? from + 2 : from + 1;
     setStep(next);
+    // Renova a reserva a cada passo: quinze minutos contam a partir da ultima
+    // acao, nao do inicio. Sem isso, quem preenche com calma perde a vaga.
+    // Le `reservation`, a mesma fonte da guarda logo acima: duas regras de
+    // leitura em doze linhas seriam armadilha para quem mexer aqui depois. No
+    // retry isso custa um RPC redundante sobre uma reserva recem-criada — o
+    // sequenciador ordena os dois, e o preco e menor que o da assimetria.
+    if (reservation?.ok) {
+      // O CPF da reserva viva, e nao `form.cpf`: o passo 1 continua reabrivel e
+      // o campo pode estar no meio de uma correcao. `normalizeCpf` no servidor
+      // so tira pontuacao, entao renovar o que esta no campo criaria uma segunda
+      // reserva para um CPF pela metade — queimando vaga de gente de verdade.
+      const cpf = reservedCpf.current;
+      if (!cpf) return;
+      void latestOnly(() => reserveSlotAction(championship.id, cpf)).then(
+        (renovada) => {
+          // `null` quando outra reserva foi disparada enquanto esta voltava:
+          // este resultado ja nasceu velho e nao pode mandar na navegacao.
+          if (!renovada) return;
+          // Mesma regra da batida de fundo: falha de chamada nao derruba reserva
+          // viva. Aqui o dano seria o mesmo — vermelho na faixa e pagamento
+          // trancado —, so que estourando no clique de quem estava so avancando.
+          if (!isSlotVerdict(renovada)) return;
+          setSlot(renovada);
+        },
+        (erro) => {
+          // Mantem o estado anterior de proposito: a reserva que ja esta na tela
+          // continua valendo, e o proximo passo tenta de novo. Mas isto e vizinho
+          // do pagamento, e renovacao que falha calada nao deixa rastro nenhum.
+          console.warn("Falha ao renovar a reserva da vaga", erro);
+        },
+      );
+    }
   }
 
   /**
@@ -180,7 +275,21 @@ export default function RegistrationWizard({
         }));
         toast.success("Encontramos você! Confira seus dados.");
       }
-      advance(1);
+      const reservation = await latestOnly(() => reserveSlotAction(championship.id, form.cpf));
+      // Outra tentativa mais nova assumiu enquanto esta voltava: resultado velho
+      // nao vira estado nem decide navegacao.
+      if (!reservation) return;
+      setSlot(reservation);
+      if (!reservation.ok) {
+        // Sem vaga nao ha o que preencher, e quem ja esta inscrito muito menos:
+        // deixar avancar so levaria a uma recusa depois do formulario inteiro.
+        // O aviso na faixa ja explica cada caso.
+        return;
+      }
+      reservedCpf.current = form.cpf;
+      // A reserva recem-nascida vai junto porque `slot` so a recebe no proximo
+      // render — e este e o caminho de retry de quem levou um `error`.
+      advance(1, reservation);
     } catch {
       toast.error("Não foi possível verificar o CPF. Tente novamente.");
     } finally { setLooking(false); }
@@ -198,6 +307,116 @@ export default function RegistrationWizard({
     const t = setTimeout(() => router.push("/"), 6000);
     return () => clearTimeout(t);
   }, [result, router]);
+
+  /**
+   * Mantem a reserva viva enquanto o formulario esta aberto.
+   *
+   * Ate aqui a vaga so era renovada no clique em "Continuar" — e o passo onde o
+   * jogador mais demora e o do pagamento: trocar para o app do banco, fazer o
+   * PIX, voltar e achar o comprovante na galeria passa dos quinze minutos sem
+   * clique nenhum. A reserva morria calada, e a guarda de navegacao nao tem como
+   * ajudar: ela so roda na saida do passo, e o dinheiro sai dentro dele.
+   *
+   * Para quando a reserva nao esta ok (nao ha o que renovar) e quando a
+   * inscricao teve desfecho — dai em diante a vaga e da inscricao gravada, nao
+   * da reserva.
+   *
+   * As deps trazem `slot` de proposito: toda reserva nova reinicia o intervalo,
+   * e o callback so enxerga valores do render que o criou. O que muda mais
+   * rapido que o efeito — CPF reservado, sinal de vida, ultima renovacao — vem
+   * de ref e e lido na hora da batida, nunca capturado.
+   */
+  useEffect(() => {
+    if (!slot?.ok || result) return;
+    // Reserva nova acabou de chegar: o piso entre renovacoes conta a partir dela.
+    lastRenew.current = Date.now();
+
+    const renew = () => {
+      const cpf = reservedCpf.current;
+      if (!cpf) return;
+      lastRenew.current = Date.now();
+      void latestOnly(() => reserveSlotAction(championship.id, cpf)).then(
+        (renovada) => {
+          if (!renovada) return;
+          // Chamada que falhou volta RESOLVIDA como `error` — o ramo de baixo so
+          // pega rejeicao, que e o caso raro. Sem esta linha, a batida de fundo
+          // trocava uma reserva viva por um veredito que ninguem deu.
+          if (!isSlotVerdict(renovada)) return;
+          setSlot(renovada);
+        },
+        (erro) => {
+          // Uma batida perdida nao mata a vaga: o intervalo cabe quase quatro
+          // vezes no TTL e a proxima tenta de novo. Mas isto e vizinho do
+          // pagamento, e renovacao que falha calada nao deixa rastro nenhum.
+          console.warn("Falha ao renovar a reserva da vaga", erro);
+        },
+      );
+    };
+
+    const beat = () => {
+      const pode = shouldRenewSlot({
+        nowMs: Date.now(),
+        lastActivityMs: lastActivity.current,
+        lastRenewMs: lastRenew.current,
+      });
+      if (pode) renew();
+    };
+
+    /*
+     * Interacao e o sinal que separa "esta preenchendo" de "esqueceu a aba
+     * aberta" — e e ela, nao a visibilidade da aba, que alimenta o orcamento.
+     * Renova tambem na hora, e nao so credita o orcamento: e assim que quem
+     * passou do orcamento e volta a mexer recupera a reserva no primeiro toque,
+     * em vez de esperar ate quatro minutos pela proxima batida.
+     *
+     * O efeito colateral e a taxa real: quem esta digitando sem parar dispara
+     * uma renovacao por minuto, o piso do `shouldRenewSlot` — nao uma a cada
+     * quatro, como o intervalo sugere. Num formulario de vinte minutos sao
+     * ~20 chamadas em vez de 5. E um RPC curto sob o lock de uma linha, por
+     * jogador que esta com o formulario na mao: nesta escala o custo nao
+     * aparece, e o piso ja existe justamente para uma tecla nao virar um RPC.
+     */
+    const onActivity = () => {
+      lastActivity.current = Date.now();
+      beat();
+    };
+    /*
+     * Os dois lados da troca de aba, e eles nao sao simetricos.
+     *
+     * Na volta, o jogador esta de novo na frente do formulario: e sinal de vida
+     * como um toque, e renova na hora — no celular o timer fica suspenso
+     * enquanto a aba esta oculta, entao a volta costuma ser a primeira chance
+     * de renovar, e ela nao gera toque nenhum sozinha.
+     *
+     * Na ida e que estava o buraco. Chrome e Safari congelam a aba de fundo em
+     * poucos minutos: quem vai ao app do banco levava so a batida seguinte e
+     * ficava com a reserva vencendo no meio do PIX. Renovar no instante da
+     * partida entrega os quinze minutos cheios contados da saida, sem depender
+     * de timer nenhum rodar no fundo.
+     *
+     * Mas a ida NAO credita o orcamento: mandar a aba para segundo plano nao e
+     * sinal de que alguem esta ali. Se creditasse, bastaria a aba esquecida
+     * cair para o fundo para o teto de posse evaporar. Por isso `beat()`, e nao
+     * `onActivity()` como na volta: os dois renovam, mas so um credita — e a
+     * simplificacao de usar o mesmo dos dois lados leva o teto junto.
+     */
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") onActivity();
+      else beat();
+    };
+
+    const timer = setInterval(beat, HEARTBEAT_INTERVAL_MS);
+    window.addEventListener("pointerdown", onActivity);
+    window.addEventListener("keydown", onActivity);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("pointerdown", onActivity);
+      window.removeEventListener("keydown", onActivity);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [slot, result, championship.id, latestOnly]);
+
   const activeSkills = skillsFor(form.preferred_position);
   const total = computeTicketsTotal({
     basePrice: championship.base_price,
@@ -219,6 +438,16 @@ export default function RegistrationWizard({
           txid: pixTxid,
         })
       : null;
+  /*
+   * Mesma primeira linha de `canOpenStep`: sem reserva ainda nao ha veredito, e
+   * com reserva ok nada muda. A guarda de navegacao atrasa exatamente uma
+   * transicao — a renovacao dispara depois do `setStep` —, entao o jogador
+   * aterrissa neste passo com a recusa ja na mao e o QR ainda no lugar. No
+   * celular e o QR que esta no campo de visao, nao a faixa: ele paga, e so o
+   * "Revisar" o para, com o dinheiro ja fora.
+   */
+  const slotAllowsPayment = !slot || slot.ok;
+
   function setSkill(skill: string, v: number) {
     setForm((p) => ({ ...p, skills: { ...p.skills, [skill]: v } }));
   }
@@ -233,6 +462,11 @@ export default function RegistrationWizard({
         setResult({ ok: false, already: true });
       } else {
         // O servidor ja disse qual campo falhou: mostra no campo e abre o passo.
+        // Sem a guarda da reserva de proposito: so chega aqui quem esta no passo
+        // do envio, e para chegar la ja concluiu todos os anteriores — a guarda
+        // liberaria os mesmos passos e nao ha campo mapeado no passo do envio.
+        // Guardar aqui so criaria o caso em que o jogador ve um campo em
+        // vermelho e nao tem como abrir o passo para conserta-lo.
         if (res.fieldErrors) {
           setErrors(res.fieldErrors);
           const target = firstStepWithError(res.fieldErrors);
@@ -287,7 +521,13 @@ export default function RegistrationWizard({
       <h1 className="text-xl font-extrabold text-[var(--gala-gold-2)] mb-1">Inscrição</h1>
       <p className="text-sm text-[var(--gala-ink-dim)] mb-4">{championship.name}</p>
 
-      {isFull && (
+      <SlotNotice slot={slot} />
+
+      {/* Some assim que a reserva responde: `liveCount` e uma contagem do
+          render do servidor e nao distingue principal de espera, entao com as
+          duas lotacoes cheias ele prometia lista de espera enquanto a faixa da
+          reserva — que sabe a verdade daquele CPF — dizia que esgotou. */}
+      {isFull && !slot && (
         <div className="mb-4 rounded-xl px-3 py-2 text-xs"
              style={{ background: "rgba(230,180,34,.1)", border: "1px solid rgba(230,180,34,.35)", color: "var(--gala-gold-2)" }}>
           ⚠︎ Vagas esgotadas — você entrará na LISTA DE ESPERA.
@@ -449,27 +689,55 @@ export default function RegistrationWizard({
             Sua inscrição já inclui <b>2 ingressos</b> para a Noite de Gala: o seu e o de um
             acompanhante. Precisa de mais? Cada ingresso adicional é cobrado à parte abaixo.
           </div>
-          <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3">
+          <div className="rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3 space-y-2">
             <span className="text-sm">Ingressos extras (Noite de Gala)</span>
-            <div className="flex items-center gap-3">
-              <button type="button" onClick={() => set("extra_tickets_count", Math.max(0, form.extra_tickets_count - 1))}
-                      className="w-8 h-8 rounded-lg font-bold text-[#050507]" style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>–</button>
-              <b>{form.extra_tickets_count}</b>
-              <button type="button" onClick={() => set("extra_tickets_count", form.extra_tickets_count + 1)}
-                      className="w-8 h-8 rounded-lg font-bold text-[#050507]" style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>+</button>
+            <div className="flex items-center">
+              {/* So aparece quando o campeonato realmente cobra por ingresso extra —
+                  nulo ou zero e "nao ha o que cobrar", e "R$ 0,00 cada" enganaria mais
+                  do que ajudaria. */}
+              {championship.extra_ticket_price != null && championship.extra_ticket_price > 0 && (
+                <span className="text-xs text-[var(--gala-ink-dim)]">
+                  {formatBRL(championship.extra_ticket_price)} cada
+                </span>
+              )}
+              <div className="flex items-center gap-3 ml-auto">
+                <button type="button" onClick={() => set("extra_tickets_count", Math.max(0, form.extra_tickets_count - 1))}
+                        className="w-8 h-8 rounded-lg font-bold text-[#050507]" style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>–</button>
+                <b>{form.extra_tickets_count}</b>
+                <button type="button"
+                        onClick={() => set("extra_tickets_count",
+                          Math.min(extraTicketsCap(championship.max_extra_tickets), form.extra_tickets_count + 1))}
+                        className="w-8 h-8 rounded-lg font-bold text-[#050507]" style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>+</button>
+              </div>
             </div>
           </div>
           <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3">
             <span className="text-sm text-[var(--gala-ink-dim)]">Total</span>
-            <b className="text-[var(--gala-gold-2)]">R$ {total.toFixed(2)}</b>
+            <b className="text-[var(--gala-gold-2)]">{formatBRL(total)}</b>
           </div>
           <UploadCard icon="📷" label="Foto de perfil (3x4)" hint="Toque para enviar" required bucket="registration-photos"
                       value={form.profile_photo_link} onChange={(u) => set("profile_photo_link", u)} />
           {err("profile_photo_link")}
-          {pixPayload && <PixPayment payload={pixPayload} amount={total} />}
-          {total > 0 && (
-            <UploadCard icon="🧾" label="Comprovante de pagamento" hint="PIX / transferência" required bucket="registration-docs"
-                        value={form.payment_receipt_link} onChange={(u) => set("payment_receipt_link", u)} />
+          {/* Some junto com o QR: anexar comprovante sem vaga e tao inutil quanto
+              pagar sem vaga, e um upload aceito faz o pagamento parecer valido. */}
+          {slotAllowsPayment ? (
+            <>
+              {pixPayload && <PixPayment payload={pixPayload} amount={total} />}
+              {total > 0 && (
+                <UploadCard icon="🧾" label="Comprovante de pagamento" hint="PIX / transferência" required bucket="registration-docs"
+                            value={form.payment_receipt_link} onChange={(u) => set("payment_receipt_link", u)} />
+              )}
+            </>
+          ) : (
+            /* Sumir sem dizer nada leria como tela quebrada: a 375px a faixa do
+               topo esta fora do campo de visao — e por isso mesmo que o QR
+               precisou sair daqui. */
+            total > 0 && (
+              <div className="rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3 text-xs leading-relaxed text-[var(--gala-ink-dim)]">
+                O pagamento fica indisponível enquanto sua vaga não estiver confirmada.
+                O aviso no topo da página explica o motivo. Não pague nada até lá.
+              </div>
+            )
           )}
           {err("payment_receipt_link")}
           <button onClick={() => advance(6)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
@@ -480,7 +748,7 @@ export default function RegistrationWizard({
           <div className="text-sm text-[var(--gala-ink-dim)] space-y-1">
             <div><b className="text-[var(--gala-ink)]">{form.name || "—"}</b> · {form.preferred_position}</div>
             <div>{form.group_affiliation || "—"}</div>
-            <div>Total: R$ {total.toFixed(2)}{isFull ? " · Lista de espera" : ""}</div>
+            <div>Total: {formatBRL(total)}{waitlisted ? " · Lista de espera" : ""}</div>
           </div>
           <button onClick={onSubmit} disabled={submitting}
                   className="w-full rounded-xl py-3 font-black uppercase tracking-wide text-[#050507]"
