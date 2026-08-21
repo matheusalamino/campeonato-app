@@ -18,12 +18,19 @@ import { summarizeErrors } from "@/features/registration/error-summary";
 import { SHIRT_SIZES, CUSTOM_SHIRT_SIZE } from "@/features/registration/shirt-sizes";
 import { radarDataFrom, hasAnyRating } from "@/features/registration/radar";
 import { extraTicketsCap } from "@/features/registration/extra-tickets";
-import { canOpenStep, isSlotVerdict, type SlotReservation } from "@/features/registration/slot";
+import { canOpenStep, isSlotVerdict, paymentGate, type SlotReservation } from "@/features/registration/slot";
 import { createLatestOnly } from "@/features/registration/latest-only";
 import { shouldRenewSlot, HEARTBEAT_INTERVAL_MS } from "@/features/registration/slot-keepalive";
+import {
+  sunsetAlert, sunsetHasPassed, nextSunsetAlert, clockSkewMs, SUNSET_TICK_MS,
+  type SunsetAlert, type NextSunset,
+} from "@/features/registration/sabbath";
 import { lookupCpfAction, submitRegistrationAction, reserveSlotAction } from "./actions";
 import StepShell from "./steps/StepShell";
 import SlotNotice from "./steps/SlotNotice";
+import SunsetNotice from "./steps/SunsetNotice";
+import PaymentClosedNotice from "./steps/PaymentClosedNotice";
+import { goldTone } from "./steps/tones";
 import SkillStars from "./steps/SkillStars";
 import UploadCard from "./steps/UploadCard";
 import PixPayment from "./steps/PixPayment";
@@ -62,9 +69,14 @@ const inputBase =
 const inputOk = "border-white/10 focus:border-[var(--gala-gold-2)]";
 const inputError = "border-red-400/70 focus:border-red-400";
 
+/**
+ * O wizard nao calcula o por do sol, recebe — e recebe junto o relogio do
+ * servidor, que e o que decide. A pagina manda o proximo; o `RestOverlay` manda
+ * `null`, porque o wizard borrado ao fundo dele nao tem ninguem para avisar.
+ */
 export default function RegistrationWizard({
-  championship, liveCount,
-}: { championship: WizardChampionship; liveCount: number }) {
+  championship, liveCount, nextSunset,
+}: { championship: WizardChampionship; liveCount: number; nextSunset: NextSunset | null }) {
   const router = useRouter();
   const [form, setForm] = useState({ ...EMPTY });
   const [step, setStep] = useState(1);
@@ -72,6 +84,12 @@ export default function RegistrationWizard({
   const [looking, setLooking] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [slot, setSlot] = useState<SlotReservation | null>(null);
+  /**
+   * O quanto o por do sol ja aperta. Um relogio so para os dois consumidores:
+   * a faixa e o bloco de pagamento. Com dois, a tela poderia dizer que ainda da
+   * tempo de pagar com o QR ja fora do ar — ou o contrario, pior.
+   */
+  const [sunset, setSunset] = useState<SunsetAlert>({ level: "none" });
   /**
    * O CPF que a reserva viva conhece — nao o que estiver no campo agora.
    *
@@ -417,6 +435,54 @@ export default function RegistrationWizard({
     };
   }, [slot, result, championship.id, latestOnly]);
 
+  /*
+   * Comeca em "none" e so calcula dentro do efeito, de proposito: computar no
+   * render faria o servidor e o cliente chegarem a valores diferentes na virada
+   * de um minuto, e a divergencia de hidratacao apareceria justo na faixa que
+   * mais precisa ser lida.
+   *
+   * A dep e o OBJETO, e os dois campos sao lidos la dentro. Abri-los aqui em
+   * cima em duas `string | null` — foi o que este efeito fez por um lote — nao
+   * comprava nada: `serverNow` tambem nasce novo a cada render do servidor,
+   * entao `[sunsetAt, serverNow]` mudava exatamente quando `[nextSunset]` muda.
+   * O que custava era o par de ISOs intercambiaveis a espera de alguem trocar
+   * um pelo outro no meio de oitocentas linhas, com o `tsc` calado. Ver
+   * `NextSunset`: os dois campos vem juntos justamente para nao se soltarem.
+   */
+  useEffect(() => {
+    if (!nextSunset) return;
+    /*
+     * A correcao do relogio, medida uma vez por render do SERVIDOR — e nao a
+     * cada tick, o que congelaria o relogio corrigido no carimbo (ver
+     * `clockSkewMs`). Nao e um segundo relogio: o tick continua sendo um so, e o
+     * que muda e de quem e a hora que ele le. Sem isto, um aparelho alguns
+     * minutos errado desligava a faixa e o corte — e, adiantado, punha a pagina
+     * em loop de refresh.
+     */
+    const skewMs = clockSkewMs(nextSunset.serverNow, Date.now());
+    const tick = () => {
+      const agora = new Date(Date.now() + skewMs);
+      // Passou do por do sol: quem decide se a pausa comecou e o servidor. O
+      // refresh traz a tela de repouso com o horario de volta, em vez de o
+      // wizard tentar se trancar sozinho.
+      if (sunsetHasPassed(agora.getTime(), nextSunset.at)) {
+        router.refresh();
+        return;
+      }
+      // So troca o estado quando o alerta MUDA de fato. `sunsetAlert` devolve
+      // objeto novo a cada chamada, e entregar esse objeto direto reconciliaria
+      // o formulario inteiro a cada meio minuto — inclusive nos seis dias e meio
+      // por semana em que a resposta e sempre "nada a anunciar".
+      const proximo = sunsetAlert(agora, nextSunset.at);
+      setSunset((anterior) => nextSunsetAlert(anterior, proximo));
+    };
+    // Antes do intervalo, e nao so dentro dele: sem esta chamada, quem abre a
+    // pagina JA dentro do corte ve o QR do PIX por ate meio minuto.
+    tick();
+    const id = setInterval(tick, SUNSET_TICK_MS);
+    return () => clearInterval(id);
+  }, [nextSunset, router]);
+
   const activeSkills = skillsFor(form.preferred_position);
   const total = computeTicketsTotal({
     basePrice: championship.base_price,
@@ -439,14 +505,11 @@ export default function RegistrationWizard({
         })
       : null;
   /*
-   * Mesma primeira linha de `canOpenStep`: sem reserva ainda nao ha veredito, e
-   * com reserva ok nada muda. A guarda de navegacao atrasa exatamente uma
-   * transicao — a renovacao dispara depois do `setStep` —, entao o jogador
-   * aterrissa neste passo com a recusa ja na mao e o QR ainda no lugar. No
-   * celular e o QR que esta no campo de visao, nao a faixa: ele paga, e so o
-   * "Revisar" o para, com o dinheiro ja fora.
+   * Dois gatilhos, um mecanismo so, e a regra mora em `paymentGate` — pura e
+   * testada. Aqui sobra a pergunta, e a razao volta junto com a resposta para o
+   * aviso de baixo nao ter que reconstrui-la.
    */
-  const slotAllowsPayment = !slot || slot.ok;
+  const payment = paymentGate(slot, sunset);
 
   function setSkill(skill: string, v: number) {
     setForm((p) => ({ ...p, skills: { ...p.skills, [skill]: v } }));
@@ -520,6 +583,14 @@ export default function RegistrationWizard({
       )}
       <h1 className="text-xl font-extrabold text-[var(--gala-gold-2)] mb-1">Inscrição</h1>
       <p className="text-sm text-[var(--gala-ink-dim)] mb-4">{championship.name}</p>
+
+      {/* Fica antes da faixa da vaga porque e a noticia com HORA MARCADA: a da
+          vaga descreve um estado, esta marca um prazo, e prazo se le primeiro.
+          E preferencia, nao invariante — nenhum teste segura esta ordem, e nao
+          deveria: quem explica o bloco de pagamento sumido e o
+          `PaymentClosedNotice`, no lugar onde ele sumiu. Esta faixa avisa ANTES,
+          para o jogador nao comecar um PIX que nao vai dar tempo de terminar. */}
+      <SunsetNotice alert={sunset} />
 
       <SlotNotice slot={slot} />
 
@@ -672,8 +743,7 @@ export default function RegistrationWizard({
           </p>
 
           {form.shirt_size === CUSTOM_SHIRT_SIZE && (
-            <div className="rounded-2xl px-3 py-3 text-xs leading-relaxed"
-                 style={{ background: "rgba(230,180,34,.08)", border: "1px solid rgba(230,180,34,.25)", color: "var(--gala-ink)" }}>
+            <div className="rounded-2xl px-3 py-3 text-xs leading-relaxed" style={goldTone}>
               Combinado! Antes de mandar produzir, a gente fala com você no WhatsApp
               pra acertar as medidas da sua camiseta.
             </div>
@@ -684,8 +754,7 @@ export default function RegistrationWizard({
         </StepShell>
 
         <StepShell index={stepNumber(6, minor)} title="Ingressos & pagamento" open={step === 6} done={!!done[6]} onToggle={() => open(6)}>
-          <div className="rounded-2xl px-3 py-3 text-xs leading-relaxed"
-               style={{ background: "rgba(230,180,34,.08)", border: "1px solid rgba(230,180,34,.25)", color: "var(--gala-ink)" }}>
+          <div className="rounded-2xl px-3 py-3 text-xs leading-relaxed" style={goldTone}>
             Sua inscrição já inclui <b>2 ingressos</b> para a Noite de Gala: o seu e o de um
             acompanhante. Precisa de mais? Cada ingresso adicional é cobrado à parte abaixo.
           </div>
@@ -718,9 +787,10 @@ export default function RegistrationWizard({
           <UploadCard icon="📷" label="Foto de perfil (3x4)" hint="Toque para enviar" required bucket="registration-photos"
                       value={form.profile_photo_link} onChange={(u) => set("profile_photo_link", u)} />
           {err("profile_photo_link")}
-          {/* Some junto com o QR: anexar comprovante sem vaga e tao inutil quanto
-              pagar sem vaga, e um upload aceito faz o pagamento parecer valido. */}
-          {slotAllowsPayment ? (
+          {/* O comprovante some junto com o QR: anexar comprovante sem poder
+              pagar e tao inutil quanto pagar sem vaga, e um upload aceito faz o
+              pagamento parecer valido. */}
+          {payment.open ? (
             <>
               {pixPayload && <PixPayment payload={pixPayload} amount={total} />}
               {total > 0 && (
@@ -729,15 +799,7 @@ export default function RegistrationWizard({
               )}
             </>
           ) : (
-            /* Sumir sem dizer nada leria como tela quebrada: a 375px a faixa do
-               topo esta fora do campo de visao — e por isso mesmo que o QR
-               precisou sair daqui. */
-            total > 0 && (
-              <div className="rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3 text-xs leading-relaxed text-[var(--gala-ink-dim)]">
-                O pagamento fica indisponível enquanto sua vaga não estiver confirmada.
-                O aviso no topo da página explica o motivo. Não pague nada até lá.
-              </div>
-            )
+            total > 0 && <PaymentClosedNotice reason={payment.reason} />
           )}
           {err("payment_receipt_link")}
           <button onClick={() => advance(6)} className="w-full rounded-xl py-3 font-bold text-[#050507]"

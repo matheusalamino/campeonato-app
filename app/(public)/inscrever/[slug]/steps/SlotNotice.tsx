@@ -3,23 +3,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { SlotReservation } from "@/features/registration/slot";
 import { slotCountdown } from "@/features/registration/slot-keepalive";
+import { goldTone, redTone } from "./tones";
 
 /** Hora local no formato 14h37, para o jogador saber quando voltar. */
 function formatLocalTime(iso: string): string {
   const d = new Date(iso);
   return `${String(d.getHours()).padStart(2, "0")}h${String(d.getMinutes()).padStart(2, "0")}`;
 }
-
-const goldTone = {
-  background: "rgba(230,180,34,.08)",
-  border: "1px solid rgba(230,180,34,.25)",
-  color: "var(--gala-ink)",
-};
-const redTone = {
-  background: "rgba(220,38,38,.10)",
-  border: "1px solid rgba(220,38,38,.35)",
-  color: "var(--gala-ink)",
-};
 
 /**
  * O texto da faixa e o tom em que ele entra.
@@ -70,6 +60,35 @@ function noticeFor(
       return {
         urgent: false,
         body: <>Você já está inscrito neste campeonato. Não é necessário se inscrever de novo.</>,
+      };
+
+    case "sabbath":
+      /*
+       * Dourado, pela pergunta que classifica: isto nao e ma noticia para o
+       * jogador. O vermelho desta tela diz uma de duas coisas — perda (a vaga
+       * acabou, esta sendo levada agora, o campeonato saiu do ar) ou incerteza
+       * (`error`, que nem sabe se ha vaga). A pausa nao e nenhuma das duas: ela
+       * congela o campeonato para todo mundo, e as duas RPCs recusam durante
+       * ela, entao ninguem se inscreve na frente dele enquanto durar — e a volta
+       * tem hora.
+       *
+       * E a tela que ele encontra ao recarregar e dourada, com um por do sol e
+       * um versiculo. Pintar de alarme a observancia da propria comunidade dele
+       * aqui, para entrega-lo a uma tela reverente no clique seguinte, seria
+       * contradicao — e ma leitura do que esta acontecendo.
+       *
+       * Perde o anuncio imediato do `role="alert"`, e esta certo assim: a outra
+       * regiao tambem anuncia, so que educadamente, e nada aqui pede pressa. A
+       * navegacao ja fechou sozinha por `canOpenStep`.
+       */
+      return {
+        urgent: false,
+        body: (
+          <>
+            As inscrições estão em repouso: nossa comunidade guarda o sábado, do pôr do sol de
+            sexta ao de sábado. Recarregue a página para ver o horário da volta.
+          </>
+        ),
       };
 
     case "all_reserved":

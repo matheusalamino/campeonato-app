@@ -10,6 +10,8 @@ import NotOpenNotice from "./NotOpenNotice";
 import NotYetNotice from "./NotYetNotice";
 import InscreverHeader from "./InscreverHeader";
 import { registrationGate } from "@/features/registration/registration-gate";
+import { sabbathStatus } from "@/features/registration/sabbath";
+import { getSabbathWindow } from "@/services/public-registration";
 
 export const dynamic = "force-dynamic";
 
@@ -54,13 +56,20 @@ export async function generateMetadata({
 export default async function InscreverPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const supabase = createAdminClient();
+  const now = new Date();
 
-  const { data: champ } = await supabase
-    .from("championships")
-    .select("id, name, slug, status, max_players, max_waitlist_players, base_price, extra_ticket_price, registration_group_options, registration_image_url, pix_key, pix_merchant_name, pix_merchant_city, max_extra_tickets, registration_start_date, registration_end_date")
-    .eq("slug", slug)
-    .is("deleted_at", null)
-    .maybeSingle();
+  // A janela de sabado nao depende do campeonato, entao as duas consultas vao
+  // juntas. Esta pagina e `force-dynamic`: o RTT economizado e em todo
+  // carregamento, e nao uma vez so.
+  const [{ data: champ }, sabbathWindow] = await Promise.all([
+    supabase
+      .from("championships")
+      .select("id, name, slug, status, max_players, max_waitlist_players, base_price, extra_ticket_price, registration_group_options, registration_image_url, pix_key, pix_merchant_name, pix_merchant_city, max_extra_tickets, registration_start_date, registration_end_date")
+      .eq("slug", slug)
+      .is("deleted_at", null)
+      .maybeSingle(),
+    getSabbathWindow(now),
+  ]);
 
   if (!champ) notFound();
 
@@ -75,17 +84,32 @@ export default async function InscreverPage({ params }: { params: Promise<{ slug
   };
   const liveCount = count ?? 0;
 
-  const gate = registrationGate(champ, new Date());
+  // A decisao do sabado mora inteira em `sabbathStatus`, e nao aqui: montada a
+  // mao nesta pagina ela nao teria teste de comportamento nenhum. O que sobra
+  // aqui e fiacao, e quem a segura e o teste de fonte em
+  // features/registration/sabbath-page-wiring.test.ts.
+  //
+  // Nao e o unico trecho do fluxo sem teste: `getSabbathWindow` tambem nao tem
+  // — `services/**` esta fora do vitest —, e o docblock dele diz o que isso
+  // custa e o que olhar antes de editar aquela consulta.
+  const { pause, sunsetAt } = sabbathStatus(now, sabbathWindow);
+  const gate = registrationGate(champ, now, pause);
+
+  // O instante vai com o relogio que o calculou. O wizard tica no aparelho do
+  // jogador, e o aparelho pode estar minutos errado nos dois sentidos — sem o
+  // carimbo daqui, a faixa e o corte do pagamento erram junto com ele. Ver
+  // `NextSunset` em features/registration/sabbath.ts.
+  const nextSunset = sunsetAt ? { at: sunsetAt, serverNow: now.toISOString() } : null;
 
   // O repouso de sabado e uma experiencia modal de tela cheia — sem header.
   if (gate.view === "rest") {
-    return <RestOverlay championship={championship} liveCount={liveCount} />;
+    return <RestOverlay championship={championship} liveCount={liveCount} endsAt={gate.endsAt} />;
   }
 
   let view;
   switch (gate.view) {
     case "wizard":
-      view = <RegistrationWizard championship={championship} liveCount={liveCount} />;
+      view = <RegistrationWizard championship={championship} liveCount={liveCount} nextSunset={nextSunset} />;
       break;
     case "not_yet":
       view = <NotYetNotice name={champ.name} opensAt={gate.opensAt} />;

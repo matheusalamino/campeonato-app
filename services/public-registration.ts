@@ -9,7 +9,9 @@ import { makeRegistrationSchema } from "@/features/registration/schema";
 import { computeTicketsTotal } from "@/features/registration/pricing";
 import { skillsFor } from "@/features/registration/skills";
 import { fieldErrorsFrom } from "@/features/registration/field-errors";
-import type { SlotReservation } from "@/features/registration/slot";
+import { reservationFromRpc, type SlotReservation } from "@/features/registration/slot";
+import { commitRefusal } from "@/features/registration/commit-refusal";
+import type { SabbathWindow } from "@/features/registration/sabbath";
 import type { GroupOption } from "@/types/championship";
 
 export type PlayerPrefill = {
@@ -148,19 +150,19 @@ export async function checkLookupRateLimit(ip: string): Promise<boolean> {
   return true;
 }
 
-/** Razoes que a RPC declara no seu COMMENT, fora `all_reserved`, que tem forma propria. */
-const RPC_REASONS = ["not_found", "not_open", "already_registered", "full"] as const;
-
-function isKnownReason(value: unknown): value is (typeof RPC_REASONS)[number] {
-  return typeof value === "string" && (RPC_REASONS as readonly string[]).includes(value);
-}
-
 /**
  * Reserva a vaga do jogador enquanto ele preenche.
  *
  * A decisao de principal ou espera acontece dentro da funcao do banco, sob lock
  * da linha do campeonato — e a unica forma de contar e classificar sem que
  * outra transacao insira no meio.
+ *
+ * A traducao da resposta mora em `reservationFromRpc`, e nao aqui: nenhum teste
+ * roda dentro de `services/**` (ver o docblock dela), e a razao que atravessa
+ * este ponto — `sabbath` — nao pode virar `error` calada, porque `error` convida
+ * a tentar de novo e a pausa dura 24h. Aqui sobra a chamada; a unica decisao que
+ * ficou e o `error ? null : data`, e os dois lados dele significam a mesma
+ * coisa: nao houve resposta.
  */
 export async function reserveSlot(
   championshipId: string,
@@ -171,34 +173,86 @@ export async function reserveSlot(
     p_championship_id: championshipId,
     p_cpf: normalizeCpf(cpf),
   });
+  return reservationFromRpc(error ? null : data);
+}
 
-  // A chamada nao completou: nada aqui diz se ha vaga. Devolver `not_found`,
-  // como era antes, transformava PostgREST fora do ar em "campeonato esgotado"
-  // na tela do jogador.
-  if (error || !data) return { ok: false, reason: "error" };
+/**
+ * A janela de sabado atual ou a proxima.
+ *
+ * Usa o client anon, e nao o service-role: a migration da T2 abriu
+ * `SELECT TO anon, authenticated USING (true)` de proposito, e ler janela de
+ * sabado nao exige privilegio nenhum. Mesma razao da vizinha
+ * `getOpenRegistrationChampionship`, logo abaixo.
+ *
+ * `ends_at >= now` e o filtro certo, e nao "cobre agora": quem chama precisa
+ * distinguir "a tabela funciona e ainda nao e sabado" de "a tabela nao alcanca
+ * este instante". Ver a nota em features/registration/sabbath.ts.
+ *
+ * ATENCAO — ESTAS LINHAS SAO CARGA ESTRUTURAL E NAO TEM TESTE.
+ *
+ * `vitest.config.ts` inclui `lib/**`, `features/**` e `scripts/**`; `services/**`
+ * esta de fora, entao um teste escrito aqui nem rodaria. Nada segura o `gte`, a
+ * coluna filtrada, o `ascending`, o `limit` ou o `try/catch`. TRES edicoes
+ * erram para o LADO PROIBIDO sem quebrar teste nenhum:
+ *
+ *   1. filtrar `starts_at` em vez de `ends_at`;
+ *   2. inverter o `ascending`;
+ *   3. trocar o `.gte` por `.gt`.
+ *
+ * As duas primeiras fazem a consulta devolver uma janela FUTURA durante todo o
+ * sabado. `isSabbath` entao responde "nao e sabado" — porque janela futura
+ * significa exatamente isso — e o site ABRE a inscricao no sabado, caladamente,
+ * sem nunca chegar na regra conservadora.
+ *
+ * A terceira tem alcance minusculo e a mesma direcao: `.gt` descarta a janela
+ * corrente no instante exato de `ends_at`, devolve a proxima, e abre a
+ * inscricao no segundo do por do sol — justamente a borda inclusiva que este
+ * modulo e o `is_sabbath` do SQL defendem espelhados.
+ *
+ * A lista vale como checklist antes de editar, entao precisa ser exaustiva:
+ * "duas" convidaria a achar que acabou. A unica defesa hoje e revisao humana.
+ *
+ * O que ESTA contido: trocar o mapeamento (`startsAt: data.ends_at`) sempre
+ * produz uma janela com `end < start`, e a guarda de janela invertida em
+ * `parseWindow` joga isso na regra conservadora. Aquela guarda foi acrescentada
+ * por causa desta consulta, e funciona.
+ *
+ * O `.order` e contrato em principio, mas hoje e infalsificavel em teste:
+ * removido, ou trocado por `ends_at`, as variantes coincidem — a ordem fisica
+ * das linhas e o fato de as janelas nao se sobreporem escondem a diferenca
+ * neste dado. Fica porque a coincidencia e do dado, nao da regra.
+ *
+ * Falha vira `null`, que aciona a regra conservadora — do lado da observancia,
+ * que e o unico lado aceitavel de errar aqui.
+ */
+export async function getSabbathWindow(now: Date): Promise<SabbathWindow | null> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("sabbath_windows")
+      .select("starts_at, ends_at")
+      .gte("ends_at", now.toISOString())
+      .order("starts_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
 
-  const result = data as {
-    success: boolean;
-    reason?: string;
-    is_waitlist?: boolean;
-    expires_at?: string;
-    retry_at?: string | null;
-  };
+    // Consulta quebrada e tabela esgotada caem as duas na regra conservadora,
+    // mas nao sao a mesma coisa: a segunda e o fim previsto da tabela, a
+    // primeira e defeito que ninguem notaria — a pausa viraria estimada para
+    // sempre e a tela nunca acusaria. O projeto nao tem infraestrutura de log,
+    // entao o console do servidor e o sinal disponivel; ficar calado aqui seria
+    // escolha errada, e nao esquecimento.
+    if (error) {
+      console.error("[sabbath] consulta a sabbath_windows falhou:", error.message);
+      return null;
+    }
 
-  if (result.success) {
-    return { ok: true, isWaitlist: !!result.is_waitlist, expiresAt: result.expires_at! };
+    if (!data) return null;
+    return { startsAt: data.starts_at, endsAt: data.ends_at };
+  } catch (cause) {
+    console.error("[sabbath] consulta a sabbath_windows lancou:", cause);
+    return null;
   }
-  if (result.reason === "all_reserved") {
-    return { ok: false, reason: "all_reserved", retryAt: result.retry_at ?? null };
-  }
-  // O `as` que estava aqui carimbava qualquer string vinda do JSON como uma das
-  // quatro razoes, entao uma razao nova na RPC — ou uma resposta malformada —
-  // seria renderizada como um veredito que ninguem deu. Razao que nao esta na
-  // lista e resposta que nao entendemos, e nao ha lotacao a declarar: `error`
-  // convida a tentar de novo, que e a unica resposta honesta.
-  return isKnownReason(result.reason)
-    ? { ok: false, reason: result.reason }
-    : { ok: false, reason: "error" };
 }
 
 export async function getOpenRegistrationChampionship(): Promise<{ slug: string; name: string } | null> {
@@ -374,18 +428,12 @@ export async function submitRegistration(
     is_waitlist?: boolean;
   };
 
-  if (!result.success) {
-    if (result.reason === "already_registered") {
-      return { ok: false, error: "Você já está inscrito neste campeonato.", alreadyRegistered: true };
-    }
-    if (result.reason === "reservation_expired") {
-      return {
-        ok: false,
-        error: "Sua vaga expirou e as inscrições lotaram. Fale com a organização.",
-      };
-    }
-    return { ok: false, error: "As inscrições não estão abertas para este campeonato." };
-  }
+  // A escada de `if` que estava aqui virou tabela em `commit-refusal.ts`, e o
+  // motivo e o mesmo de `reservationFromRpc`: escrita neste arquivo, ela era
+  // invisivel nos dois sentidos — o ramo do sabado podia ser apagado, ou o
+  // literal virar `"sabath"`, e os tres portoes passavam verdes. La o `tsc`
+  // recusa as duas coisas, e o teste le as frases.
+  if (!result.success) return { ok: false, ...commitRefusal(result.reason) };
 
   return { ok: true, registrationId: result.registration_id!, isWaitlist: !!result.is_waitlist };
 }
