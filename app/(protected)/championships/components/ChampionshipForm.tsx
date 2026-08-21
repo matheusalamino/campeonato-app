@@ -11,6 +11,7 @@ import {
   type Championship,
   type ChampionshipStatus,
 } from "@/types/championship";
+import { MAX_PIX_KEY } from "@/lib/pix";
 
 type FieldErrors = Record<string, string>;
 
@@ -283,6 +284,7 @@ export function ChampionshipForm({
           />
           <p className="mt-1 text-xs text-zinc-500">
             Usada para montar o QR Code do PIX na inscrição, já com o valor total calculado.
+            Máximo de {MAX_PIX_KEY} caracteres.
           </p>
           <FieldError errors={errors} name="pix_key" />
         </div>

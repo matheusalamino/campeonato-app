@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { championshipFormSchema, statusChangeSchema } from "./schema";
+import {
+  championshipFormSchema,
+  createChampionshipSchema,
+  updateChampionshipSchema,
+  statusChangeSchema,
+} from "./schema";
 
 const validDraft = {
   name: "Copa Interna",
@@ -80,6 +85,62 @@ describe("championshipFormSchema", () => {
       max_waitlist_players: 5,
     });
     expect(r.success).toBe(true);
+  });
+});
+
+describe("championshipFormSchema: pix_key", () => {
+  // O teto vem do BR Code, nao de gosto: o campo 26 cabe 99 bytes, dos quais 18
+  // sao o GUI e 4 o cabecalho da propria chave. Uma chave maior faz o campo 26
+  // declarar o tamanho em tres digitos e o QR sai malformado, em silencio.
+  const NO_TETO = "u".repeat(62) + "@dominio.com.br"; // 77 bytes
+
+  it("accepts a pix_key at the limit the QR Code allows", () => {
+    const r = championshipFormSchema.safeParse({ ...validDraft, pix_key: NO_TETO });
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects a pix_key one byte over the limit", () => {
+    const r = championshipFormSchema.safeParse({ ...validDraft, pix_key: `u${NO_TETO}` });
+    expect(r.success).toBe(false);
+  });
+
+  it("says why, instead of failing without a message", () => {
+    const r = championshipFormSchema.safeParse({ ...validDraft, pix_key: `u${NO_TETO}` });
+    expect(r.success).toBe(false);
+    if (r.success) return;
+    // Sem isto, uma mensagem engolida pela uniao do `.or(z.literal(""))`
+    // passaria no teste acima e deixaria o admin sem saber o que corrigir.
+    const naChave = r.error.issues.filter((i) => i.path[0] === "pix_key");
+    expect(naChave.length).toBeGreaterThan(0);
+    expect(JSON.stringify(naChave)).toContain("77");
+  });
+
+  it("measures the limit in bytes, not characters", () => {
+    // 70 cedilhas sao 70 caracteres e 140 bytes: cabe contando caractere,
+    // estoura contando byte — que e como o leitor do QR conta.
+    const r = championshipFormSchema.safeParse({ ...validDraft, pix_key: "ç".repeat(70) });
+    expect(r.success).toBe(false);
+  });
+
+  it("holds on the server path too, not only in the form", () => {
+    // O formulario e contornavel: quem posta direto na server action passa
+    // pelo create/update, e nao pelo championshipFormSchema da tela.
+    const longa = `u${NO_TETO}`;
+    expect(createChampionshipSchema.safeParse({ ...validDraft, pix_key: longa }).success).toBe(false);
+    expect(
+      updateChampionshipSchema.safeParse({
+        ...validDraft,
+        id: "550e8400-e29b-41d4-a716-446655440000",
+        pix_key: longa,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("still accepts an empty pix_key", () => {
+    // O campo e opcional: um campeonato sem cobranca nao configura PIX.
+    for (const pix_key of ["", "   "]) {
+      expect(championshipFormSchema.safeParse({ ...validDraft, pix_key }).success).toBe(true);
+    }
   });
 });
 
