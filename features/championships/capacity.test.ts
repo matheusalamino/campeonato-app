@@ -145,6 +145,13 @@ describe("derivedCapacity", () => {
     });
   });
 
+  it("o piso vale em cada um dos tres fatores, nao no produto", () => {
+    expect(derivedCapacity({ ...hoje, teamsCount: 8.5, playersPerTeam: 10.5, goalkeepersPerTeam: 1.5 })).toEqual({
+      total: 80, goalkeepers: 8, outfield: 72,
+      waitlistGoalkeepers: 1, waitlistOutfield: 4, waitlistTotal: 5,
+    });
+  });
+
   it("fila fracionaria tambem vira inteiro", () => {
     expect(derivedCapacity({ ...hoje, waitlistGoalkeepers: 1.9, waitlistOutfield: 4.9 })).toEqual({
       total: 80, goalkeepers: 8, outfield: 72,
