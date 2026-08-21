@@ -97,14 +97,14 @@ function campos(payload: string): { id: string; declara: number; valor: string }
 }
 
 describe("o tamanho declarado em cada campo", () => {
-  // O acento e o caso que separa os dois jeitos de contar: "ç" e "ã" ocupam um
-  // caractere de JS e dois bytes em UTF-8. Contando caracteres, o cabecalho de
-  // tamanho mente, o leitor le a menos, e o resto do payload desanda.
+  // Nome, cidade e descricao agora saem normalizados para ASCII, entao quem
+  // ainda pode levar byte multibyte ate o payload e a CHAVE: ela vai crua,
+  // byte a byte como o banco a registrou. E ela que mantem esta regra viva.
   const COM_ACENTO = {
-    key: "a@b.com",
-    merchantName: "Joao Anção",
-    merchantCity: "São Paulo",
-    description: "Inscrição",
+    key: "joão@dominio.com.br",
+    merchantName: "Recebedor",
+    merchantCity: "Sorocaba",
+    description: "Inscricao",
     txid: "T1",
   };
 
@@ -120,15 +120,14 @@ describe("o tamanho declarado em cada campo", () => {
     }
   });
 
-  it("o payload acentuado ainda termina no CRC, sem sobra nem falta", () => {
+  it("o payload com chave multibyte ainda termina no CRC, sem sobra nem falta", () => {
     const lidos = campos(buildPixPayload(COM_ACENTO));
     expect(lidos[lidos.length - 1].id).toBe("63");
   });
 
-  it("o nome acentuado chega inteiro ao campo 59", () => {
-    const lidos = campos(buildPixPayload(COM_ACENTO));
-    expect(lidos.find((c) => c.id === "59")?.valor).toBe("Joao Anção");
-    expect(lidos.find((c) => c.id === "60")?.valor).toBe("São Paulo");
+  it("a chave multibyte chega inteira ao campo 26, sem perder byte", () => {
+    const dentro26 = campos(campos(buildPixPayload(COM_ACENTO)).find((c) => c.id === "26")!.valor);
+    expect(dentro26.find((c) => c.id === "01")!.valor).toBe("joão@dominio.com.br");
   });
 
   it("os payloads de referencia, que sao ASCII, continuam intactos", () => {
@@ -141,32 +140,101 @@ describe("o tamanho declarado em cada campo", () => {
   });
 });
 
-describe("o corte de nome e cidade", () => {
-  it("corta por bytes, e nao por caracteres", () => {
-    // 13 cedilhas sao 13 caracteres e 26 bytes. Cortando por caractere caberiam
-    // as 13, e o campo estouraria o limite de 25 do padrao.
-    const p = buildPixPayload({
-      key: "a@b.com", merchantName: "ç".repeat(13), merchantCity: "X",
-      description: "X", txid: "T1",
-    });
-    const nome = campos(p).find((c) => c.id === "59")!;
-    expect(Buffer.byteLength(nome.valor, "utf8")).toBeLessThanOrEqual(25);
-    expect(nome.valor).toBe("ç".repeat(12));
+describe("a normalizacao do texto", () => {
+  /** Os quatro textos do payload, ja lidos de dentro dos campos. */
+  function ler(p: string) {
+    const topo = campos(p);
+    const dentro26 = campos(topo.find((c) => c.id === "26")!.valor);
+    return {
+      chave: dentro26.find((c) => c.id === "01")!.valor,
+      descricao: dentro26.find((c) => c.id === "02")?.valor ?? "",
+      nome: topo.find((c) => c.id === "59")!.valor,
+      cidade: topo.find((c) => c.id === "60")!.valor,
+    };
+  }
+
+  it("tira o acento do nome, da cidade e da descricao", () => {
+    const r = ler(buildPixPayload({
+      key: "a@b.com", merchantName: "João Anção", merchantCity: "São Paulo",
+      description: "Inscrição Copa São Bento", txid: "T1",
+    }));
+    expect(r.nome).toBe("Joao Ancao");
+    expect(r.cidade).toBe("Sao Paulo");
+    expect(r.descricao).toBe("Inscricao Copa Sao Bento");
   });
 
-  it("nao parte um caractere multibyte ao meio", () => {
-    // 12 cedilhas dao 24 bytes; o 13o nao cabe inteiro em 25. Cortar no byte 25
-    // deixaria meia cedilha, que decodifica como caractere de substituicao.
-    const p = buildPixPayload({
-      key: "a@b.com", merchantName: "ç".repeat(13), merchantCity: "ã".repeat(9),
+  it("NAO normaliza a chave: ela vai como o banco a registrou", () => {
+    // Tirar acento da chave nao seria higiene, seria trocar a chave: o QR
+    // apontaria para um destinatario que nao existe no DICT.
+    const r = ler(buildPixPayload({
+      key: "joão@dominio.com.br", merchantName: "N", merchantCity: "C",
       description: "X", txid: "T1",
+    }));
+    expect(r.chave).toBe("joão@dominio.com.br");
+  });
+
+  it("tira o que nao e ASCII imprimivel, sem deixar espaco dobrado", () => {
+    const r = ler(buildPixPayload({
+      key: "a@b.com", merchantName: "N", merchantCity: "C",
+      description: "Inscricao 🏆 Copa", txid: "T1",
+    }));
+    expect(r.descricao).toBe("Inscricao Copa");
+  });
+
+  it("normaliza antes de cortar, e nao depois", () => {
+    // 25 agudos sao 25 caracteres e 50 bytes. Normalizando primeiro, os 25
+    // cabem; cortando primeiro sobrariam 12, e o nome sairia pela metade.
+    const r = ler(buildPixPayload({
+      key: "a@b.com", merchantName: "á".repeat(25), merchantCity: "C",
+      description: "X", txid: "T1",
+    }));
+    expect(r.nome).toBe("a".repeat(25));
+  });
+
+  it("o payload inteiro fica em ASCII imprimivel", () => {
+    // E este o ponto do conserto: sem byte multibyte, contar caractere e
+    // contar byte dao o mesmo numero, e a duvida sobre como cada app le o
+    // BR Code deixa de existir.
+    const p = buildPixPayload({
+      key: "a@b.com", merchantName: "João Anção", merchantCity: "São Paulo",
+      description: "Inscrição Copa São Bento", amount: 100, txid: "T1",
+    });
+    expect(p).toMatch(/^[\x20-\x7E]*$/);
+  });
+});
+
+describe("o corte de nome e cidade", () => {
+  // Depois da normalizacao, nome e cidade chegam sempre em ASCII, entao aqui
+  // byte e caractere coincidem. O corte por bytes continua sendo o certo — e a
+  // rede se a normalizacao um dia afrouxar —, mas o ramo multibyte dele deixou
+  // de ser alcancavel por esta porta: quem ainda leva multibyte ao payload e a
+  // chave, e ela nao e cortada, e barrada na entrada (ver MAX_PIX_KEY).
+
+  it("corta o nome depois de tirar o acento, e nao antes", () => {
+    // "Jose Antonio da Silva Goncalves" tem 31; cortando antes de normalizar,
+    // os 31 caracteres virariam 25 BYTES e o nome sairia bem mais curto.
+    const p = buildPixPayload({
+      key: "a@b.com",
+      merchantName: "José Antônio da Silva Gonçalves",
+      merchantCity: "São José dos Campos",
+      description: "X",
+      txid: "T1",
     });
     const lidos = campos(p);
-    for (const id of ["59", "60"]) {
-      expect(lidos.find((c) => c.id === id)!.valor).not.toContain("�");
-    }
-    // Cidade: limite de 15 bytes, entao 7 tis (14 bytes) e o maximo inteiro.
-    expect(lidos.find((c) => c.id === "60")!.valor).toBe("ã".repeat(7));
+    expect(lidos.find((c) => c.id === "59")!.valor).toBe("Jose Antonio da Silva Gon");
+    expect(lidos.find((c) => c.id === "60")!.valor).toBe("Sao Jose dos Ca");
+  });
+
+  it("respeita os limites mesmo com a entrada toda acentuada", () => {
+    const p = buildPixPayload({
+      key: "a@b.com", merchantName: "ç".repeat(40), merchantCity: "ã".repeat(40),
+      description: "ê".repeat(80), txid: "T1",
+    });
+    const lidos = campos(p);
+    expect(lidos.find((c) => c.id === "59")!.valor).toBe("c".repeat(25));
+    expect(lidos.find((c) => c.id === "60")!.valor).toBe("a".repeat(15));
+    // Nenhum corte pode deixar meio caractere para tras.
+    expect(p).not.toContain("\uFFFD");
   });
 });
 

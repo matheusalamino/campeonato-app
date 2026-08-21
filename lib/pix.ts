@@ -61,6 +61,31 @@ export function pixKeyFits(key: string): boolean {
 }
 
 /**
+ * Reduz o texto a ASCII imprimivel, tirando acento em vez de tirar a letra.
+ *
+ * Por que, se o `field()` ja conta bytes: porque o conserto do `field()` assume
+ * que quem le o BR Code avanca por BYTES, e isso nao da para provar de todo app
+ * de banco. Sem nenhum byte multibyte, contar caractere e contar byte dao o
+ * mesmo numero, e a duvida deixa de existir. E o que o proprio Mercado Pago faz
+ * — o payload de referencia deste modulo traz "Sao Paulo", sem til.
+ *
+ * O `NFD` separa a letra do diacritico, e a faixa `0300-036F` remove so o
+ * diacritico solto: "ç" vira "c", e nao some. O que sobra fora do ASCII (emoji,
+ * por exemplo) sai, e o espaco duplo que isso deixaria e fechado em seguida.
+ *
+ * Nao vale para a chave: ali o texto tem de ser byte a byte o que o banco
+ * registrou, e trocar um caractere apontaria o QR para outro destinatario.
+ */
+function toAscii(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7E]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * Corta para caber em `max` BYTES, sem partir um caractere ao meio.
  *
  * Os limites do padrao tambem sao em bytes, entao cortar com `slice` conta
@@ -113,13 +138,18 @@ export function crc16(payload: string): string {
 }
 
 export type PixPayloadInput = {
-  /** Chave PIX do recebedor (e-mail, CPF, telefone ou aleatoria). */
+  /**
+   * Chave PIX do recebedor (e-mail, CPF, telefone ou aleatoria). Vai crua: e a
+   * unica entrada que nao passa por `toAscii`, porque mudar um caractere dela
+   * apontaria o QR para outro destinatario.
+   */
   key: string;
-  /** Nome do recebedor, cortado em 25 caracteres pelo padrao. */
+  /** Nome do recebedor. Sai sem acento, cortado em 25 bytes. */
   merchantName: string;
-  /** Cidade do recebedor, cortada em 15. */
+  /** Cidade do recebedor. Sai sem acento, cortada em 15 bytes. */
   merchantCity: string;
-  /** Texto que o pagador ve como referencia do pagamento. */
+  /** Texto que o pagador ve como referencia. Sai sem acento, e cortado no que
+   *  sobrar do campo 26 depois da chave. */
   description: string;
   /** Valor em reais. Omitido deixa o pagador digitar — evite. */
   amount?: number;
@@ -139,7 +169,9 @@ export function buildPixPayload({
   // O que sobra do campo 26 depois do GUI e da chave. O `- 4` e o cabecalho do
   // proprio campo 02: sem espaco nem para ele, a descricao nao entra.
   const orcamento = MAX_MERCHANT_ACCOUNT - byteLength(identificacao) - 4;
-  const referencia = orcamento > 0 ? sliceWords(description, orcamento) : "";
+  // `toAscii` ANTES do corte: normalizar depois encolheria o texto de novo, e
+  // o corte teria contado bytes que o acento levaria embora.
+  const referencia = orcamento > 0 ? sliceWords(toAscii(description), orcamento) : "";
   const merchantAccount = identificacao + (referencia ? field("02", referencia) : "");
 
   let payload =
@@ -154,8 +186,8 @@ export function buildPixPayload({
 
   payload +=
     field("58", "BR") +
-    field("59", sliceBytes(merchantName, MAX_NAME)) +
-    field("60", sliceBytes(merchantCity, MAX_CITY)) +
+    field("59", sliceBytes(toAscii(merchantName), MAX_NAME)) +
+    field("60", sliceBytes(toAscii(merchantCity), MAX_CITY)) +
     // "***" e o txid neutro previsto pelo padrao para quando nao ha um proprio.
     field("62", field("05", txid || "***"));
 
