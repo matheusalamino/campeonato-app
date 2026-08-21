@@ -139,9 +139,14 @@ describe("os formularios que escrevem posicao falam CODIGO", () => {
     expect(wizard).toMatch(/CANONICAL_POSITIONS\.map\(/);
     expect(wizard).toMatch(OPCAO_CODIGO_ROTULO);
     // A opcao vazia e o que torna a escolha obrigatoria na tela: sem ela o
-    // select mostraria a primeira posicao ja selecionada e o jogador enviaria
-    // `GOL` sem ter escolhido nada.
-    expect(wizard).toMatch(/<option value="">/);
+    // select desenha a PRIMEIRA posicao como se estivesse escolhida enquanto o
+    // estado ainda e "", e o jogador manda goleiro sem nunca ter tocado no
+    // campo — bem o silencio que a decisao do usuario proibiu.
+    //
+    // Colada ao `.map` de proposito. Solta, `<option value="">` casava com
+    // qualquer um dos QUATRO selects deste arquivo (estado, grupo, camiseta), e
+    // apagar justamente o da posicao passava com os 509 testes verdes. Medido.
+    expect(wizard).toMatch(/<option value="">[^<]*<\/option>\s*\{CANONICAL_POSITIONS\.map\(/);
   });
 
   it("o cadastro de jogador do admin sai da constante", () => {
