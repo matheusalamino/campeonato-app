@@ -14,9 +14,23 @@ const PIX_GUI = "br.gov.bcb.pix";
 const MAX_NAME = 25;
 const MAX_CITY = 15;
 
-/** Monta um campo no formato id + tamanho + valor. */
+/**
+ * Monta um campo no formato id + tamanho + valor.
+ *
+ * O tamanho conta BYTES em UTF-8, nao caracteres de JS. `String.length` conta
+ * unidades UTF-16: "Sao Paulo" da 9 nas duas contas, mas "Sao Paulo" com til
+ * da 9 caracteres e 10 bytes. Quem le o BR Code avanca por bytes, entao um
+ * cabecalho contado em caracteres faz o leitor parar cedo e todo o resto do
+ * payload desandar a partir dali.
+ *
+ * `TextEncoder` e nao `Buffer`: este modulo tambem roda no navegador, dentro do
+ * wizard de inscricao.
+ */
+const utf8 = new TextEncoder();
+
 function field(id: string, value: string): string {
-  return `${id}${String(value.length).padStart(2, "0")}${value}`;
+  const length = utf8.encode(value).length;
+  return `${id}${String(length).padStart(2, "0")}${value}`;
 }
 
 /**
