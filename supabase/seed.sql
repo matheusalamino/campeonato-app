@@ -25,6 +25,11 @@ INSERT INTO public.championships (
   points_loss,
   periods_count,
   period_duration,
+  teams_count,
+  players_per_team,
+  goalkeepers_per_team,
+  waitlist_goalkeepers,
+  waitlist_outfield,
   created_at
 )
 VALUES (
@@ -37,6 +42,16 @@ VALUES (
   0,
   2,
   7,
+  -- O formato de 2026, igual ao de staging: 8 x 10 = 80 vagas, 8 de goleiro e 72
+  -- de linha, espera de 1 goleiro + 4 de linha. Sem isto o local nasce com
+  -- teams_count NULL e qualquer medida de capacidade feita aqui e irreproduzivel
+  -- -- foi o que aconteceu: o "8x10 da 80/8/72/5" foi medido contra estado
+  -- editado a mao, que um `local:reset` limpo apagava.
+  8,
+  10,
+  1,
+  1,
+  4,
   now()
 )
 ON CONFLICT (id) DO UPDATE
@@ -48,7 +63,12 @@ SET
   points_draw = EXCLUDED.points_draw,
   points_loss = EXCLUDED.points_loss,
   periods_count = EXCLUDED.periods_count,
-  period_duration = EXCLUDED.period_duration;
+  period_duration = EXCLUDED.period_duration,
+  teams_count = EXCLUDED.teams_count,
+  players_per_team = EXCLUDED.players_per_team,
+  goalkeepers_per_team = EXCLUDED.goalkeepers_per_team,
+  waitlist_goalkeepers = EXCLUDED.waitlist_goalkeepers,
+  waitlist_outfield = EXCLUDED.waitlist_outfield;
 
 -- ---------------------------------------------------------------------------
 -- 3. Times e managers do campeonato

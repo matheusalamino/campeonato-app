@@ -525,6 +525,62 @@ r=$($DB -c "
 checar "is_sabbath precede a primeira escrita em commit_registration" "true" "$r"
 
 # =============================================================================
+# O entregavel de manchete da T2 -- a capacidade derivada -- nao tinha assertiva
+# NENHUMA. Tres mutacoes na DDL passavam nos 494 testes, no tsc e no lint:
+# trocar `max_players >= 0` de volta para `> 0`, apagar o NOT VALID, e apagar uma
+# das cinco colunas. Este script e o unico portao do repo que fala com o banco,
+# entao e aqui que elas morrem.
+#
+# O zero e o ponto todo: `derivedCapacity` devolve `total: 0` para formato nao
+# configurado, e o CHECK antigo (`max_players > 0`) tornava esse desfecho seguro
+# IMPOSSIVEL de gravar -- sobrava NULL, que significa ILIMITADO. As duas
+# assertivas abaixo sao lidas juntas: o zero grava, e o negativo continua barrado.
+# Provar so o zero deixaria passar um CHECK apagado.
+echo "== a capacidade derivada: o zero grava, o negativo nao =="
+preparar
+
+# `|| true` e OBRIGATORIO aqui, e nao desleixo: este arquivo roda com `set -e`
+# (linha 19), o psql sai com status != 0 na violacao que a segunda assertiva
+# PROVOCA de proposito, e `grep -c` sai 1 quando conta zero. A primeira versao
+# deste bloco usava `| grep -c "ERROR"` sem guarda: o script morria aqui SEM
+# mensagem, o -x parava de imprimir, e as duas assertivas de privilegio que vem
+# depois desapareciam -- 32 assertivas em vez de 34, sem nenhum FALHOU. Nao
+# "limpe" o `|| true`, e nao troque o case por grep -c.
+#
+# O case le a SAIDA, entao a assertiva continua medindo o banco, e nao o status.
+saida=$($DB -c "BEGIN; UPDATE championships SET max_players = 0 WHERE id='$CHAMP'; ROLLBACK;" 2>&1 || true)
+case "$saida" in *ERROR*) r="recusado" ;; *) r="gravou" ;; esac
+checar "max_players = 0 GRAVA (zero fecha, e tem de ser gravavel)" "gravou" "$r"
+
+saida=$($DB -c "BEGIN; UPDATE championships SET max_players = -1 WHERE id='$CHAMP'; ROLLBACK;" 2>&1 || true)
+case "$saida" in *ERROR*) r="recusado" ;; *) r="gravou" ;; esac
+checar "max_players = -1 RECUSADO (o CHECK nao virou terra arrasada)" "recusado" "$r"
+
+r=$($DB -c "
+  SELECT count(*) FROM information_schema.columns
+   WHERE table_name = 'championships'
+     AND column_name IN ('teams_count','players_per_team','goalkeepers_per_team',
+                         'waitlist_goalkeepers','waitlist_outfield');")
+checar "as cinco colunas do formato existem" "5" "$(echo "$r" | tr -d ' ')"
+
+# NOT VALID e deliberado: producao esta 15 migrations atras e vai receber este
+# CHECK sobre 80 jogadores vivos, onde VALIDATE varre a tabela e pode abortar.
+r=$($DB -c "SELECT convalidated::text FROM pg_constraint WHERE conname = 'players_preferred_position_known';")
+checar "a CHECK da posicao segue NOT VALID" "false" "$(echo "$r" | tr -d ' ')"
+
+# E a forma derivada casa a formula: 8 x 10 = 80, 8 de goleiro, 72 de linha,
+# espera 5. Os mesmos numeros que derivedCapacity devolve para esta config.
+r=$($DB -c "
+  SELECT teams_count * players_per_team || '|' ||
+         teams_count * goalkeepers_per_team || '|' ||
+         (teams_count * players_per_team - teams_count * goalkeepers_per_team) || '|' ||
+         (waitlist_goalkeepers + waitlist_outfield)
+    FROM championships WHERE id = '10000000-0000-0000-0000-000000000001';")
+checar "o formato do seed deriva 80/8/72/5" "80|8|72|5" "$(echo "$r" | tr -d ' ')"
+
+limpar
+
+# =============================================================================
 echo "== as RPCs publicas nao sao chamaveis por anon =="
 r=$($DB -c "
   SELECT has_function_privilege('anon','public.reserve_registration_slot(uuid, text)','EXECUTE')::text || '|' ||

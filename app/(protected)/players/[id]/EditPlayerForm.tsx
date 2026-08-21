@@ -20,8 +20,10 @@ export default function EditPlayerForm({ player }: { player: Player }) {
   const [saving, setSaving] = useState(false);
 
   // A posicao GRAVADA pode estar fora dos quatro valores que a CHECK
-  // `players_preferred_position_known` aceita: 56 dos 64 jogadores estao em
-  // vocabulario de futsal (Fixo, Ala Esquerda, Ala Direita, Pivo).
+  // `players_preferred_position_known` aceita. Producao e staging tem 100% dos
+  // jogadores nos quatro canonicos (medido em 2026-08-21), entao hoje isto e
+  // defesa e nao conversao -- vale para nulo, para dump antigo e para o que o
+  // CSV de import deixar entrar.
   //
   // Sem normalizar a semente, este form re-submetia o valor invalido inalterado
   // e o banco recusava -- e como o `handleUpdate` nao olhava o erro, a tela

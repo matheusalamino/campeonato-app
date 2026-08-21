@@ -88,11 +88,20 @@ ALTER TABLE public.championships
 -- como se fosse producao. O seed foi alinhado aos quatro canonicos no mesmo
 -- bloco, e producao nunca teve outra coisa.
 --
--- NOT VALID fica, e por um motivo melhor do que o que eu tinha escrito: este
--- repo restaura dump de producao para local (`scripts/pull-prod.sh`,
--- `scripts/restore-last-production.sh`), e dump antigo pode trazer vocabulario
--- que ninguem mediu. VALIDATE ali quebraria a migration no meio da restauracao.
--- NOT VALID nao afrouxa nada para quem ESCREVE: todo INSERT e UPDATE e checado.
+-- NOT VALID fica, e o motivo NAO e a restauracao de dump — eu tinha escrito isso
+-- e estava errado sobre o mecanismo. `restore-local-from-dump.sh` faz
+-- `db reset --local --no-seed` e SO DEPOIS carrega o dump por psql: o schema
+-- nasce contra uma `players` VAZIA, entao VALIDATE ali seria no-op (zero linhas
+-- para varrer) e NOT VALID nao compraria nada — um dump com vocabulario estranho
+-- estoura no INSERT, que e checado de qualquer jeito.
+--
+-- O motivo real e o outro fluxo: aplicar esta migration por `db:up:local` ou
+-- `db:push` sobre um banco que JA TEM linhas. E exatamente o caso de PRODUCAO,
+-- que esta 15 migrations atras e vai receber isto sobre 80 jogadores vivos.
+-- VALIDATE ali varre a tabela e pode abortar a migration; NOT VALID nao varre.
+--
+-- E nao afrouxa para quem ESCREVE: todo INSERT e UPDATE e checado. O que
+-- NOT VALID dispensa e so a varredura do que ja estava gravado.
 --
 -- A cota conta `Goleiro` contra tudo que nao e `Goleiro`, entao ela conta certo
 -- em qualquer um dos tres vocabularios, inclusive num dump legado.

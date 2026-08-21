@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   CANONICAL_POSITIONS,
+  POSITION_ALIASES,
   normalizePreferredPosition,
   type CanonicalPosition,
 } from "./position";
@@ -19,9 +20,10 @@ describe("normalizePreferredPosition", () => {
     }
   });
 
-  // O vocabulario dos 64 jogadores que ja estao no banco. MEDIDO em
-  // 2026-08-20: Fixo 16, Ala Esquerda 16, Ala Direita 16, Pivo 8, Goleiro 8.
-  it("converte o futsal dos 64 atuais para canonico", () => {
+  // Vocabulario de futsal. NAO existe em dado real: producao (80) e staging (82)
+  // estao 100% canonicos, medido em 2026-08-21. Vinha do seed local, ja alinhado.
+  // Fica coberto porque o CSV de import aceita celula arbitraria.
+  it("converte o vocabulario de futsal para canonico", () => {
     expect(pos("Fixo")).toBe("Zagueiro");
     expect(pos("Ala Esquerda")).toBe("Meia");
     expect(pos("Ala Direita")).toBe("Meia");
@@ -80,8 +82,24 @@ describe("normalizePreferredPosition", () => {
     }
   });
 
-  // O teste que amarra a funcao a constraint. Sem ele, alguem acrescenta um
-  // mapeamento novo com valor fora do enum e descobre em producao.
+  // O teste que amarra a funcao a constraint. Itera a TABELA de aliases, e nao um
+  // corpus escrito a mao: com corpus, um alias novo cuja chave ninguem listou
+  // aqui passava batido, e quem pegava de fato era o `tsc` pelo
+  // `Record<string, CanonicalPosition>`. Agora a afirmacao e verdadeira no teste.
+  it("NENHUM alias da tabela produz valor fora do enum", () => {
+    const permitido: (CanonicalPosition | null)[] = [...CANONICAL_POSITIONS, null];
+    const chaves = Object.keys(POSITION_ALIASES);
+    expect(chaves.length).toBeGreaterThan(10);
+    for (const chave of chaves) {
+      expect(permitido).toContain(normalizePreferredPosition(chave).position);
+      // E o alias nao pode virar null: chave da tabela tem de mapear.
+      expect(normalizePreferredPosition(chave).position).not.toBeNull();
+    }
+    for (const valor of Object.values(POSITION_ALIASES)) {
+      expect(CANONICAL_POSITIONS).toContain(valor);
+    }
+  });
+
   it("NENHUMA saida escapa dos quatro valores ou de null", () => {
     const corpus = [
       ...CANONICAL_POSITIONS,

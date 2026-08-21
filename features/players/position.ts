@@ -69,14 +69,15 @@ function fold(raw: string): string {
  * Os grupos, e a razao de cada um:
  *  - identidade: as quatro palavras, mais os quatro codigos de POSITION_LABELS
  *    em `lib/public/types.ts`.
- *  - futsal: e o vocabulario dos 64 jogadores que ja estao no banco. O fixo e o
+ *  - futsal: vocabulario que NAO existe em dado real (ver ALCANCE acima); entra
+ *    so por planilha. O fixo e o
  *    defensor; as alas sao o corredor, meio-campo na taxonomia de quatro; o pivo
  *    e o homem de referencia a frente.
  *  - `ala` sozinho: extrapolacao minha, e segura — as DUAS alas listadas
  *    concordam em `Meia`, entao nao ha o que desempatar.
  *  - volante: meio-campo defensivo.
  */
-const ALIASES: Record<string, CanonicalPosition> = {
+export const POSITION_ALIASES: Record<string, CanonicalPosition> = {
   goleiro: "Goleiro",
   gol: "Goleiro",
   zagueiro: "Zagueiro",
@@ -132,7 +133,7 @@ export function normalizePreferredPosition(
   // `unrecognized` e o admin ve o aviso em vez de perder o dado em silencio.
   if (!/[a-z0-9]/.test(key)) return { kind: "empty", position: null };
 
-  const canonical = ALIASES[key];
+  const canonical = POSITION_ALIASES[key];
   if (canonical) return { kind: "mapped", position: canonical };
 
   return { kind: "unrecognized", position: null, raw };

@@ -286,11 +286,11 @@ export default function RegistrationWizard({
           email: p.email ?? "",
           whatsapp: p.whatsapp ? formatPhoneBR(p.whatsapp) : "", birth_date: (p.birth_date ?? "").slice(0, 10),
           birth_state: p.birth_state ?? "", instagram: p.instagram ?? "",
-          // Normaliza o que veio do banco: 56 dos 64 jogadores estao em
-          // vocabulario de futsal, e `Fixo` nao casa com NENHUMA das quatro
-          // opcoes do select abaixo -- caia aqui e o jogador que volta a se
-          // inscrever via o campo em branco e levava erro do Zod num campo
-          // que ele nunca tocou.
+          // Normaliza o que veio do banco: valor fora das quatro opcoes do
+          // select abaixo nao casa com nenhuma, e o jogador que volta a se
+          // inscrever via o campo em branco e levava erro do Zod num campo que
+          // nunca tocou. Producao e staging estao 100% canonicos hoje (medido em
+          // 2026-08-21), entao quem cai aqui e nulo ou dado vindo do CSV.
           preferred_position:
             normalizePreferredPosition(p.preferred_position).position ?? "Meia",
           height: p.height != null ? heightToMask(p.height) : "",

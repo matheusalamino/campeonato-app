@@ -52,7 +52,12 @@ const semComentario = (src: string) =>
   src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
 
 describe("fiacao: import-players normaliza a posicao", () => {
-  const src = ler(IMPORT);
+  // JA sem comentario: toda assertiva deste arquivo mede CODIGO. A versao
+  // anterior aplicava semComentario em UMA assertiva -- a que ja tinha queimado
+  // -- e as outras nove liam texto cru. Duas mutacoes reais atravessaram os 494
+  // testes por isso: apagar o throw do desconhecido e devolver o isGk para
+  // `row["Posição"]`, ambas deixando a versao boa virar comentario logo acima.
+  const src = semComentario(ler(IMPORT));
 
   it("importa a funcao de features/", () => {
     expect(src).toMatch(
@@ -62,6 +67,8 @@ describe("fiacao: import-players normaliza a posicao", () => {
 
   it("NAO grava mais a celula crua em preferred_position", () => {
     expect(src).not.toMatch(/preferred_position:\s*safeString\(/);
+    // E nenhum acesso cru a linha do CSV, seja qual for a grafia.
+    expect(src).not.toMatch(/preferred_position:\s*[^,\n]*row\[/);
   });
 
   it("os DOIS escritores gravam o valor normalizado", () => {
@@ -94,15 +101,18 @@ describe("fiacao: import-players normaliza a posicao", () => {
   });
 
   it("o isGk olha o canonico, e nao a celula crua", () => {
-    expect(src).toMatch(
-      /isGk\s*=\s*normalizePreferredPosition\([\s\S]{0,80}?\)\.position\s*===\s*["']Goleiro["']/,
-    );
-    expect(src).not.toMatch(/isGk\s*=\s*safeString\(/);
+    const m = src.match(/const\s+isGk\s*=\s*([^;]+);/);
+    expect(m).not.toBeNull();
+    const rhs = m![1];
+    // Exige a FORMA, em vez de proibir uma grafia: a negativa antiga bloqueava
+    // `safeString(` e deixava passar `row["Posição"] === "Goleiro"` cru.
+    expect(rhs).toMatch(/^normalizePreferredPosition\(/);
+    expect(rhs).toMatch(/\.position\s*===\s*["']Goleiro["']/);
   });
 });
 
 describe("fiacao: EditPlayerForm olha o erro e normaliza a semente", () => {
-  const src = ler(EDIT);
+  const src = semComentario(ler(EDIT));
 
   it("destrutura o error do update", () => {
     expect(src).toMatch(/const\s*\{\s*error\s*(?::\s*\w+\s*)?\}\s*=\s*await\s+supabase/);
@@ -111,7 +121,7 @@ describe("fiacao: EditPlayerForm olha o erro e normaliza a semente", () => {
   it("um update recusado NAO chega ao router.refresh()", () => {
     // Ha um `if (error) { ... return; }` ANTES do refresh. Sobre codigo, e nao
     // sobre prosa: ver `semComentario` acima.
-    const codigo = semComentario(src);
+    const codigo = src;
     const guarda = codigo.match(/if\s*\(\s*error\s*\)\s*\{[\s\S]{0,300}?return\s*;[\s\S]*?\}/);
     expect(guarda).not.toBeNull();
     const iGuarda = codigo.search(/if\s*\(\s*error\s*\)/);
@@ -130,7 +140,7 @@ describe("fiacao: EditPlayerForm olha o erro e normaliza a semente", () => {
 });
 
 describe("fiacao: o prefill do wizard normaliza", () => {
-  const src = ler(WIZARD);
+  const src = semComentario(ler(WIZARD));
 
   it("nao joga mais o valor cru do banco no select de quatro opcoes", () => {
     expect(src).not.toMatch(/preferred_position:\s*p\.preferred_position\s*\?\?/);
