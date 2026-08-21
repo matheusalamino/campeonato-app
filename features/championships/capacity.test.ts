@@ -38,7 +38,7 @@ describe("shouldCloseForCapacity", () => {
 });
 
 describe("derivedCapacity", () => {
-  /** O formato de 2026, que os testes abaixo variam um fator por vez. */
+  /** O formato de 2026. Os testes variam um fator por vez a partir dele. */
   const hoje = {
     teamsCount: 8, playersPerTeam: 10, goalkeepersPerTeam: 1,
     waitlistGoalkeepers: 1, waitlistOutfield: 4,
@@ -74,12 +74,13 @@ describe("derivedCapacity", () => {
     });
   });
 
-  it("zero times fecha tudo, em vez de abrir tudo", () => {
-    expect(derivedCapacity({ ...hoje, teamsCount: 0, waitlistGoalkeepers: 0, waitlistOutfield: 0 }))
-      .toEqual({
-        total: 0, goalkeepers: 0, outfield: 0,
-        waitlistGoalkeepers: 0, waitlistOutfield: 0, waitlistTotal: 0,
-      });
+  it("cota absurda continua presa ao total, e nao vira zero goleiro", () => {
+    expect(derivedCapacity({
+      ...hoje, teamsCount: 3000, playersPerTeam: 10, goalkeepersPerTeam: 800000,
+    })).toEqual({
+      total: 30000, goalkeepers: 30000, outfield: 0,
+      waitlistGoalkeepers: 1, waitlistOutfield: 4, waitlistTotal: 5,
+    });
   });
 
   it("sem formato nao ha fila: a espera fecha junto, mesmo configurada", () => {
@@ -103,13 +104,6 @@ describe("derivedCapacity", () => {
     });
   });
 
-  it("numero de times negativo fecha o campeonato", () => {
-    expect(derivedCapacity({ ...hoje, teamsCount: -8 })).toEqual({
-      total: 0, goalkeepers: 0, outfield: 0,
-      waitlistGoalkeepers: 0, waitlistOutfield: 0, waitlistTotal: 0,
-    });
-  });
-
   it("dois campos negativos nao se multiplicam num campeonato inteiro", () => {
     expect(derivedCapacity({ ...hoje, teamsCount: -8, playersPerTeam: -10 })).toEqual({
       total: 0, goalkeepers: 0, outfield: 0,
@@ -117,37 +111,51 @@ describe("derivedCapacity", () => {
     });
   });
 
-  it("campo vazio no admin fecha, em vez de virar NULL no banco", () => {
+  it("NaN no formato fecha, em vez de virar NULL e valer ilimitado", () => {
     expect(derivedCapacity({ ...hoje, teamsCount: Number.NaN })).toEqual({
       total: 0, goalkeepers: 0, outfield: 0,
       waitlistGoalkeepers: 0, waitlistOutfield: 0, waitlistTotal: 0,
     });
   });
 
-  it("infinito fecha, em vez de virar NaN na subtracao da linha", () => {
-    expect(derivedCapacity({ ...hoje, teamsCount: Number.POSITIVE_INFINITY })).toEqual({
+  it("NaN na espera de goleiro zera aquele balde, e nao a fila toda", () => {
+    expect(derivedCapacity({ ...hoje, waitlistGoalkeepers: Number.NaN })).toEqual({
+      total: 80, goalkeepers: 8, outfield: 72,
+      waitlistGoalkeepers: 0, waitlistOutfield: 4, waitlistTotal: 4,
+    });
+  });
+
+  it("NaN na espera de linha zera aquele balde, e nao a fila toda", () => {
+    expect(derivedCapacity({ ...hoje, waitlistOutfield: Number.NaN })).toEqual({
+      total: 80, goalkeepers: 8, outfield: 72,
+      waitlistGoalkeepers: 1, waitlistOutfield: 0, waitlistTotal: 1,
+    });
+  });
+
+  it("total que nao cabe em int4 fecha, em vez de estourar a coluna", () => {
+    expect(derivedCapacity({ ...hoje, teamsCount: 3000, playersPerTeam: 800000 })).toEqual({
       total: 0, goalkeepers: 0, outfield: 0,
       waitlistGoalkeepers: 0, waitlistOutfield: 0, waitlistTotal: 0,
     });
   });
 
-  it("produto que estoura para infinito fecha, em vez de virar NaN", () => {
-    expect(derivedCapacity({ ...hoje, teamsCount: 1e308, playersPerTeam: 1e308 })).toEqual({
-      total: 0, goalkeepers: 0, outfield: 0,
+  it("fila que nao cabe em int4 fecha a fila inteira, sem mentir no total dela", () => {
+    expect(derivedCapacity({ ...hoje, waitlistGoalkeepers: 2e9, waitlistOutfield: 2e9 })).toEqual({
+      total: 80, goalkeepers: 8, outfield: 72,
       waitlistGoalkeepers: 0, waitlistOutfield: 0, waitlistTotal: 0,
     });
   });
 
-  it("meio jogador nao existe: o piso vale por fator, e max_players e inteiro", () => {
-    expect(derivedCapacity({ ...hoje, teamsCount: 3, playersPerTeam: 10.5 })).toEqual({
-      total: 30, goalkeepers: 3, outfield: 27,
+  it("time e cota fracionarios sao chao antes de multiplicar", () => {
+    expect(derivedCapacity({ ...hoje, teamsCount: 8.5, goalkeepersPerTeam: 1.5 })).toEqual({
+      total: 80, goalkeepers: 8, outfield: 72,
       waitlistGoalkeepers: 1, waitlistOutfield: 4, waitlistTotal: 5,
     });
   });
 
-  it("o piso vale em cada um dos tres fatores, nao no produto", () => {
-    expect(derivedCapacity({ ...hoje, teamsCount: 8.5, playersPerTeam: 10.5, goalkeepersPerTeam: 1.5 })).toEqual({
-      total: 80, goalkeepers: 8, outfield: 72,
+  it("meio jogador nao existe: 3 times de 10,5 dao 30 vagas, e nao 31", () => {
+    expect(derivedCapacity({ ...hoje, teamsCount: 3, playersPerTeam: 10.5 })).toEqual({
+      total: 30, goalkeepers: 3, outfield: 27,
       waitlistGoalkeepers: 1, waitlistOutfield: 4, waitlistTotal: 5,
     });
   });
