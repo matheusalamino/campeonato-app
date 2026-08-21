@@ -49,8 +49,9 @@ const MAX_INT4 = 2_147_483_647;
  * int4. Fora dessa faixa devolve 0 — que aqui significa FECHADO, nao "sem
  * valor".
  *
- * Nao se chama `seats` porque em 3 dos 6 sitios nao ha vaga nenhuma: um time
- * nao e uma vaga, e cota-por-time nem e um total.
+ * Nao se chama `seats` porque em 3 dos 6 sitios nao ha vaga nenhuma:
+ * `teamsCount` conta times, e `playersPerTeam` e `goalkeepersPerTeam` sao taxas
+ * por time. Vaga so nos outros tres: o produto e os dois baldes da espera.
  *
  * O `Number.isFinite` esta aqui pelo NaN, e o motivo e o mesmo do modulo:
  * `JSON.stringify(NaN)` e `null`, e `max_players` NULL faz
