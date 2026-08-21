@@ -7,24 +7,11 @@ import {
   normalizePreferredPosition,
   type CanonicalPosition,
 } from "./position";
+import { semComentarioSql } from "@/features/testing/sem-comentario";
 
 /** Atalho: so o valor canonico, para as tabelas de caso abaixo. */
 const pos = (raw: string | null | undefined) =>
   normalizePreferredPosition(raw).position;
-
-/**
- * O SQL sem comentario: `--` de linha e bloco `/* *\/`.
- *
- * Separado do irmao de TypeScript de proposito. Em SQL `--` e comentario; em
- * TypeScript `--` e decremento (`i--`), entao um stripper unico que apagasse
- * `--.*$` nos dois idiomas comeria CODIGO nos arquivos `.ts`.
- *
- * Limite conhecido e aceito: um `--` DENTRO de string literal SQL seria cortado
- * junto. Nao ha nenhum nesta migration, e a alternativa (tokenizar SQL) custa
- * mais do que a assertiva vale.
- */
-const semComentarioSql = (sql: string) =>
-  sql.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--[^\n]*/g, "");
 
 describe("normalizePreferredPosition", () => {
   it("passa os quatro canonicos por identidade", () => {

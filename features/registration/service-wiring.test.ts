@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { semComentario } from "@/features/testing/sem-comentario";
 
 /**
  * A fiacao do servico publico de inscricao, lida como texto.
@@ -43,21 +44,7 @@ import { join } from "node:path";
  */
 const SERVICO = join(process.cwd(), "services/public-registration.ts");
 
-/**
- * O arquivo sem comentarios, como nos dois irmaos.
- *
- * Os comentarios daqui CITAM as duas chamadas pelo nome — o docblock de
- * `reserveSlot` fala de `reservationFromRpc`, e o bloco acima do `if` fala de
- * `commit-refusal.ts`. Sem isto, o preco de comentar bem seria um teste que
- * passa medindo o comentario em vez do codigo.
- *
- * O `(?<!:)` guarda o `https://` de virar comentario de linha.
- */
-function semComentarios(fonte: string): string {
-  return fonte.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(?<!:)\/\/[^\n]*/g, "");
-}
-
-const servico = semComentarios(readFileSync(SERVICO, "utf8"));
+const servico = semComentario(readFileSync(SERVICO, "utf8"));
 
 /** Um unico casamento de `padrao`, com os grupos. Falha se nao houver exatamente um. */
 function achado(fonte: string, padrao: RegExp): RegExpMatchArray {

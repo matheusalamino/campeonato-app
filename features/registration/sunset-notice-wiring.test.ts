@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { semComentario } from "@/features/testing/sem-comentario";
 
 /**
  * A FIACAO das faixas da pausa no wizard, lida como texto.
@@ -8,7 +9,7 @@ import { join } from "node:path";
  * Nasceu so para o aviso do por do sol — dai o nome — e ganhou o vizinho no
  * ultimo round: `<SlotNotice>` tinha a mesma forma apagavel e era o unico dos
  * tres sem esta rede. Estao no mesmo arquivo porque sao o mesmo arquivo LIDO, o
- * mesmo `semComentarios`, os mesmos helpers.
+ * mesmo `semComentario`, os mesmos helpers.
  *
  * Fiacao, e so isso. As regras foram para funcoes puras e sao testadas de
  * verdade: `sunsetAlert`, `sunsetHasPassed`, `clockSkewMs` e `sunsetTimeLabel`
@@ -64,20 +65,7 @@ import { join } from "node:path";
  */
 const WIZARD = join(process.cwd(), "app/(public)/inscrever/[slug]/RegistrationWizard.tsx");
 
-/**
- * O arquivo sem comentarios, como em rest-overlay-source.test.ts.
- *
- * Nao e capricho: os comentarios deste arquivo CITAM as expressoes que os testes
- * procuram. Sem isto, o preco de comentar bem seria um teste que passa medindo o
- * comentario em vez do codigo.
- *
- * O `(?<!:)` guarda o `https://` de virar comentario de linha.
- */
-function semComentarios(fonte: string): string {
-  return fonte.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(?<!:)\/\/[^\n]*/g, "");
-}
-
-const wizard = semComentarios(readFileSync(WIZARD, "utf8"));
+const wizard = semComentario(readFileSync(WIZARD, "utf8"));
 
 /** O valor de `prop={...}` na abertura de tag, como em sabbath-page-wiring. */
 function prop(tag: string, nome: string): string | null {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { semComentario } from "@/features/testing/sem-comentario";
 
 /**
  * A fiacao da normalizacao de posicao, lida como texto.
@@ -38,28 +39,6 @@ const EDIT = join(process.cwd(), "app/(protected)/players/[id]/EditPlayerForm.ts
 const WIZARD = join(process.cwd(), "app/(public)/inscrever/[slug]/RegistrationWizard.tsx");
 
 const ler = (p: string) => readFileSync(p, "utf8");
-
-/**
- * O texto SEM comentario.
- *
- * Nao e purismo: a primeira versao deste arquivo reprovou porque a assertiva
- * posicional achou `router.refresh()` DENTRO do comentario que explica por que
- * ele nao pode ser alcancado — prosa casando como se fosse codigo, e a ordem
- * saindo invertida (2215 antes de 2327). Assertiva de controle tem de casar o
- * CODIGO.
- *
- * A versao anterior era `/^[ \t]*\/\/.*$/gm`, ANCORADA em inicio de linha, e por
- * isso so pegava comentario de linha inteira. Comentario no RABO de linha de
- * codigo sobrevivia, e alimentava as assertivas posicionais como se fosse
- * codigo. Mutacao medida que atravessou: tirar o `return;` de dentro do
- * `if (error)` do EditPlayerForm e deixar `// TODO: voltar o return;` no fim da
- * linha do `toast.error` — dentro do bloco, entao nem recortar o bloco salva.
- *
- * O `(?<!:)` guarda o `https://` de virar comentario de linha; e a mesma versao
- * de `features/registration/service-wiring.test.ts` e dos dois irmaos dela.
- */
-const semComentario = (src: string) =>
-  src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(?<!:)\/\/[^\n]*/g, "");
 
 /**
  * O corpo `{...}` do bloco que `padrao` abre, com as chaves balanceadas.

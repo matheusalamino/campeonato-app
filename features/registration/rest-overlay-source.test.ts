@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { semComentario } from "@/features/testing/sem-comentario";
 
 /**
  * Cinco fatos da tela de repouso, lidos como texto, em quatro casos.
@@ -44,25 +45,8 @@ import { join } from "node:path";
 const OVERLAY = join(process.cwd(), "app/(public)/inscrever/[slug]/RestOverlay.tsx");
 const VIDEO = join(process.cwd(), "app/(public)/inscrever/[slug]/steps/SabbathVideo.tsx");
 
-/**
- * O arquivo sem comentarios.
- *
- * Nao e capricho: a primeira versao deste teste falhou contra o codigo CERTO,
- * porque o docblock do SabbathVideo explica por que nao ha thumbnail e cita o
- * dominio da capa — texto em prosa casando com uma busca que queria codigo. Sem
- * isto, o preco de comentar bem seria um teste vermelho, e o jeito de deixar
- * verde seria apagar a explicacao.
- *
- * O `(?<!:)` na linha de baixo existe por causa de `https://`: sem ele, o strip
- * de `//` comeria a propria URL do embed e o teste do dominio passaria a medir
- * o nada.
- */
-function semComentarios(fonte: string): string {
-  return fonte.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(?<!:)\/\/[^\n]*/g, "");
-}
-
-const overlay = semComentarios(readFileSync(OVERLAY, "utf8"));
-const video = semComentarios(readFileSync(VIDEO, "utf8"));
+const overlay = semComentario(readFileSync(OVERLAY, "utf8"));
+const video = semComentario(readFileSync(VIDEO, "utf8"));
 
 describe("a tela de repouso do sabado", () => {
   // Sentinelas: um `indexOf` que devolve -1 ou um regex que casa zero linhas
