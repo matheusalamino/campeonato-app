@@ -81,6 +81,24 @@ const editarJogador = fonteDe(EDITAR_JOGADOR);
  */
 const SEM_PALAVRA = /["'`](Goleiro|Zagueiro|Meia|Atacante)["'`]/;
 
+/**
+ * Uma `<option>` inteira: valor CODIGO, rotulo PALAVRA, e as duas amarradas ao
+ * MESMO identificador pela referencia de volta.
+ *
+ * Amarradas de proposito, e a licao veio de uma mutacao que sobreviveu: com
+ * `CANONICAL_POSITIONS.map(` e `POSITION_LABELS[` asseverados SEPARADAMENTE,
+ * trocar as duas pontas —
+ *
+ *     <option key={codigo} value={POSITION_LABELS[codigo]}>{codigo}</option>
+ *
+ * — passava com os 509 testes verdes, e e exatamente o defeito que esta task
+ * existe para matar: o select volta a submeter a palavra, e o insert volta a
+ * bater na CHECK. O `\s*` entre as partes tolera a quebra de linha do
+ * formatador, que nao e invariante nenhuma.
+ */
+const OPCAO_CODIGO_ROTULO =
+  /<option\s+key=\{(\w+)\}\s+value=\{\1\}>\s*\{POSITION_LABELS\[\1\]\}\s*<\/option>/;
+
 describe("os formularios que escrevem posicao falam CODIGO", () => {
   // Sentinela: um arquivo movido de lugar leria vazio, e toda assertiva de
   // ausencia abaixo passaria medindo o nada.
@@ -119,7 +137,7 @@ describe("os formularios que escrevem posicao falam CODIGO", () => {
 
   it("o select do wizard oferece o codigo como valor e a palavra como rotulo", () => {
     expect(wizard).toMatch(/CANONICAL_POSITIONS\.map\(/);
-    expect(wizard).toMatch(/<option\s+key=\{\w+\}\s+value=\{\w+\}>\{POSITION_LABELS\[\w+\]\}/);
+    expect(wizard).toMatch(OPCAO_CODIGO_ROTULO);
     // A opcao vazia e o que torna a escolha obrigatoria na tela: sem ela o
     // select mostraria a primeira posicao ja selecionada e o jogador enviaria
     // `GOL` sem ter escolhido nada.
@@ -128,19 +146,20 @@ describe("os formularios que escrevem posicao falam CODIGO", () => {
 
   it("o cadastro de jogador do admin sai da constante", () => {
     expect(criarJogador).toMatch(/CANONICAL_POSITIONS\.map\(/);
-    expect(criarJogador).toMatch(/POSITION_LABELS\[/);
+    expect(criarJogador).toMatch(OPCAO_CODIGO_ROTULO);
     expect(criarJogador).not.toMatch(SEM_PALAVRA);
   });
 
   it("o formulario de avaliacao decide o goleiro pelo codigo", () => {
     expect(formJogador).toMatch(/===\s*"GOL"/);
     expect(formJogador).toMatch(/CANONICAL_POSITIONS\.map\(/);
+    expect(formJogador).toMatch(OPCAO_CODIGO_ROTULO);
     expect(formJogador).not.toMatch(SEM_PALAVRA);
   });
 
   it("a edicao de jogador mostra a palavra, e nao o codigo cru", () => {
     expect(editarJogador).toMatch(/CANONICAL_POSITIONS\.map\(/);
-    expect(editarJogador).toMatch(/POSITION_LABELS\[/);
+    expect(editarJogador).toMatch(OPCAO_CODIGO_ROTULO);
     expect(editarJogador).not.toMatch(SEM_PALAVRA);
   });
 });
