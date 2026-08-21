@@ -67,15 +67,20 @@ function fold(raw: string): string {
  * Chaves em forma dobrada (`fold`), valores canonicos.
  *
  * Os grupos, e a razao de cada um:
- *  - identidade: as quatro palavras, mais os quatro codigos de POSITION_LABELS
- *    em `lib/public/types.ts`.
+ *  - identidade: as quatro palavras canonicas, mais os SEIS codigos de
+ *    POSITION_LABELS em `lib/public/types.ts` — GOL, ZAG, LAT, VOL, MEI e ATA.
+ *    Sao seis, e nao quatro: `LAT` e `VOL` estao la junto com os outros, e por
+ *    isso `lateral`/`volante` e `lat`/`vol` entram por esta porta, e nao por
+ *    extrapolacao. O que eles tem de diferente e so o destino — POSITION_LABELS
+ *    tem seis rotulos e a CHECK aceita quatro valores, entao os dois excedentes
+ *    precisam de um canonico de chegada (ambos `Meia`; a decisao do `lateral`
+ *    esta anotada no proprio mapa abaixo).
  *  - futsal: vocabulario que NAO existe em dado real (ver ALCANCE acima); entra
  *    so por planilha. O fixo e o
  *    defensor; as alas sao o corredor, meio-campo na taxonomia de quatro; o pivo
  *    e o homem de referencia a frente.
- *  - `ala` sozinho: extrapolacao minha, e segura — as DUAS alas listadas
- *    concordam em `Meia`, entao nao ha o que desempatar.
- *  - volante: meio-campo defensivo.
+ *  - `ala` sozinho: a UNICA extrapolacao deste mapa, e segura — as DUAS alas
+ *    listadas concordam em `Meia`, entao nao ha o que desempatar.
  */
 export const POSITION_ALIASES: Record<string, CanonicalPosition> = {
   goleiro: "Goleiro",

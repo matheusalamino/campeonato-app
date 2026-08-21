@@ -46,11 +46,29 @@ limpar() {
 
 # Campeonato com 2 vagas principais e 1 de espera — numeros pequenos para os
 # limites aparecerem rapido.
+#
+# As cinco colunas do formato entram aqui com o formato de 2026 (8 x 10, 1 goleiro
+# por time, espera de 1 + 4) para a assertiva do fim do arquivo nao depender do
+# SEED. Nao interferem em nenhum cenario acima: as duas RPCs leem `max_players` e
+# `max_waitlist_players`, e nada mais -- quem as ligar ao codigo e a T3.
+#
+# Antes elas ficavam so no seed, e aquela era a UNICA assertiva do script que
+# dependia dele. Num banco vindo de `scripts/restore-local-from-dump.sh` o SELECT
+# voltava vazio e o script quebrava comparando "" com "80|8|72|5" -- falha com
+# zero relacao com as RPCs, no arquivo cujo assunto sao as RPCs. Medido: exit 1,
+# 39 assertivas, 1 FALHOU.
 preparar() {
   limpar
   $DB -c "
-    INSERT INTO championships (id, name, slug, status, max_players, max_waitlist_players)
-    VALUES ('$CHAMP', 'Teste A4', 'teste-a4', 'subscribing', 2, 1);
+    INSERT INTO championships (
+      id, name, slug, status, max_players, max_waitlist_players,
+      teams_count, players_per_team, goalkeepers_per_team,
+      waitlist_goalkeepers, waitlist_outfield
+    )
+    VALUES (
+      '$CHAMP', 'Teste A4', 'teste-a4', 'subscribing', 2, 1,
+      8, 10, 1, 1, 4
+    );
   " > /dev/null
 }
 
@@ -568,15 +586,24 @@ checar "as cinco colunas do formato existem" "5" "$(echo "$r" | tr -d ' ')"
 r=$($DB -c "SELECT convalidated::text FROM pg_constraint WHERE conname = 'players_preferred_position_known';")
 checar "a CHECK da posicao segue NOT VALID" "false" "$(echo "$r" | tr -d ' ')"
 
-# E a forma derivada casa a formula: 8 x 10 = 80, 8 de goleiro, 72 de linha,
-# espera 5. Os mesmos numeros que derivedCapacity devolve para esta config.
+# As cinco colunas guardam numero, e a aritmetica sobre elas fecha nos mesmos
+# 80/8/72/5 que derivedCapacity devolve para o formato de 2026.
+#
+# O nome antigo dizia que o formato "deriva" 80/8/72/5, e nada derivava: o SQL
+# abaixo refaz `8 x 10` na mao, e nenhuma linha deste script chama
+# derivedCapacity. O que a assertiva mede e que as colunas sao gravaveis, sao
+# numericas e guardam o formato -- se o codigo e o SQL divergirem na FORMULA,
+# quem pega e `features/championships/capacity.test.ts`, e nao esta linha.
+#
+# Contra `$CHAMP`, que `preparar()` acabou de criar, e nao contra o seed: ver a
+# nota em preparar().
 r=$($DB -c "
   SELECT teams_count * players_per_team || '|' ||
          teams_count * goalkeepers_per_team || '|' ||
          (teams_count * players_per_team - teams_count * goalkeepers_per_team) || '|' ||
          (waitlist_goalkeepers + waitlist_outfield)
-    FROM championships WHERE id = '10000000-0000-0000-0000-000000000001';")
-checar "o formato do seed deriva 80/8/72/5" "80|8|72|5" "$(echo "$r" | tr -d ' ')"
+    FROM championships WHERE id = '$CHAMP';")
+checar "a aritmetica sobre as cinco colunas fecha em 80|8|72|5 (o SQL refaz 8x10 na mao)" "80|8|72|5" "$(echo "$r" | tr -d ' ')"
 
 limpar
 
