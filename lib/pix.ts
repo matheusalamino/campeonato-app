@@ -13,6 +13,12 @@
 const PIX_GUI = "br.gov.bcb.pix";
 const MAX_NAME = 25;
 const MAX_CITY = 15;
+/**
+ * O campo 26 declara o proprio tamanho em dois digitos, entao ele nao passa de
+ * 99 bytes. Dentro dele moram o GUI, a chave e a descricao — e a chave e quem
+ * manda: um e-mail no teto do padrao (77) consome o campo inteiro sozinho.
+ */
+const MAX_MERCHANT_ACCOUNT = 99;
 
 /**
  * `TextEncoder` e nao `Buffer`: este modulo tambem roda no navegador, dentro do
@@ -60,6 +66,20 @@ function sliceBytes(value: string, max: number): string {
 }
 
 /**
+ * Como `sliceBytes`, mas recuando ate o fim da ultima palavra inteira.
+ *
+ * A descricao e o texto que o pagador le como referencia do pagamento, entao
+ * entregar "Sorocaba" como "Sor" e pior do que entregar uma palavra a menos.
+ */
+function sliceWords(value: string, max: number): string {
+  const cortado = sliceBytes(value, max);
+  if (cortado === value) return value;
+  const fim = cortado.lastIndexOf(" ");
+  // Sem espaco onde recuar — uma palavra so —, o corte por bytes fica.
+  return fim > 0 ? cortado.slice(0, fim) : cortado;
+}
+
+/**
  * CRC-16/CCITT-FALSE, exigido pelo padrao no campo 63.
  *
  * O calculo cobre todo o payload ja incluindo o "6304" do proprio campo, por
@@ -99,7 +119,12 @@ export function buildPixPayload({
   amount,
   txid,
 }: PixPayloadInput): string {
-  const merchantAccount = field("00", PIX_GUI) + field("01", key) + field("02", description);
+  const identificacao = field("00", PIX_GUI) + field("01", key);
+  // O que sobra do campo 26 depois do GUI e da chave. O `- 4` e o cabecalho do
+  // proprio campo 02: sem espaco nem para ele, a descricao nao entra.
+  const orcamento = MAX_MERCHANT_ACCOUNT - byteLength(identificacao) - 4;
+  const referencia = orcamento > 0 ? sliceWords(description, orcamento) : "";
+  const merchantAccount = identificacao + (referencia ? field("02", referencia) : "");
 
   let payload =
     field("00", "01") +

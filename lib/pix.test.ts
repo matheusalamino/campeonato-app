@@ -170,6 +170,80 @@ describe("o corte de nome e cidade", () => {
   });
 });
 
+describe("o orcamento da descricao", () => {
+  /** O campo 26 declara o tamanho em dois digitos, entao nao passa de 99. */
+  function campo26(p: string) {
+    return campos(p).find((c) => c.id === "26")!;
+  }
+
+  it("a descricao do campeonato cabe inteira, sem cortar no meio da palavra", () => {
+    // O caso real: com `.slice(0, 30)` fixo isto saia "Inscricao Champions
+    // League Sor", com "Sorocaba" partida.
+    const p = buildPixPayload({
+      key: "wellmmer@outlook.com",
+      merchantName: "Wellmmer Lucas de Olivei",
+      merchantCity: "Sao Paulo",
+      description: "Inscricao Champions League Sorocaba",
+      amount: 100,
+      txid: "CMS0123456789",
+    });
+    const sub = campos(campo26(p).valor);
+    expect(sub.find((c) => c.id === "02")!.valor).toBe("Inscricao Champions League Sorocaba");
+  });
+
+  it("quando nao cabe, corta em palavra inteira", () => {
+    const p = buildPixPayload({
+      // Chave de 36 (aleatoria) encolhe o orcamento para 37 bytes.
+      key: "123e4567-e89b-12d3-a456-426614174000",
+      merchantName: "N", merchantCity: "C",
+      description: "Inscricao Campeonato Municipal de Sorocaba",
+      txid: "T1",
+    });
+    const texto = campos(campo26(p).valor).find((c) => c.id === "02")!.valor;
+    expect(texto).toBe("Inscricao Campeonato Municipal de");
+    expect(texto.endsWith("Sor")).toBe(false);
+  });
+
+  it("o campo 26 nunca passa de 99 bytes", () => {
+    for (const key of [
+      "a@b.com",
+      "123e4567-e89b-12d3-a456-426614174000",
+      "u".repeat(62) + "@dominio.com.br", // e-mail de 77 bytes: o teto que cabe no 26
+    ]) {
+      const p = buildPixPayload({
+        key, merchantName: "N", merchantCity: "C",
+        description: "Inscricao ".repeat(20), txid: "T1",
+      });
+      expect(Buffer.byteLength(campo26(p).valor, "utf8")).toBeLessThanOrEqual(99);
+    }
+  });
+
+  it("com a chave ocupando tudo, a descricao e omitida em vez de estourar", () => {
+    // 77 e o teto da chave: 99 do campo 26, menos 18 do GUI, menos os 4 do
+    // cabecalho da propria chave. No teto ela consome o campo inteiro, e nao
+    // sobra nem o cabecalho do 02.
+    const p = buildPixPayload({
+      key: "u".repeat(62) + "@dominio.com.br",
+      merchantName: "N", merchantCity: "C",
+      description: "Inscricao Champions League", txid: "T1",
+    });
+    const sub = campos(campo26(p).valor);
+    expect(sub.map((c) => c.id)).toEqual(["00", "01"]);
+  });
+
+  it("palavra unica longa demais cai no corte por bytes", () => {
+    // Sem espaco onde cortar, cortar em palavra inteira devolveria vazio.
+    const p = buildPixPayload({
+      key: "123e4567-e89b-12d3-a456-426614174000",
+      merchantName: "N", merchantCity: "C",
+      description: "A".repeat(60), txid: "T1",
+    });
+    const texto = campos(campo26(p).valor).find((c) => c.id === "02")!.valor;
+    expect(texto.length).toBeGreaterThan(0);
+    expect(texto).toBe("A".repeat(37));
+  });
+});
+
 describe("makePixTxid", () => {
   it("gera identificador dentro do limite do padrao", async () => {
     const { makePixTxid } = await import("./pix");
