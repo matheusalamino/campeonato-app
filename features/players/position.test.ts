@@ -47,6 +47,13 @@ describe("normalizePreferredPosition", () => {
     // `POSITION_ALIASES[key]` alcanca o prototipo: uma celula de planilha com a
     // palavra `constructor` produzia `{ kind: "mapped", position: <function> }`,
     // e a funcao ia para o insert.
+    //
+    // SO `constructor` sobrevive ao `fold`, e a lista abaixo nao promete mais
+    // que isso: `fold` minuscula antes do lookup, entao `toString` chega como
+    // `tostring`, `valueOf` como `valueof` e `hasOwnProperty` como
+    // `hasownproperty` -- nenhum desses tres existe em Object.prototype, e os
+    // tres ja saiam `unrecognized` ANTES do guarda. Ficam como regressao barata
+    // caso alguem tire o lowercase do `fold` e reabra a porta para eles.
     for (const veneno of ["constructor", "toString", "valueOf", "hasOwnProperty"]) {
       const r = normalizePreferredPosition(veneno);
       expect(r.kind).toBe("unrecognized");
@@ -157,7 +164,14 @@ describe("normalizePreferredPosition", () => {
   // quatro canonicos (medido em 2026-08-21). Esta assertiva existe para o seed
   // nao voltar a divergir do mundo em silencio.
   it("o seed local usa SO vocabulario canonico", () => {
-    const seed = readFileSync(resolve(process.cwd(), "supabase/seed.sql"), "utf8");
+    // `semComentarioSql` aqui pelo mesmo motivo do irmao logo abaixo, e nao
+    // porque haja chamariz hoje: uma linha de exemplo em comentario `--` com
+    // posicao por extenso passaria a alimentar as assertivas como se fosse
+    // codigo. Dois testes vizinhos lendo o mesmo tipo de arquivo com defesas
+    // diferentes e como a proxima copia nasce furada.
+    const seed = semComentarioSql(
+      readFileSync(resolve(process.cwd(), "supabase/seed.sql"), "utf8"),
+    );
 
     // A coluna de posicao do CTE `player_seed`, e nao qualquer string do arquivo.
     //
@@ -171,7 +185,19 @@ describe("normalizePreferredPosition", () => {
       ...seed.matchAll(/'60000000-[0-9a-f-]+'[^\n]*?'([A-Za-zÀ-ÿ ]+)',\s*(?:true|false),\s*\d+\)/g),
     ].map((m) => m[1]);
 
-    expect(posicoes.length).toBeGreaterThan(0);
+    // DENOMINADOR FECHADO, e nao `> 0`. Com `> 0` a assertiva media o que a
+    // regex ACHOU, e nao o que o arquivo TEM: mutacao medida que passou 16/16
+    // verde -- sujar o prefixo de UUID de UMA linha e por `'Zagueiro'` nela. A
+    // linha ficava invisivel a regex, o conjunto `distintas` continuava so com
+    // codigo, e o seed resultante e recusado pela CHECK (`local:setup` quebra
+    // do zero).
+    //
+    // 192 = 64 jogadores x 3 blocos VALUES (players, championship_registrations
+    // e championship_team_players repetem a mesma lista). Se voce acrescentou
+    // jogador ao seed, atualize este numero -- e a falha aqui e o pedido de
+    // uma olhada humana, nao um estorvo.
+    expect(posicoes.length).toBe(192);
+
     const distintas = [...new Set(posicoes)].sort();
     expect(distintas).toEqual([...CANONICAL_POSITIONS].sort());
 
@@ -185,6 +211,12 @@ describe("normalizePreferredPosition", () => {
   // `'GOL'` -- o unico que a cota do A6 precisa exato, porque ela conta o
   // goleiro contra todo o resto.
   //
+  // Ela le o ARQUIVO, e nao o banco -- por isso o nome diz isso. Arquivo certo
+  // nao prova banco certo: uma `CHECK (true)` com este mesmo nome passaria aqui
+  // e no `convalidated` do script. Quem fecha esse buraco e a assertiva de
+  // `pg_get_constraintdef` em scripts/test-registration-slots.sh, que le a
+  // EXPRESSAO do pg_constraint. As duas sao lidas juntas.
+  //
   // A versao anterior lia o SQL CRU e casava a PRIMEIRA ocorrencia do texto no
   // arquivo. Mutacao medida que atravessou os 495 testes: apagar o goleiro da
   // DDL E deixar um comentario `--` acima com a lista velha inteira. O `match`
@@ -196,7 +228,7 @@ describe("normalizePreferredPosition", () => {
   //  - a ancora no `ADD CONSTRAINT players_preferred_position_known` mata o
   //    chamariz que NAO e comentario (outra CHECK, um COMMENT ON, uma linha de
   //    exemplo em string), porque prende o casamento ao constraint que importa.
-  it("a lista canonica do codigo e exatamente a da CHECK no banco", () => {
+  it("a lista canonica do codigo e exatamente a da CHECK no ARQUIVO da migration", () => {
     const bruto = readFileSync(
       resolve(process.cwd(), "supabase/migrations/20260821010000_position_vocabulary_codes.sql"),
       "utf8",

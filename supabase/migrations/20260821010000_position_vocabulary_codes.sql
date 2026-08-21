@@ -12,6 +12,13 @@
 --
 -- Medido em 2026-08-21, nos tres ambientes: 100% dos jogadores nos quatro
 -- canonicos, zero fora. local 64, staging 82, producao 80.
+--
+-- ORDEM DE DEPLOY: APP PRIMEIRO, ESTA MIGRATION DEPOIS. O DROP COLUMN abaixo
+-- torna isso obrigatorio -- bundle antigo pedindo `players(...,position)` leva
+-- 400 com 42703 e a requisicao INTEIRA falha, nao so o campo. Os dois leitores
+-- eram hooks "use client", entao quem esta com a aba aberta perde a pagina de
+-- jogo e o ranking de goleiros ate recarregar. Medido no stack local; o detalhe
+-- esta em MIGRATIONS.md, secao "Ordem de deploy".
 -- =============================================================================
 BEGIN;
 

@@ -149,7 +149,13 @@ export function useGoalkeeper(championshipId: string | null) {
           .eq("championship_id", championshipId),
       ]);
 
-      // Goalkeeper reg ids: position-based (GOL/Goleiro) + anyone with saves
+      // Goalkeeper reg ids: pela posicao + qualquer um com defesa registrada.
+      //
+      // A coluna so guarda `GOL` desde a 20260821010000; o `Goleiro` que ainda
+      // esta em GK_POSITIONS e VESTIGIAL, e nao um caso vivo. Fica ate a
+      // varredura do vocabulario passar por aqui -- tirar agora nao ganharia
+      // nada e perderia a rede para um dump antigo restaurado no meio do
+      // caminho.
       const gkRegIds = new Set<string>();
       for (const reg of regsRes.data ?? []) {
         const playersRel = reg.players as { preferred_position: string | null } | { preferred_position: string | null }[] | null;

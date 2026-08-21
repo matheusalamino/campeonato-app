@@ -1079,6 +1079,28 @@ checar "as cinco colunas do formato existem" "5" "$(echo "$r" | tr -d ' ')"
 r=$($DB -c "SELECT convalidated::text FROM pg_constraint WHERE conname = 'players_preferred_position_known';")
 checar "a CHECK da posicao entrou VALIDADA" "true" "$(echo "$r" | tr -d ' ')"
 
+# E a EXPRESSAO, e nao so o nome e o convalidated. Sem esta linha nada no repo
+# prendia o que a constraint FAZ no banco: o vitest le o ARQUIVO da migration
+# (features/players/position.test.ts) e a assertiva acima le so um booleano --
+# uma `CHECK (true)` batizada `players_preferred_position_known` passaria nas
+# duas, com o banco aceitando qualquer string na coluna.
+#
+# Le pg_get_constraintdef, e nao o texto da migration, porque e o CATALOGO que
+# responde: importa o que esta aplicado, nao o que o arquivo pediu.
+#
+# Extrai o CONJUNTO de codigos em vez de comparar a string inteira porque o
+# Postgres reescreve `IN (...)` como `= ANY (ARRAY[...])` -- comparar texto cru
+# quebraria por normalizacao, sem nenhum defeito real. Assim, sobrar codigo,
+# faltar codigo ou virar `CHECK (true)` (que da 'NENHUM') derruba a assertiva.
+r=$($DB -c "
+  SELECT coalesce(string_agg(codigo, ',' ORDER BY codigo), 'NENHUM') FROM (
+    SELECT DISTINCT m[1] AS codigo
+      FROM pg_constraint c,
+           LATERAL regexp_matches(pg_get_constraintdef(c.oid), '''([A-Z]{3})''::text', 'g') AS m
+     WHERE c.conname = 'players_preferred_position_known'
+  ) t;")
+checar "a CHECK da posicao lista os quatro codigos, e so eles" "ATA,GOL,MEI,ZAG" "$(echo "$r" | tr -d ' ')"
+
 # As cinco colunas guardam numero, e a aritmetica sobre elas fecha nos mesmos
 # 80/8/72/5 que derivedCapacity devolve para o formato de 2026.
 #

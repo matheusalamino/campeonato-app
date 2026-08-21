@@ -74,6 +74,41 @@ npm run db:push
 
 `npm run db:push` nao reseta o banco. Ele apenas aplica o diff pendente.
 
+## Ordem de deploy: app primeiro ou migration primeiro?
+
+A ordem so e indiferente quando a migration ACRESCENTA. Migration que REMOVE ou
+RENOMEIA coluna exige **app primeiro, migration depois** — o bundle antigo
+continua rodando na aba de quem ja estava com o site aberto, e ele nao sabe que
+a coluna sumiu.
+
+O ponto que costuma pegar de surpresa: no PostgREST a coluna que sumiu nao volta
+como `null`, e a requisicao INTEIRA falha. Medido no stack local em 2026-08-21,
+contra a `20260821010000_position_vocabulary_codes.sql`, que dropou
+`players.position`:
+
+```
+GET /rest/v1/championship_registrations?select=id,profile_photo_link,players(id,name,position)
+-> HTTP 400  {"code":"42703","message":"column players_1.position does not exist"}
+
+GET /rest/v1/championship_registrations?select=id,profile_photo_link,players(id,name,preferred_position)
+-> HTTP 200
+```
+
+Entao nao e um campo faltando na tela: e a consulta inteira morrendo.
+
+### O caso da 20260821010000
+
+Esta migration dropou `players.position` (a coluna GERADA de compatibilidade) e
+os dois leitores dela sao hooks `"use client"` — `features/hooks/useGoalkeeper.ts`
+e `features/hooks/useMatchDetail.ts`. Se a migration for antes do deploy do app,
+quem estiver com a aba aberta perde a pagina de jogo e o ranking de goleiros ate
+recarregar a pagina.
+
+Sequencia correta:
+
+1. Deploy do app (os hooks ja pedindo `preferred_position`).
+2. `npm run db:push` no ambiente.
+
 ## Seed local
 
 O seed local existe apenas para desenvolvimento:
@@ -92,3 +127,5 @@ Credenciais locais:
 - Nunca rode seed local em staging ou producao
 - Nunca aplique migrations sem validar localmente antes
 - Nunca aponte o fluxo diario de desenvolvimento para producao
+- Nunca aplique migration que REMOVE ou RENOMEIA coluna antes do deploy do app
+  (ver "Ordem de deploy" acima)
