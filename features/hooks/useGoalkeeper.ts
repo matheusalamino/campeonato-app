@@ -6,7 +6,19 @@ import type { GoalkeeperScore } from "@/types/goalkeeper";
 
 const supabase = createClient();
 
-const GK_POSITIONS = new Set(["GOL", "Goleiro"]);
+/**
+ * Um vocabulario, nao dois.
+ *
+ * O `"Goleiro"` que ficava ao lado do `GOL` era residuo da tentativa de codigos
+ * que o repo recuou em junho, e nao caso vivo: a 20260821010000 converteu o
+ * DADO, e a CHECK `players_preferred_position_known` recusa a palavra na
+ * escrita. Segundo vocabulario tolerado e o que fez todo este bloco existir.
+ *
+ * Nao ha `ZAG`/`MEI`/`ATA` a enumerar aqui de proposito: a conta e `GOL` contra
+ * tudo que nao e `GOL`, e e isso que tolera vocabulario novo entrando pelo CSV
+ * sem transformar um jogador de linha desconhecido em goleiro.
+ */
+const GK_POSITIONS = new Set(["GOL"]);
 
 type RawSave = {
   registration_id: string;
@@ -151,11 +163,11 @@ export function useGoalkeeper(championshipId: string | null) {
 
       // Goalkeeper reg ids: pela posicao + qualquer um com defesa registrada.
       //
-      // A coluna so guarda `GOL` desde a 20260821010000; o `Goleiro` que ainda
-      // esta em GK_POSITIONS e VESTIGIAL, e nao um caso vivo. Fica ate a
-      // varredura do vocabulario passar por aqui -- tirar agora nao ganharia
-      // nada e perderia a rede para um dump antigo restaurado no meio do
-      // caminho.
+      // A varredura do vocabulario JA passou por aqui: `GK_POSITIONS` tem um
+      // item so, e o motivo esta na propria constante.
+      //
+      // A segunda metade da conta e o que segura o caso de vocabulario torto —
+      // quem tem defesa registrada entra por defesa, tenha a posicao que tiver.
       const gkRegIds = new Set<string>();
       for (const reg of regsRes.data ?? []) {
         const playersRel = reg.players as { preferred_position: string | null } | { preferred_position: string | null }[] | null;

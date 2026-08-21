@@ -40,7 +40,11 @@ function positionHeaderClass(position: string) {
   const p = position.toUpperCase();
   if (p.includes("GOL")) return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (p.includes("ZAG")) return "border-blue-500/40 bg-blue-500/10 text-blue-200";
-  if (p.includes("MEIA")) return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  // `MEI`, e nao `MEIA`: o pote copia `players.preferred_position`, que guarda
+  // CODIGO desde a 20260821010000. `"MEI".includes("MEIA")` e falso, e o
+  // cabecalho do pote de meias caia no cinza do fallback — so cor, mas e o
+  // mesmo defeito calado dos outros doze sitios desta varredura.
+  if (p.includes("MEI")) return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (p.includes("ATA")) return "border-red-500/40 bg-red-500/10 text-red-200";
   return "border-zinc-600 bg-zinc-800/80 text-zinc-200";
 }

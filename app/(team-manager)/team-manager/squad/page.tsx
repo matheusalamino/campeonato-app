@@ -112,15 +112,12 @@ export default function SquadPage() {
 
   const positionCounts = players.reduce(
     (acc, p) => {
-      const pos =
-        p.position === "Goleiro"
-          ? "GOL"
-          : p.position === "Zagueiro"
-            ? "ZAG"
-            : p.position === "Meia"
-              ? "MEI"
-              : "ATA";
-      acc[pos] = (acc[pos] ?? 0) + 1;
+      // Sem conversao: `players.preferred_position` ja guarda o CODIGO desde a
+      // 20260821010000, e a cadeia palavra->sigla que estava aqui parou de casar
+      // qualquer ramo. Nao virou identidade — caia no `else` e contava TODO o
+      // elenco como `ATA`. Reescrever a cadeia em codigo seria identidade
+      // escrita a mao; o certo e nao ter cadeia.
+      acc[p.position] = (acc[p.position] ?? 0) + 1;
       return acc;
     },
     {} as Record<string, number>,

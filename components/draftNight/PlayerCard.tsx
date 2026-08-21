@@ -26,18 +26,6 @@ type RevealPlayer = {
   };
 };
 
-const POS_ABBR: Record<string, string> = {
-  Atacante: "ATA",
-  Zagueiro: "ZAG",
-  Meia: "MEI",
-  Goleiro: "GOL",
-  Lateral: "LAT",
-  Volante: "VOL",
-};
-function posAbbr(pos: string): string {
-  return POS_ABBR[pos] ?? pos.slice(0, 3).toUpperCase();
-}
-
 export function PlayerRadar({
   attributes,
 }: {
@@ -128,7 +116,16 @@ export default function PlayerCard(props: PlayerCardProps) {
           ],
         };
 
-  const pos = posAbbr(player.position);
+  // A etiqueta da carta E o codigo. O `player.position` chega de
+  // `draft_pots.position`, que a geracao de potes copia de
+  // `players.preferred_position` — codigo desde a 20260821010000.
+  //
+  // Aqui havia uma tabela `POS_ABBR` so de PALAVRA, encoberta por um
+  // `?? pos.slice(0, 3).toUpperCase()`: com codigo na entrada toda consulta
+  // errava e o fallback devolvia o proprio codigo. Mapa que so acerta quando
+  // nao e consultado nao e rede — e ruido que o proximo leitor toma por suporte
+  // a dois vocabularios.
+  const pos = player.position;
   const overall = player.overall ?? "—";
   const mid = Math.ceil(player.attributes.length / 2);
   const leftAttrs = player.attributes.slice(0, mid);

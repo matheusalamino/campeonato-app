@@ -96,7 +96,12 @@ export async function POST(req: Request) {
       const list = grouped[position];
 
       // 🧤 GOLEIRO
-      if (position === "Goleiro") {
+      //
+      // `GOL`, e nao `Goleiro`: `position` vem de `players.preferred_position`,
+      // que guarda CODIGO desde a 20260821010000. Errar aqui nao lanca erro —
+      // o pote exclusivo de goleiro (pote 1, `max_managers` 0) simplesmente
+      // deixa de existir, e os goleiros entram no rodizio de potes de linha.
+      if (position === "GOL") {
         for (const player of list) {
           inserts.push({
             championship_id: championshipId,

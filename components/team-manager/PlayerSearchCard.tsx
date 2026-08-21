@@ -15,14 +15,21 @@ type PlayerSearchCardProps = {
   onToggleFavorite: () => void;
 };
 
+/**
+ * A cor da etiqueta por CODIGO de posicao.
+ *
+ * As quatro PALAVRAS que estavam aqui sairam na virada da 20260821010000 —
+ * `players.preferred_position` guarda codigo, entao nenhuma voltaria a casar.
+ *
+ * A metade que parecia ser "de codigo" tambem estava furada: a chave do meia
+ * era `MEIA`, que nao e codigo de nada. O meia ja caia no cinza do fallback bem
+ * antes da virada, e ninguem viu — que e o argumento inteiro contra deixar
+ * entrada morta "por seguranca" num mapa.
+ */
 const positionColors: Record<string, string> = {
-  Goleiro: "bg-yellow-500/20 text-yellow-300",
-  Zagueiro: "bg-blue-500/20 text-blue-300",
-  Meia: "bg-emerald-500/20 text-emerald-300",
-  Atacante: "bg-red-500/20 text-red-300",
   GOL: "bg-yellow-500/20 text-yellow-300",
   ZAG: "bg-blue-500/20 text-blue-300",
-  MEIA: "bg-emerald-500/20 text-emerald-300",
+  MEI: "bg-emerald-500/20 text-emerald-300",
   ATA: "bg-red-500/20 text-red-300",
 };
 

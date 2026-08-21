@@ -51,7 +51,11 @@ export function LineupControl({ detail, onSaved }: LineupControlProps) {
       lineup.some(l => l.playerId === p.registrationId) &&
       !detail.suspendedRegistrationIds.has(p.registrationId)
     );
-    const gkCount = selected.filter(p => p.position === "Goleiro").length;
+    // `GOL`, e nao `Goleiro`: `useMatchDetail` entrega `p.position` como veio de
+    // `players.preferred_position`, que guarda CODIGO desde a 20260821010000.
+    // Comparar com a palavra nao lanca erro nenhum — faz `gkCount` valer 0
+    // sempre, e ai a regra "1 goleiro + 5 de linha" degrada para "6 jogadores".
+    const gkCount = selected.filter(p => p.position === "GOL").length;
     const fieldCount = selected.length - gkCount;
 
     return ((gkCount === 1 && fieldCount === 5) || (gkCount === 0 && fieldCount === 6)) && !!color;
@@ -111,7 +115,7 @@ export function LineupControl({ detail, onSaved }: LineupControlProps) {
     }
 
     // Validation: Exactly 1 GK + 5 Field (Total 6)
-    const gkCount = selectedPlayers.filter(p => p.position === "Goleiro").length;
+    const gkCount = selectedPlayers.filter(p => p.position === "GOL").length;
     const fieldCount = selectedPlayers.length - gkCount;
 
     if (!((gkCount === 1 && fieldCount === 5) || (gkCount === 0 && fieldCount === 6))) {
@@ -255,7 +259,7 @@ export function LineupControl({ detail, onSaved }: LineupControlProps) {
               {players.map(p => {
                 const isStarter = localStarters.has(p.registrationId);
                 const isCaptain = localCaptain === p.registrationId;
-                const isGK = p.position === "Goleiro";
+                const isGK = p.position === "GOL";
                 const isSuspended = detail.suspendedRegistrationIds.has(p.registrationId);
                 const isBooked = !isSuspended && detail.bookedRegistrationIds.has(p.registrationId);
                 return (

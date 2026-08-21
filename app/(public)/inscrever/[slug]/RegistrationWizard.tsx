@@ -590,7 +590,21 @@ export default function RegistrationWizard({
     return () => clearInterval(id);
   }, [nextSunset, router]);
 
-  const activeSkills = skillsFor(form.preferred_position);
+  // O select da posicao nasce vazio, e o bloco de habilidades logo abaixo tem de
+  // nascer vazio junto.
+  //
+  // `skillsFor("")` devolve LINE_SKILLS, e esta CERTO assim: ela tem quatro
+  // chamadores (este, o Zod de `schema.ts`, o radar e o servico do insert), e
+  // devolver `[]` para desconhecido mudaria a semantica do `superRefine` e do
+  // filtro do insert de graca. A politica deste repo e decidir na BORDA
+  // (features/players/position.ts:46-47) — a borda e aqui.
+  //
+  // Sem isto o passo 4 desenha as seis estrelas de LINHA antes de a pessoa
+  // escolher posicao. Nao grava errado (o Zod exige o conjunto certo depois),
+  // mas o goleiro que avaliar as estrelas primeiro ve o trabalho sumir da tela
+  // ao escolher a posicao, sem explicacao nenhuma.
+  const posicaoEscolhida = form.preferred_position !== "";
+  const activeSkills = posicaoEscolhida ? skillsFor(form.preferred_position) : [];
   const total = computeTicketsTotal({
     basePrice: championship.base_price,
     extraTicketPrice: championship.extra_ticket_price,
@@ -815,7 +829,18 @@ export default function RegistrationWizard({
               terceira habilidade e o "ao vivo" se perderia onde mais importa.
               O fundo repete a mesma tinta dourada do StepShell sobre o fundo da
               pagina, para a banda opaca nao destoar do passo. */}
-          {hasAnyRating(form.skills, form.preferred_position) && (
+          {/* Sem posicao escolhida nao ha o que avaliar, e a tela diz isso em vez
+              de desenhar as estrelas de linha por padrao. */}
+          {!posicaoEscolhida && (
+            <p className="text-xs text-[var(--gala-ink-dim)]">
+              Escolha a posição acima para avaliar as habilidades certas.
+            </p>
+          )}
+          {/* A guarda tambem aqui, e nao so no `activeSkills`: `hasAnyRating`
+              passa pelo mesmo `skillsFor`, entao quem avaliou e depois voltou o
+              select para vazio veria o radar sozinho, com as habilidades de
+              linha e sem nenhuma estrela por perto. */}
+          {posicaoEscolhida && hasAnyRating(form.skills, form.preferred_position) && (
             <div className="sticky top-14 z-10 -mx-4 px-4 py-2"
                  style={{ background: "linear-gradient(rgba(230,180,34,.06), rgba(230,180,34,.06)), var(--gala-bg-0)" }}>
               <PlayerRadar
