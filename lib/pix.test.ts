@@ -141,6 +141,35 @@ describe("o tamanho declarado em cada campo", () => {
   });
 });
 
+describe("o corte de nome e cidade", () => {
+  it("corta por bytes, e nao por caracteres", () => {
+    // 13 cedilhas sao 13 caracteres e 26 bytes. Cortando por caractere caberiam
+    // as 13, e o campo estouraria o limite de 25 do padrao.
+    const p = buildPixPayload({
+      key: "a@b.com", merchantName: "ç".repeat(13), merchantCity: "X",
+      description: "X", txid: "T1",
+    });
+    const nome = campos(p).find((c) => c.id === "59")!;
+    expect(Buffer.byteLength(nome.valor, "utf8")).toBeLessThanOrEqual(25);
+    expect(nome.valor).toBe("ç".repeat(12));
+  });
+
+  it("nao parte um caractere multibyte ao meio", () => {
+    // 12 cedilhas dao 24 bytes; o 13o nao cabe inteiro em 25. Cortar no byte 25
+    // deixaria meia cedilha, que decodifica como caractere de substituicao.
+    const p = buildPixPayload({
+      key: "a@b.com", merchantName: "ç".repeat(13), merchantCity: "ã".repeat(9),
+      description: "X", txid: "T1",
+    });
+    const lidos = campos(p);
+    for (const id of ["59", "60"]) {
+      expect(lidos.find((c) => c.id === id)!.valor).not.toContain("�");
+    }
+    // Cidade: limite de 15 bytes, entao 7 tis (14 bytes) e o maximo inteiro.
+    expect(lidos.find((c) => c.id === "60")!.valor).toBe("ã".repeat(7));
+  });
+});
+
 describe("makePixTxid", () => {
   it("gera identificador dentro do limite do padrao", async () => {
     const { makePixTxid } = await import("./pix");

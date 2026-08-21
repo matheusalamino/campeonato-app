@@ -15,6 +15,17 @@ const MAX_NAME = 25;
 const MAX_CITY = 15;
 
 /**
+ * `TextEncoder` e nao `Buffer`: este modulo tambem roda no navegador, dentro do
+ * wizard de inscricao.
+ */
+const utf8 = new TextEncoder();
+
+/** Quantos bytes a string ocupa em UTF-8. */
+function byteLength(value: string): number {
+  return utf8.encode(value).length;
+}
+
+/**
  * Monta um campo no formato id + tamanho + valor.
  *
  * O tamanho conta BYTES em UTF-8, nao caracteres de JS. `String.length` conta
@@ -22,15 +33,30 @@ const MAX_CITY = 15;
  * da 9 caracteres e 10 bytes. Quem le o BR Code avanca por bytes, entao um
  * cabecalho contado em caracteres faz o leitor parar cedo e todo o resto do
  * payload desandar a partir dali.
- *
- * `TextEncoder` e nao `Buffer`: este modulo tambem roda no navegador, dentro do
- * wizard de inscricao.
  */
-const utf8 = new TextEncoder();
-
 function field(id: string, value: string): string {
-  const length = utf8.encode(value).length;
-  return `${id}${String(length).padStart(2, "0")}${value}`;
+  return `${id}${String(byteLength(value)).padStart(2, "0")}${value}`;
+}
+
+/**
+ * Corta para caber em `max` BYTES, sem partir um caractere ao meio.
+ *
+ * Os limites do padrao tambem sao em bytes, entao cortar com `slice` conta
+ * errado: 13 cedilhas sao 13 caracteres e 26 bytes, e passariam do limite de
+ * 25 do campo 59. Itera por code points, e nao por unidades UTF-16, porque
+ * cortar dentro de um par substituto produziria um caractere invalido.
+ */
+function sliceBytes(value: string, max: number): string {
+  if (byteLength(value) <= max) return value;
+  let out = "";
+  let used = 0;
+  for (const ch of value) {
+    const n = byteLength(ch);
+    if (used + n > max) break;
+    out += ch;
+    used += n;
+  }
+  return out;
 }
 
 /**
@@ -87,8 +113,8 @@ export function buildPixPayload({
 
   payload +=
     field("58", "BR") +
-    field("59", merchantName.slice(0, MAX_NAME)) +
-    field("60", merchantCity.slice(0, MAX_CITY)) +
+    field("59", sliceBytes(merchantName, MAX_NAME)) +
+    field("60", sliceBytes(merchantCity, MAX_CITY)) +
     // "***" e o txid neutro previsto pelo padrao para quando nao ha um proprio.
     field("62", field("05", txid || "***"));
 
