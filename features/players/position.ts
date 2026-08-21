@@ -15,6 +15,17 @@
  * 20260615000000 subiu comparando `preferred_position = 'GOL'` e a SEGUINTE
  * consertou na direcao das palavras, com o motivo escrito no cabecalho
  * ("gravado por extenso"). A unificacao em enum de codigos e o bloco A8.
+ *
+ * ALCANCE, e leia isto antes de "limpar" a tabela de aliases: futsal (`Fixo`,
+ * `Ala Esquerda`, `Ala Direita`, `Pivo`), `Lateral` e `Volante` NAO EXISTEM em
+ * dado real. Medido em 2026-08-21: producao tem 80 jogadores e staging 82, e nos
+ * dois os 100% estao nos quatro canonicos — zero futsal, zero codigo, zero nulo.
+ * O futsal vinha do SEED local, que foi alinhado aos canonicos no mesmo bloco.
+ *
+ * Entao isto NAO e traducao de legado vivo, e sim defesa de entrada: o CSV de
+ * `app/api/import-players/route.ts` aceita celula arbitraria de planilha, e e
+ * dali que vocabulario alheio entra. Os aliases ficam por isso, e nao porque ha
+ * linha no banco esperando conversao.
  */
 
 /** Os quatro valores da CHECK. Um teste prende esta lista ao SQL. */
@@ -84,13 +95,16 @@ const ALIASES: Record<string, CanonicalPosition> = {
   volante: "Meia",
   vol: "Meia",
 
-  // ⚠️ VETO PEDIDO AO USUARIO — o unico mapeamento genuinamente discutivel.
-  // `Lateral` vai para `Zagueiro` porque na leitura brasileira padrao o lateral
-  // e defensor. Da para argumentar `Meia` num time que joga com laterais
-  // avancados. Foi decisao do coordenador sob incerteza, e trocar e UMA LINHA:
-  // mude os dois valores abaixo para "Meia".
-  lateral: "Zagueiro",
-  lat: "Zagueiro",
+  // DECIDIDO pelo usuario em 2026-08-21, e nao mais em aberto. Foi o unico
+  // mapeamento genuinamente discutivel: `Zagueiro` pela leitura brasileira de
+  // campo, onde o lateral e defensor.
+  //
+  // Ganhou `Meia`, e a razao e que o campeonato e de FUTSAL. No futsal o
+  // corredor e a ala, e `Ala Esquerda`/`Ala Direita` ja vao para `Meia` logo
+  // acima — mandar `Lateral` para `Zagueiro` colocaria o mesmo papel em dois
+  // destinos diferentes dependendo da palavra usada.
+  lateral: "Meia",
+  lat: "Meia",
 };
 
 /**

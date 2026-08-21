@@ -78,14 +78,24 @@ ALTER TABLE public.championships
 -- A posicao declarada na inscricao, pinada no vocabulario que o Zod da inscricao
 -- ja usa (`features/registration/schema.ts`: z.enum dos mesmos quatro valores).
 --
--- NOT VALID de proposito: 56 dos 64 jogadores atuais estao em vocabulario de
--- FUTSAL (medido: Fixo 16, Ala Esquerda 16, Ala Direita 16, Pivo 8) — valores que
--- este CHECK recusa, e que fariam VALIDATE quebrar a migration. Os outros 8 sao
--- `Goleiro`, que e o unico termo comum aos dois vocabularios e por isso ja passa.
--- Ou seja: o legado fora do enum sao 56 linhas, nao 64.
+-- DADO REAL (medido em 2026-08-21): producao tem 80 jogadores e staging 82, e em
+-- AMBOS os 100% estao nos quatro canonicos. Zero futsal, zero `Lateral`, zero
+-- `Volante`, zero codigo, zero nulo. Este CHECK passaria limpo nos dois, e daria
+-- para VALIDATE.
 --
--- A cota conta `Goleiro` contra tudo que nao e `Goleiro`, e por isso o legado
--- conta CERTO mesmo em futsal: 8 goleiros, 56 de linha.
+-- A versao anterior deste comentario dizia que 56 dos 64 jogadores estavam em
+-- vocabulario de futsal. Aquilo era o SEED local, e nao o mundo: fixture lida
+-- como se fosse producao. O seed foi alinhado aos quatro canonicos no mesmo
+-- bloco, e producao nunca teve outra coisa.
+--
+-- NOT VALID fica, e por um motivo melhor do que o que eu tinha escrito: este
+-- repo restaura dump de producao para local (`scripts/pull-prod.sh`,
+-- `scripts/restore-last-production.sh`), e dump antigo pode trazer vocabulario
+-- que ninguem mediu. VALIDATE ali quebraria a migration no meio da restauracao.
+-- NOT VALID nao afrouxa nada para quem ESCREVE: todo INSERT e UPDATE e checado.
+--
+-- A cota conta `Goleiro` contra tudo que nao e `Goleiro`, entao ela conta certo
+-- em qualquer um dos tres vocabularios, inclusive num dump legado.
 --
 -- NULL passa, e isso e LOAD-BEARING, nao descuido: `preferred_position` e
 -- nullable desde 20260411000000, `scripts/test-registration-slots.sh` insere

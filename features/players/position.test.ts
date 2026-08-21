@@ -35,12 +35,12 @@ describe("normalizePreferredPosition", () => {
     expect(pos("MEI")).toBe("Meia");
     expect(pos("ATA")).toBe("Atacante");
     expect(pos("VOL")).toBe("Meia");
-    expect(pos("LAT")).toBe("Zagueiro");
+    expect(pos("LAT")).toBe("Meia");
   });
 
   it("converte as palavras largas que a CHECK nao aceita", () => {
     expect(pos("Volante")).toBe("Meia");
-    expect(pos("Lateral")).toBe("Zagueiro");
+    expect(pos("Lateral")).toBe("Meia");
   });
 
   // O caso que a CHECK rejeitaria e que a cota contaria errado: um goleiro
@@ -94,6 +94,29 @@ describe("normalizePreferredPosition", () => {
     const permitido: (CanonicalPosition | null)[] = [...CANONICAL_POSITIONS, null];
     for (const raw of corpus) {
       expect(permitido).toContain(normalizePreferredPosition(raw).position);
+    }
+  });
+
+  // O seed local mentiu para o coordenador em TRES medicoes: ele reportou
+  // vocabulario de futsal como se fosse producao, e o plano inteiro nasceu com o
+  // alcance errado por causa disso. Producao e staging sempre tiveram so os
+  // quatro canonicos (medido em 2026-08-21). Esta assertiva existe para o seed
+  // nao voltar a divergir do mundo em silencio.
+  it("o seed local usa SO vocabulario canonico", () => {
+    const seed = readFileSync(resolve(process.cwd(), "supabase/seed.sql"), "utf8");
+
+    // A coluna de posicao do CTE `player_seed`, e nao qualquer string do arquivo.
+    const posicoes = [
+      ...seed.matchAll(/'60000000-[0-9a-f-]+'[^\n]*?'([A-Za-zÀ-ÿ ]+)',\s*\d+\)/g),
+    ].map((m) => m[1]);
+
+    expect(posicoes.length).toBeGreaterThan(0);
+    const distintas = [...new Set(posicoes)].sort();
+    expect(distintas).toEqual([...CANONICAL_POSITIONS].sort());
+
+    // E toda uma delas normaliza para si mesma: o seed nao depende da traducao.
+    for (const p of distintas) {
+      expect(normalizePreferredPosition(p).position).toBe(p);
     }
   });
 
