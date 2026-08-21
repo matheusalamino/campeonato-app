@@ -12,6 +12,20 @@ import {
 const pos = (raw: string | null | undefined) =>
   normalizePreferredPosition(raw).position;
 
+/**
+ * O SQL sem comentario: `--` de linha e bloco `/* *\/`.
+ *
+ * Separado do irmao de TypeScript de proposito. Em SQL `--` e comentario; em
+ * TypeScript `--` e decremento (`i--`), entao um stripper unico que apagasse
+ * `--.*$` nos dois idiomas comeria CODIGO nos arquivos `.ts`.
+ *
+ * Limite conhecido e aceito: um `--` DENTRO de string literal SQL seria cortado
+ * junto. Nao ha nenhum nesta migration, e a alternativa (tokenizar SQL) custa
+ * mais do que a assertiva vale.
+ */
+const semComentarioSql = (sql: string) =>
+  sql.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--[^\n]*/g, "");
+
 describe("normalizePreferredPosition", () => {
   it("passa os quatro canonicos por identidade", () => {
     for (const canonical of CANONICAL_POSITIONS) {
@@ -138,12 +152,30 @@ describe("normalizePreferredPosition", () => {
     }
   });
 
+  // Esta e a UNICA rede de vitest sobre esta DDL, e o valor que ela protege e
+  // `'Goleiro'` -- o unico que a cota do A6 precisa exato, porque ela conta
+  // `Goleiro` contra todo o resto.
+  //
+  // A versao anterior lia o SQL CRU e casava a PRIMEIRA ocorrencia do texto no
+  // arquivo. Mutacao medida que atravessou os 495 testes: apagar `'Goleiro'` da
+  // DDL na linha ~124 E deixar um comentario `--` sete linhas acima com a lista
+  // velha inteira. O `match` achava a PROSA, comparava a prosa com o codigo, e
+  // dava verde sobre uma CHECK que passou a recusar goleiro.
+  //
+  // Sao duas defesas, e cada uma sozinha nao basta:
+  //  - `semComentarioSql` mata o chamariz em comentario;
+  //  - a ancora no `ADD CONSTRAINT players_preferred_position_known` mata o
+  //    chamariz que NAO e comentario (outra CHECK, um COMMENT ON, uma linha de
+  //    exemplo em string), porque prende o casamento ao constraint que importa.
   it("a lista canonica do codigo e exatamente a da CHECK no banco", () => {
-    const sql = readFileSync(
+    const bruto = readFileSync(
       resolve(process.cwd(), "supabase/migrations/20260820010000_capacity_formula_columns.sql"),
       "utf8",
     );
-    const m = sql.match(/preferred_position IN \(([^)]*)\)/);
+    const sql = semComentarioSql(bruto);
+    const m = sql.match(
+      /ADD CONSTRAINT\s+players_preferred_position_known[\s\S]*?preferred_position IN \(([^)]*)\)/,
+    );
     expect(m).not.toBeNull();
     const doSql = m![1].split(",").map((s) => s.trim().replace(/^'|'$/g, ""));
     expect([...doSql].sort()).toEqual([...CANONICAL_POSITIONS].sort());
