@@ -1092,11 +1092,26 @@ checar "a CHECK da posicao entrou VALIDADA" "true" "$(echo "$r" | tr -d ' ')"
 # Postgres reescreve `IN (...)` como `= ANY (ARRAY[...])` -- comparar texto cru
 # quebraria por normalizacao, sem nenhum defeito real. Assim, sobrar codigo,
 # faltar codigo ou virar `CHECK (true)` (que da 'NENHUM') derruba a assertiva.
+#
+# O padrao pega QUALQUER literal entre aspas, e nao `[A-Z]{3}`. A versao com
+# `[A-Z]{3}` so enxergava exatamente tres maiusculas, entao o unico jeito de
+# esta linha ficar vermelha era sumir com um dos quatro -- e era CEGA justamente
+# para a regressao que ela existe para pegar: a palavra por extenso voltando
+# para a CHECK.
+#
+# MEDIDO em 2026-08-21, com a CHECK alargada dentro de BEGIN...ROLLBACK:
+#
+#   CHECK (... = ANY (ARRAY['GOL','ZAG','MEI','ATA','Goleiro','LATERAL','gol']))
+#     '([A-Z]{3})' -> ATA,GOL,MEI,ZAG                          <- VERDE, nao pega
+#     '([^']*)'    -> ATA,gol,GOL,Goleiro,LATERAL,MEI,ZAG      <- VERMELHO, pega
+#
+# E e drop-in: sobre a CHECK correta o padrao novo devolve os mesmos
+# ATA,GOL,MEI,ZAG, entao o valor esperado abaixo nao muda.
 r=$($DB -c "
   SELECT coalesce(string_agg(codigo, ',' ORDER BY codigo), 'NENHUM') FROM (
     SELECT DISTINCT m[1] AS codigo
       FROM pg_constraint c,
-           LATERAL regexp_matches(pg_get_constraintdef(c.oid), '''([A-Z]{3})''::text', 'g') AS m
+           LATERAL regexp_matches(pg_get_constraintdef(c.oid), '''([^'']*)''::text', 'g') AS m
      WHERE c.conname = 'players_preferred_position_known'
   ) t;")
 checar "a CHECK da posicao lista os quatro codigos, e so eles" "ATA,GOL,MEI,ZAG" "$(echo "$r" | tr -d ' ')"

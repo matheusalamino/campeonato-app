@@ -48,7 +48,12 @@ export const POSITION_LABELS: Record<string, string> = {
   ATA: "Atacante",
 };
 
-// Maps full-word labels (as stored in DB) back to position codes
+// Palavra por extenso -> codigo. O "(as stored in DB)" que estava escrito aqui
+// PAROU DE VALER na 20260821010000: `players.preferred_position` guarda o
+// codigo, e a CHECK `players_preferred_position_known` recusa a palavra. Isto
+// aqui virou defesa de LEITURA -- dump antigo, planilha, resposta de terceiro --
+// e nao a descricao da coluna. Vale dizer porque e deste arquivo que os cinco
+// formularios importam `POSITION_LABELS`.
 const LABEL_TO_CODE: Record<string, string> = {
   Goleiro: "GOL", Zagueiro: "ZAG", Lateral: "LAT",
   Volante: "VOL", Meia: "MEI", Atacante: "ATA",

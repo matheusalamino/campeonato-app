@@ -93,15 +93,34 @@ const SEM_PALAVRA = /["'`](Goleiro|Zagueiro|Meia|Atacante)["'`]/;
  *
  * — passava com os 509 testes verdes, e e exatamente o defeito que esta task
  * existe para matar: o select volta a submeter a palavra, e o insert volta a
- * bater na CHECK. O `\s*` entre as partes tolera a quebra de linha do
- * formatador, que nao e invariante nenhuma.
+ * bater na CHECK.
+ *
+ * O QUE ELA NAO PRENDE, e nao deveria: a ORDEM dos atributos e a presenca de
+ * outros. `<option value={c} key={c}>` e no-op de JSX, e `className` a mais
+ * tambem — reprovar por isso mandaria o proximo cacar um bug que nao existe.
+ * Dai o `key` vir por LOOKAHEAD: ele acha o identificador em qualquer posicao
+ * da tag sem consumir, e o `value` e procurado do inicio dela de novo. Uma
+ * versao sem o lookahead (`<option[^>]*\bkey=...[^>]*\bvalue=...`) parece
+ * tolerante e nao e: exige `key` ANTES de `value` e reprova a ordem trocada.
+ * Medido nos dois.
+ *
+ * O `\s*` entre a tag e o rotulo tolera a quebra de linha do formatador, que
+ * tambem nao e invariante nenhuma.
  */
 const OPCAO_CODIGO_ROTULO =
-  /<option\s+key=\{(\w+)\}\s+value=\{\1\}>\s*\{POSITION_LABELS\[\1\]\}\s*<\/option>/;
+  /<option(?=[^>]*\bkey=\{(\w+)\})[^>]*\bvalue=\{\1\}[^>]*>\s*\{POSITION_LABELS\[\1\]\}\s*<\/option>/;
 
 describe("os formularios que escrevem posicao falam CODIGO", () => {
-  // Sentinela: um arquivo movido de lugar leria vazio, e toda assertiva de
-  // ausencia abaixo passaria medindo o nada.
+  // Sentinela. E a justificativa obvia esta ERRADA, entao fica escrita a certa:
+  // arquivo MOVIDO nao "leria vazio" — o `readFileSync` la em cima estoura
+  // ENOENT e o vitest derruba o arquivo de teste inteiro, bem barulhento.
+  // Medido.
+  //
+  // O que este `it` pega e o caso silencioso: o arquivo continua existindo e
+  // legivel, mas deixou de ser o que as assertivas abaixo supoem — o insert
+  // migrou para um service, o select virou componente proprio, o form foi
+  // reescrito. Nesse dia todo `not.toMatch` continua verde medindo um arquivo
+  // que nao guarda mais a fiacao. Cada linha aqui e a ancora de um dos cinco.
   it("le os cinco arquivos, e cada um ainda e o que este teste pensa que e", () => {
     expect(schema).toContain("preferred_position:");
     expect(wizard).toContain("normalizePreferredPosition(");
@@ -156,7 +175,9 @@ describe("os formularios que escrevem posicao falam CODIGO", () => {
   });
 
   it("o formulario de avaliacao decide o goleiro pelo codigo", () => {
-    expect(formJogador).toMatch(/===\s*"GOL"/);
+    // Aspas de qualquer lado: nao ha `.prettierrc` no repo, entao a escolha
+    // entre `"` e `'` nao e invariante de nada.
+    expect(formJogador).toMatch(/===\s*["']GOL["']/);
     expect(formJogador).toMatch(/CANONICAL_POSITIONS\.map\(/);
     expect(formJogador).toMatch(OPCAO_CODIGO_ROTULO);
     expect(formJogador).not.toMatch(SEM_PALAVRA);

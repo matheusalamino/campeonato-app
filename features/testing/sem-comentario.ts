@@ -41,11 +41,30 @@
  * propria URL do embed do SabbathVideo e a assertiva do dominio passaria a medir
  * o nada.
  *
+ * O comentario de JSX — `{/* ... *\/}` — sai com as CHAVES junto, e essa e a
+ * primeira troca de proposito. Tirar so o miolo deixava um `{}` orfao no meio
+ * do markup, e `{}` nao e espaco em branco: toda assertiva que costura duas
+ * partes vizinhas com `\s*` deixa de casar. Isso e falso VERMELHO contra codigo
+ * CERTO, o modo de falha que este arquivo inteiro existe para evitar — so que
+ * pela porta dos fundos.
+ *
+ * MEDIDO em 2026-08-21: inserir `{/* ... *\/}` entre o `<option value="">` e o
+ * `CANONICAL_POSITIONS.map(` do RegistrationWizard — comentario util, na mesma
+ * posicao em que EditPlayerForm.tsx ja tem um — reprovava
+ * `position-wiring.test.ts`. O castigo caia sobre quem comentasse bem, e o jeito
+ * de voltar ao verde era apagar a explicacao.
+ *
+ * A ordem importa: o caso com chaves vem ANTES do bloco nu, senao o `/* *\/` sai
+ * primeiro e as chaves ficam para tras — que e exatamente o defeito.
+ *
  * NAO serve para SQL: aqui `--` e decremento (`i--`), e la e comentario. Para
  * SQL, use `semComentarioSql`.
  */
 export function semComentario(fonte: string): string {
-  return fonte.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(?<!:)\/\/[^\n]*/g, "");
+  return fonte
+    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(?<!:)\/\/[^\n]*/g, "");
 }
 
 /**
