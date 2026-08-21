@@ -45,6 +45,22 @@ function field(id: string, value: string): string {
 }
 
 /**
+ * Teto da chave PIX, em bytes.
+ *
+ * Sai do proprio campo 26: dos 99 bytes, o GUI ocupa 18 e o cabecalho da
+ * chave, 4. Uma chave maior faz o campo 26 declarar o tamanho em TRES digitos
+ * — o cabecalho tem dois —, e o payload sai malformado sem nada avisar. E o
+ * mesmo 77 que o padrao da como limite da chave de e-mail; aqui ele e
+ * calculado, e nao copiado, para nao descolar se o GUI mudar.
+ */
+export const MAX_PIX_KEY = MAX_MERCHANT_ACCOUNT - byteLength(field("00", PIX_GUI)) - 4;
+
+/** A chave cabe no campo 26? Acima do teto o BR Code sai malformado. */
+export function pixKeyFits(key: string): boolean {
+  return byteLength(key) <= MAX_PIX_KEY;
+}
+
+/**
  * Corta para caber em `max` BYTES, sem partir um caractere ao meio.
  *
  * Os limites do padrao tambem sao em bytes, entao cortar com `slice` conta

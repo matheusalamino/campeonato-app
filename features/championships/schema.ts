@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CHAMPIONSHIP_STATUS } from "@/types/championship";
+import { MAX_PIX_KEY, pixKeyFits } from "@/lib/pix";
 
 export const championshipStatusSchema = z.enum(CHAMPIONSHIP_STATUS);
 
@@ -19,7 +20,16 @@ const baseChampionshipObject = z.object({
   registration_image_url: z.string().trim().url().optional().or(z.literal("")).transform((v) => v || undefined),
   base_price: z.coerce.number().min(0).optional(),
   extra_ticket_price: z.coerce.number().min(0).optional(),
-  pix_key: z.string().trim().optional().or(z.literal("")).transform((v) => v || undefined),
+  // O teto nao e estetico: acima dele o campo 26 do BR Code declara o tamanho
+  // em tres digitos e o QR sai malformado, sem nada avisar. `pixKeyFits` mede
+  // em bytes, que e como o leitor do QR conta.
+  pix_key: z
+    .string()
+    .trim()
+    .refine(pixKeyFits, `Máximo de ${MAX_PIX_KEY} caracteres`)
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => v || undefined),
   pix_merchant_name: z.string().trim().max(25, "Máximo de 25 caracteres").optional().or(z.literal("")).transform((v) => v || undefined),
   pix_merchant_city: z.string().trim().max(15, "Máximo de 15 caracteres").optional().or(z.literal("")).transform((v) => v || undefined),
   registration_group_options: z
