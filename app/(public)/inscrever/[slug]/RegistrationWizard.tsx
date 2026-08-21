@@ -13,13 +13,16 @@ import { buildPixPayload, makePixTxid } from "@/lib/pix";
 import { isMinor } from "@/features/registration/minor";
 import { makeRegistrationSchema } from "@/features/registration/schema";
 import { fieldErrorsFrom } from "@/features/registration/field-errors";
-import { errorsForStep, firstStepWithError, stepNumber, AUTHORIZATION_STEP } from "@/features/registration/field-steps";
+import { errorsForStep, firstStepWithError, stepNumber, AUTHORIZATION_STEP, UNIFORM_STEP } from "@/features/registration/field-steps";
 import { summarizeErrors } from "@/features/registration/error-summary";
+import { SHIRT_SIZES, CUSTOM_SHIRT_SIZE } from "@/features/registration/shirt-sizes";
+import { radarDataFrom, hasAnyRating } from "@/features/registration/radar";
 import { lookupCpfAction, submitRegistrationAction } from "./actions";
 import StepShell from "./steps/StepShell";
 import SkillStars from "./steps/SkillStars";
 import UploadCard from "./steps/UploadCard";
 import PixPayment from "./steps/PixPayment";
+import PlayerRadar from "@/components/PlayerRadar";
 import { INSTAGRAM_HANDLE, INSTAGRAM_URL } from "@/lib/social";
 
 export type WizardChampionship = {
@@ -33,7 +36,7 @@ export type WizardChampionship = {
 };
 
 const EMPTY = {
-  cpf: "", name: "", shirt_name: "", email: "", whatsapp: "", birth_date: "",
+  cpf: "", name: "", shirt_name: "", shirt_size: "", email: "", whatsapp: "", birth_date: "",
   birth_state: "", instagram: "", preferred_position: "Meia",
   height: "", weight: "", group_affiliation: "", invite_code: "",
   extra_tickets_count: 0,
@@ -74,6 +77,7 @@ export default function RegistrationWizard({
     return {
       championship_slug: championship.slug,
       cpf: form.cpf, name: form.name, shirt_name: form.shirt_name,
+      shirt_size: form.shirt_size,
       email: form.email, whatsapp: form.whatsapp, birth_date: form.birth_date,
       birth_state: form.birth_state, instagram: form.instagram,
       preferred_position: form.preferred_position,
@@ -120,17 +124,28 @@ export default function RegistrationWizard({
     setStep(next);
   }
 
-  /** Mensagem de erro sob o campo, quando houver. */
-  /** Classe, estado e ligacao com a mensagem — para o campo invalido se anunciar. */
-  function fieldProps(field: string) {
+  /**
+   * Classe, estado e ligacao com as mensagens — para o campo invalido se
+   * anunciar.
+   *
+   * `hintId` liga uma dica permanente ao campo. Sem ele, quem navega campo a
+   * campo com leitor de tela nao ouve o texto de apoio, so o rotulo — e no caso
+   * do tamanho da camiseta e a dica que avisa da opcao Personalizado. Quando ha
+   * erro, os dois ids vao juntos, na ordem em que devem ser lidos.
+   */
+  function fieldProps(field: string, hintId?: string) {
     const invalid = !!errors[field];
+    const describedBy = [hintId, invalid ? `${field}-error` : null]
+      .filter(Boolean)
+      .join(" ");
     return {
       className: `${inputBase} ${invalid ? inputError : inputOk}`,
       "aria-invalid": invalid || undefined,
-      "aria-describedby": invalid ? `${field}-error` : undefined,
+      "aria-describedby": describedBy || undefined,
     };
   }
 
+  /** Mensagem de erro sob o campo, quando houver. */
   function err(field: string) {
     if (!errors[field]) return null;
     return (
@@ -153,7 +168,8 @@ export default function RegistrationWizard({
         const p = res.player;
         setForm((prev) => ({
           ...prev,
-          name: p.name ?? "", shirt_name: p.shirt_name ?? "", email: p.email ?? "",
+          name: p.name ?? "", shirt_name: p.shirt_name ?? "", shirt_size: p.shirt_size ?? "",
+          email: p.email ?? "",
           whatsapp: p.whatsapp ? formatPhoneBR(p.whatsapp) : "", birth_date: (p.birth_date ?? "").slice(0, 10),
           birth_state: p.birth_state ?? "", instagram: p.instagram ?? "",
           preferred_position: p.preferred_position ?? "Meia",
@@ -293,8 +309,6 @@ export default function RegistrationWizard({
         <StepShell index={stepNumber(2, minor)} title="Dados pessoais" open={step === 2} done={!!done[2]} onToggle={() => open(2)}>
           <input {...fieldProps("name")} placeholder="Nome completo" aria-label="Nome completo" value={form.name} onChange={(e) => set("name", e.target.value)} />
           {err("name")}
-          <input {...fieldProps("shirt_name")} placeholder="Nome da camisa" aria-label="Nome da camisa" value={form.shirt_name} onChange={(e) => set("shirt_name", e.target.value)} />
-          {err("shirt_name")}
           <input {...fieldProps("email")} placeholder="E-mail" aria-label="E-mail" value={form.email} onChange={(e) => set("email", e.target.value)} />
           {err("email")}
           <input {...fieldProps("whatsapp")} type="tel" inputMode="numeric" placeholder="WhatsApp — (11) 99999-9999" aria-label="WhatsApp"
@@ -368,6 +382,20 @@ export default function RegistrationWizard({
               {err("weight")}
             </div>
           </div>
+          {/* Preso abaixo do header (que e sticky top-0 z-50) enquanto as
+              estrelas rolam por baixo. Estatico, o radar sairia da tela na
+              terceira habilidade e o "ao vivo" se perderia onde mais importa.
+              O fundo repete a mesma tinta dourada do StepShell sobre o fundo da
+              pagina, para a banda opaca nao destoar do passo. */}
+          {hasAnyRating(form.skills, form.preferred_position) && (
+            <div className="sticky top-14 z-10 -mx-4 px-4 py-2"
+                 style={{ background: "linear-gradient(rgba(230,180,34,.06), rgba(230,180,34,.06)), var(--gala-bg-0)" }}>
+              <PlayerRadar
+                data={radarDataFrom(form.skills, form.preferred_position)}
+                heightClass="h-[200px]"
+              />
+            </div>
+          )}
           {activeSkills.map((s) => (
             <div key={s} className="flex items-center justify-between py-1 border-b border-white/5">
               <span className="text-sm text-[var(--gala-ink)]">{SKILL_LABELS[s]}</span>
@@ -377,11 +405,45 @@ export default function RegistrationWizard({
           {activeSkills.some((s) => errors[`skills.${s}`]) && (
             <p className="text-xs" style={{ color: "#fca5a5" }}>Avalie todas as habilidades para continuar.</p>
           )}
-          <button onClick={() => advance(5)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
+          <button onClick={() => advance(4)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
                   style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>Continuar</button>
         </StepShell>
 
-        <StepShell index={stepNumber(5, minor)} title="Ingressos & pagamento" open={step === 5} done={!!done[5]} onToggle={() => open(5)}>
+        <StepShell index={stepNumber(UNIFORM_STEP, minor)} title="Uniforme"
+                   open={step === UNIFORM_STEP} done={!!done[UNIFORM_STEP]} onToggle={() => open(UNIFORM_STEP)}>
+          <input {...fieldProps("shirt_name")} placeholder="Nome da camisa" aria-label="Nome da camisa"
+                 value={form.shirt_name} onChange={(e) => set("shirt_name", e.target.value)} />
+          {err("shirt_name")}
+
+          <select {...fieldProps("shirt_size", "shirt_size-hint")} aria-label="Tamanho da camiseta"
+                  value={form.shirt_size} onChange={(e) => set("shirt_size", e.target.value)}>
+            <option value="">Tamanho da camiseta…</option>
+            {SHIRT_SIZES.map((size) => (
+              <option key={size} value={size}>{size}</option>
+            ))}
+          </select>
+          {err("shirt_size")}
+
+          {/* Sempre visivel, e nao so depois de escolher: quem esta em duvida se
+              o GG serve precisa saber que Personalizado e caminho previsto antes
+              de chutar um tamanho — senao a camiseta chega errada. */}
+          <p id="shirt_size-hint" className="text-xs text-[var(--gala-ink-dim)] -mt-1">
+            A modelagem varia de marca pra marca. Não achou o seu? Escolha Personalizado.
+          </p>
+
+          {form.shirt_size === CUSTOM_SHIRT_SIZE && (
+            <div className="rounded-2xl px-3 py-3 text-xs leading-relaxed"
+                 style={{ background: "rgba(230,180,34,.08)", border: "1px solid rgba(230,180,34,.25)", color: "var(--gala-ink)" }}>
+              Combinado! Antes de mandar produzir, a gente fala com você no WhatsApp
+              pra acertar as medidas da sua camiseta.
+            </div>
+          )}
+
+          <button onClick={() => advance(UNIFORM_STEP)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
+                  style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>Continuar</button>
+        </StepShell>
+
+        <StepShell index={stepNumber(6, minor)} title="Ingressos & pagamento" open={step === 6} done={!!done[6]} onToggle={() => open(6)}>
           <div className="rounded-2xl px-3 py-3 text-xs leading-relaxed"
                style={{ background: "rgba(230,180,34,.08)", border: "1px solid rgba(230,180,34,.25)", color: "var(--gala-ink)" }}>
             Sua inscrição já inclui <b>2 ingressos</b> para a Noite de Gala: o seu e o de um
@@ -410,11 +472,11 @@ export default function RegistrationWizard({
                         value={form.payment_receipt_link} onChange={(u) => set("payment_receipt_link", u)} />
           )}
           {err("payment_receipt_link")}
-          <button onClick={() => advance(4)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
+          <button onClick={() => advance(6)} className="w-full rounded-xl py-3 font-bold text-[#050507]"
                   style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>Revisar</button>
         </StepShell>
 
-        <StepShell index={stepNumber(6, minor)} title="Revisão & envio" open={step === 6} done={false} onToggle={() => open(6)}>
+        <StepShell index={stepNumber(7, minor)} title="Revisão & envio" open={step === 7} done={false} onToggle={() => open(7)}>
           <div className="text-sm text-[var(--gala-ink-dim)] space-y-1">
             <div><b className="text-[var(--gala-ink)]">{form.name || "—"}</b> · {form.preferred_position}</div>
             <div>{form.group_affiliation || "—"}</div>

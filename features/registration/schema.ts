@@ -5,6 +5,7 @@ import { isMinor } from "./minor";
 import { MIN_AGE, isBelowMinimumAge } from "./age-policy";
 import { groupRequiresInviteCode } from "./groups";
 import { skillsFor } from "./skills";
+import { SHIRT_SIZES } from "./shirt-sizes";
 import type { GroupOption } from "@/types/championship";
 
 const rating = z.coerce.number().int().min(1).max(5);
@@ -29,6 +30,7 @@ export function makeRegistrationSchema(groupOptions: GroupOption[]) {
       cpf: z.string().refine(isValidCpf, "CPF inválido"),
       name: z.string().trim().min(1, "Nome é obrigatório"),
       shirt_name: z.string().trim().min(1, "Nome da camisa é obrigatório"),
+      shirt_size: z.enum(SHIRT_SIZES, { message: "Tamanho da camiseta é obrigatório" }),
       email: z.string().trim().email("E-mail inválido"),
       whatsapp: z.string().trim().min(8, "WhatsApp é obrigatório"),
       birth_date: z.string().min(1, "Data de nascimento é obrigatória"),

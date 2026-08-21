@@ -9,7 +9,6 @@ export const FIELD_STEP: Readonly<Record<string, number>> = {
   cpf: 1,
 
   name: 2,
-  shirt_name: 2,
   email: 2,
   whatsapp: 2,
   birth_date: 2,
@@ -27,16 +26,22 @@ export const FIELD_STEP: Readonly<Record<string, number>> = {
   weight: 4,
   skills: 4,
 
-  extra_tickets_count: 5,
-  profile_photo_link: 5,
-  payment_receipt_link: 5,
+  // O uniforme tem passo proprio: e a unica tela em que o jogador que nao veste
+  // a grade padrao le, com calma, que existe o tamanho Personalizado. Junto das
+  // habilidades, esse aviso disputava atencao com o radar e as estrelas.
+  shirt_name: 5,
+  shirt_size: 5,
+
+  extra_tickets_count: 6,
+  profile_photo_link: 6,
+  payment_receipt_link: 6,
 };
 
 /** Passo da carta do responsavel — so existe quando o jogador e menor. */
 export const AUTHORIZATION_STEP = 3;
 
-/** Ultimo passo, de revisao e envio. */
-export const REVIEW_STEP = 6;
+/** Passo do uniforme: nome na camisa e tamanho. */
+export const UNIFORM_STEP = 5;
 
 /**
  * Numero exibido de um passo.
