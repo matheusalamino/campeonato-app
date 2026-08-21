@@ -13,12 +13,24 @@
 -- Medido em 2026-08-21, nos tres ambientes: 100% dos jogadores nos quatro
 -- canonicos, zero fora. local 64, staging 82, producao 80.
 --
--- ORDEM DE DEPLOY: APP PRIMEIRO, ESTA MIGRATION DEPOIS. O DROP COLUMN abaixo
--- torna isso obrigatorio -- bundle antigo pedindo `players(...,position)` leva
--- 400 com 42703 e a requisicao INTEIRA falha, nao so o campo. Os dois leitores
--- eram hooks "use client", entao quem esta com a aba aberta perde a pagina de
--- jogo e o ranking de goleiros ate recarregar. Medido no stack local; o detalhe
--- esta em MIGRATIONS.md, secao "Ordem de deploy".
+-- ORDEM DE DEPLOY: ESTA MIGRATION PRIMEIRO, APP DEPOIS -- e nao ha ordem de
+-- graca, porque esta migration puxa os DOIS lados ao mesmo tempo.
+--
+-- O DROP COLUMN abaixo pede APP primeiro: bundle antigo pedindo
+-- `players(...,position)` leva 400 com 42703 e a requisicao INTEIRA falha, nao
+-- so o campo. Eram TRES `select` em DOIS arquivos, ambos hooks "use client"
+-- (useGoalkeeper.ts, 1; useMatchDetail.ts, 2), entao quem esta com a aba aberta
+-- perde a pagina de jogo e o ranking de goleiros ate recarregar.
+--
+-- Mas o ALTER da CHECK, la embaixo, ESTREITA o dominio e pede o INVERSO: ate
+-- ela subir o banco ainda so aceita a palavra por extenso (e o que a
+-- 20260820010000 deixou), entao o app novo no ar escreve GOL/ZAG/MEI/ATA contra
+-- a regra velha e NENHUMA INSCRICAO GRAVA.
+--
+-- Vence a migration primeiro: leitor quebrado volta com um refresh e nao perde
+-- dado; inscricao recusada perde a pessoa que tentou. Janela curta, fora do
+-- pico. A proxima migration desta forma deve ser partida em expand/contract --
+-- MIGRATIONS.md, secao "A saida limpa".
 -- =============================================================================
 BEGIN;
 
@@ -27,7 +39,8 @@ ALTER TABLE public.players
 
 -- A coluna `position` era CURATIVO, nao dominio: a 20260504170000 a criou como
 -- GENERATED ALWAYS AS (preferred_position) so para nao quebrar consultas que
--- ainda liam o nome antigo. Tinha TRES leitores, nenhum dependente em SQL, e
+-- ainda liam o nome antigo. Tinha TRES `select` (em dois arquivos, os hooks
+-- citados no cabecalho), nenhum dependente em SQL, e
 -- nem entrada no tipo Player. Vem ai `secondary_position`, e uma coluna chamada
 -- `position` espelhando a primaria em silencio obrigaria todo leitor futuro a
 -- adivinhar qual das tres coisas ela significa.
