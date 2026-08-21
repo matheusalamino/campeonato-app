@@ -195,7 +195,10 @@ export default function RegistrationWizard({
           key: championship.pix_key,
           merchantName: championship.pix_merchant_name || championship.name,
           merchantCity: championship.pix_merchant_city || "Brasil",
-          description: `Inscricao ${championship.name}`.slice(0, 30),
+          // Sem corte aqui: quanto cabe depende do tamanho da chave, e so o
+          // `buildPixPayload` sabe disso. Um `.slice` fixo daqui cortava
+          // "Sorocaba" em "Sor" mesmo quando havia folga de sobra no campo.
+          description: `Inscricao ${championship.name}`,
           amount: total,
           txid: pixTxid,
         })
