@@ -209,12 +209,17 @@ export async function getOpenRegistrationChampionship(): Promise<{ slug: string;
   // landing, since this is a non-critical convenience link.
   try {
     const supabase = await createClient();
+    const agora = new Date().toISOString();
     const { data } = await supabase
       .from("championships")
-      .select("slug, name")
+      .select("slug, name, registration_start_date, registration_end_date")
       .in("status", ["subscribing", "rest"])
       .not("slug", "is", null)
       .is("deleted_at", null)
+      // Data nula nao e borda: campeonato sem janela configurada continua
+      // elegivel, do mesmo jeito que registrationGate e as RPCs tratam nulo.
+      .or(`registration_start_date.is.null,registration_start_date.lte.${agora}`)
+      .or(`registration_end_date.is.null,registration_end_date.gte.${agora}`)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();

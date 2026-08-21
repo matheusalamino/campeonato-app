@@ -144,6 +144,74 @@ describe("championshipFormSchema: pix_key", () => {
   });
 });
 
+describe("id from the database (does not follow RFC 4122 version/variant)", () => {
+  // O id da coluna uuid do Postgres pode ter sido fabricado a mao, migrado
+  // de outro sistema ou vir de seed — nada disso garante versao 1-8 no
+  // terceiro grupo. A validacao so precisa pegar chamada malformada da
+  // propria aplicacao, nao atestar conformidade com a RFC.
+  const idOutsideRfc = "10000000-0000-0000-0000-000000000001";
+  const idV4 = "550e8400-e29b-41d4-a716-446655440000";
+
+  it("updateChampionshipSchema accepts an id outside the RFC (version zero)", () => {
+    const r = updateChampionshipSchema.safeParse({ ...validDraft, id: idOutsideRfc });
+    expect(r.success).toBe(true);
+  });
+
+  it("statusChangeSchema accepts an id outside the RFC (version zero)", () => {
+    const r = statusChangeSchema.safeParse({
+      id: idOutsideRfc,
+      from: "subscribing",
+      to: "rest",
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("still accepts a normal v4 uuid", () => {
+    const r = updateChampionshipSchema.safeParse({ ...validDraft, id: idV4 });
+    expect(r.success).toBe(true);
+  });
+
+  it("still accepts uppercase hex", () => {
+    // Mata o mutante que remove a flag `i`.
+    const r = updateChampionshipSchema.safeParse({
+      ...validDraft,
+      id: "550E8400-E29B-41D4-A716-446655440000",
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it.each([
+    ["abc"],
+    ["nao-e-uuid"],
+    ["10000000-0000-0000-0000-00000000000"], // ultimo grupo com 11 digitos
+  ])("still rejects text that is not a uuid: %s", (invalid) => {
+    const r = updateChampionshipSchema.safeParse({ ...validDraft, id: invalid });
+    expect(r.success).toBe(false);
+  });
+
+  it.each([
+    [" 550e8400-e29b-41d4-a716-446655440000"], // espaco antes, mata o `^`
+    ["550e8400-e29b-41d4-a716-446655440000 "], // espaco depois, mata o `$`
+    ["550e8400e29b41d4a716446655440000"], // 32 hex sem hifens
+    ["550e84000-e29b-41d4-a716-446655440000"], // grupo 1 com um digito a mais, mata os `{n,}`
+    ["550e840g-e29b-41d4-a716-446655440000"], // `g` fora do hexadecimal, mata a classe ampliada
+    [""], // string vazia
+  ])("rejects shapes a loosened regex could let through: %s", (invalid) => {
+    const r = updateChampionshipSchema.safeParse({ ...validDraft, id: invalid });
+    expect(r.success).toBe(false);
+  });
+
+  it("points the error at the id field, not at the form root", () => {
+    const r = updateChampionshipSchema.safeParse({ ...validDraft, id: "nao-e-uuid" });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      const idIssue = r.error.issues.find((issue) => issue.path[0] === "id");
+      expect(idIssue).toBeDefined();
+      expect(idIssue?.message).toBe("Id inválido");
+    }
+  });
+});
+
 describe("statusChangeSchema", () => {
   it("rejects changing to the same status", () => {
     const r = statusChangeSchema.safeParse({

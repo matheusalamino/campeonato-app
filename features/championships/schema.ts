@@ -6,6 +6,17 @@ export const championshipStatusSchema = z.enum(CHAMPIONSHIP_STATUS);
 
 const optionalDate = z.coerce.date().optional();
 
+// Este id vem da coluna uuid do Postgres, nao de entrada de usuario — a
+// coluna ja rejeita qualquer coisa malformada. z.string().uuid() exige
+// versao (1-8) e variante (8/9/a/b) conforme a RFC 4122, o que rejeita um id
+// legitimo mas fabricado a mao, migrado de outro sistema ou de seed (ex.:
+// "10000000-0000-0000-0000-000000000001", com "versao zero"). O Zod aqui so
+// precisa pegar chamada malformada da propria aplicacao, entao validamos
+// apenas a forma 8-4-4-4-12 hexadecimal, sem exigir conformidade com a RFC.
+const databaseId = z
+  .string()
+  .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "Id inválido");
+
 export const baseChampionshipObject = z.object({
   name: z.string().trim().min(1, "Nome é obrigatório"),
   season: z.string().trim().optional(),
@@ -102,7 +113,7 @@ export const championshipFormSchema =
 export const createChampionshipSchema = championshipFormSchema;
 
 export const updateChampionshipSchema = baseChampionshipObject
-  .extend({ id: z.string().uuid() })
+  .extend({ id: databaseId })
   .superRefine(refineChampionship);
 
 export type ChampionshipFormValues = z.infer<typeof championshipFormSchema>;
@@ -112,7 +123,7 @@ export type ChampionshipFormValues = z.infer<typeof championshipFormSchema>;
 // lives in the changeChampionshipStatus server action (.eq("status", from)).
 export const statusChangeSchema = z
   .object({
-    id: z.string().uuid(),
+    id: databaseId,
     from: championshipStatusSchema,
     to: championshipStatusSchema,
   })

@@ -77,6 +77,50 @@ done
 r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000199')::text;")
 checar "max_players nulo sempre da principal" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
 
+echo "== janela de inscricao =="
+preparar
+$DB -c "UPDATE championships SET registration_start_date = now() + interval '1 day' WHERE id='$CHAMP';" > /dev/null
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000401')::text;")
+checar "antes da abertura recusa" "not_open" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+$DB -c "UPDATE championships SET registration_start_date = now() - interval '1 day',
+                                 registration_end_date = now() + interval '1 day' WHERE id='$CHAMP';" > /dev/null
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000402')::text;")
+checar "dentro da janela reserva normalmente" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+$DB -c "UPDATE championships SET registration_end_date = now() - interval '1 minute' WHERE id='$CHAMP';" > /dev/null
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000403')::text;")
+checar "depois do prazo recusa" "not_open" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+# Campeonato sem data configurada tem que se comportar como antes do A5: nulo
+# nao e prazo vencido, e trancaria todo mundo do lado de fora.
+$DB -c "UPDATE championships SET registration_start_date = NULL,
+                                 registration_end_date = NULL WHERE id='$CHAMP';" > /dev/null
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000404')::text;")
+checar "data nula nao fecha nada" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+# As bordas sao inclusivas: o admin que escolhe 23:59 espera aquele minuto
+# inteiro. UPDATE e chamada precisam ficar na MESMA transacao — now() e o
+# instante do BEGIN, entao os dois lados enxergam o mesmo relogio e a igualdade
+# e exata. Em transacoes separadas o tempo anda no meio e o teste vira ">= -1ms",
+# que nao distingue < de <=.
+preparar
+r=$($DB -c "
+  BEGIN;
+  UPDATE championships SET registration_start_date = now(),
+                           registration_end_date = NULL WHERE id='$CHAMP';
+  SELECT reserve_registration_slot('$CHAMP', '99900000405')::text;
+  COMMIT;" | grep '"success"')
+checar "no instante da abertura ja reserva" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+r=$($DB -c "
+  BEGIN;
+  UPDATE championships SET registration_start_date = NULL,
+                           registration_end_date = now() WHERE id='$CHAMP';
+  SELECT reserve_registration_slot('$CHAMP', '99900000406')::text;
+  COMMIT;" | grep '"success"')
+checar "no instante do encerramento ainda reserva" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
 echo "== concorrencia: duas transacoes disputando a ultima vaga =="
 preparar
 $DB -c "UPDATE championships SET max_players = 1, max_waitlist_players = 0 WHERE id='$CHAMP';" > /dev/null
@@ -120,6 +164,33 @@ r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid', '99900000301',
       '{\"visao\":9}'::jsonb)::text;" 2>&1 || true)
 restou=$($DB -c "SELECT count(*) FROM championship_registrations WHERE championship_id='$CHAMP';")
 checar "inscricao desfeita quando a habilidade e invalida" "0" "$restou"
+
+# A excecao deliberada do A5: reservou as 23h58, o prazo fechou as 23:59:59, e
+# ele envia as 00h03. E aceito. A reserva e a autorizacao, e recusa-lo aqui
+# recriaria o "pagou e foi recusado" justo na correria de ultima hora.
+echo "== tolerancia: reservou antes do prazo, enviou depois =="
+preparar
+$DB -c "INSERT INTO players (cpf, name) VALUES ('99900000501', 'Tolerancia A5');" > /dev/null
+pid=$($DB -c "SELECT id FROM players WHERE cpf='99900000501';")
+$DB -c "UPDATE championships SET registration_start_date = now() - interval '1 day',
+                                 registration_end_date = now() + interval '1 minute' WHERE id='$CHAMP';" > /dev/null
+$DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000501');" > /dev/null
+# O prazo vira enquanto ele preenche.
+$DB -c "UPDATE championships SET registration_end_date = now() - interval '1 second' WHERE id='$CHAMP';" > /dev/null
+r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid', '99900000501',
+      '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0}'::jsonb,
+      '{\"visao\":4}'::jsonb)::text;")
+checar "reserva viva atravessa o prazo" "true" "$(echo "$r" | sed 's/.*\"success\" : \([a-z]*\).*/\1/')"
+
+# O outro lado da mesma moeda: sem reserva viva nao ha promessa a honrar, entao
+# o prazo vale. Mesmo campeonato, mesmo instante — so muda a reserva.
+echo "== sem reserva viva, o prazo vale =="
+$DB -c "INSERT INTO players (cpf, name) VALUES ('99900000502', 'Sem reserva A5');" > /dev/null
+pid=$($DB -c "SELECT id FROM players WHERE cpf='99900000502';")
+r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid', '99900000502',
+      '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0}'::jsonb,
+      '{\"visao\":4}'::jsonb)::text;")
+checar "sem reserva, fora do prazo recusa" "not_open" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
 
 limpar
 
