@@ -21,6 +21,22 @@ export const SKILL_LABELS: Record<string, string> = {
   agilidade: "Agilidade",
 };
 
+/**
+ * As habilidades da posicao. CODIGO, e nao palavra.
+ *
+ * `GOL` e nao `Goleiro` porque desde a 20260821010000 e o codigo que circula em
+ * todo caminho que chega aqui: o `form.preferred_position` do wizard, o valor ja
+ * validado pelo Zod em `schema.ts`, e o mesmo valor no insert de
+ * `services/public-registration.ts`.
+ *
+ * Errar esta comparacao nao quebra nada visivelmente — devolve as habilidades de
+ * LINHA para o goleiro. O wizard mostra as seis estrelas erradas, o schema exige
+ * as seis erradas, e o servico GRAVA as seis erradas. Tudo calado.
+ *
+ * Comparacao exata de proposito, sem passar por `normalizePreferredPosition`:
+ * aceitar as duas grafias aqui manteria vivo justamente o segundo vocabulario
+ * que o bloco A8 existe para matar.
+ */
 export function skillsFor(position: string): readonly string[] {
-  return position === "Goleiro" ? KEEPER_SKILLS : LINE_SKILLS;
+  return position === "GOL" ? KEEPER_SKILLS : LINE_SKILLS;
 }

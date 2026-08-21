@@ -7,7 +7,8 @@ import { isValidCpf, formatCpf } from "@/lib/cpf";
 import { formatPhoneBR, formatHeightM, heightToMask, formatBRL } from "@/lib/masks";
 import { BR_STATES } from "@/lib/br-states";
 import { groupRequiresInviteCode } from "@/features/registration/groups";
-import { normalizePreferredPosition } from "@/features/players/position";
+import { CANONICAL_POSITIONS, normalizePreferredPosition } from "@/features/players/position";
+import { POSITION_LABELS } from "@/lib/public/types";
 import { skillsFor, SKILL_LABELS } from "@/features/registration/skills";
 import { computeTicketsTotal } from "@/features/registration/pricing";
 import { buildPixPayload, makePixTxid } from "@/lib/pix";
@@ -51,7 +52,11 @@ export type WizardChampionship = {
 
 const EMPTY = {
   cpf: "", name: "", shirt_name: "", shirt_size: "", email: "", whatsapp: "", birth_date: "",
-  birth_state: "", instagram: "", preferred_position: "Meia",
+  // Sem posicao escolhida, e nao "Meia" por padrao: uma posicao ja preenchida e
+  // um palpite que o jogador tende a nao corrigir, e a cota de goleiro do A6
+  // conta `GOL` contra todo o resto — o palpite errado poe um goleiro no balde
+  // de linha sem ninguem decidir isso.
+  birth_state: "", instagram: "", preferred_position: "",
   height: "", weight: "", group_affiliation: "", invite_code: "",
   extra_tickets_count: 0,
   skills: {} as Record<string, number>,
@@ -324,7 +329,13 @@ export default function RegistrationWizard({
         // inscrever via o campo em branco e levava erro do Zod num campo que
         // nunca tocou. Producao e staging estao 100% canonicos hoje (medido em
         // 2026-08-21), entao quem cai aqui e nulo ou dado vindo do CSV.
-        position = normalizePreferredPosition(p.preferred_position).position ?? "Meia";
+        //
+        // O nao reconhecido para em "" e OBRIGA a escolha, em vez de virar uma
+        // posicao de consolo. Os dois lados desta linha se encontram aqui: a
+        // variavel existe porque a reserva le a posicao antes do render, e o
+        // vazio existe porque a cota conta GOL contra todo o resto -- um goleiro
+        // com dado sujo mandado calado para o balde de linha nao deixa rastro.
+        position = normalizePreferredPosition(p.preferred_position).position ?? "";
         setForm((prev) => ({
           ...prev,
           name: p.name ?? "", shirt_name: p.shirt_name ?? "", shirt_size: p.shirt_size ?? "",
@@ -707,9 +718,16 @@ export default function RegistrationWizard({
                  value={form.cpf} onChange={(e) => set("cpf", formatCpf(e.target.value))} />
           {err("cpf")}
           {/* A posicao mora AQUI, e nao no perfil de jogo, porque a reserva sai
-              deste passo e precisa saber o balde. Ver `FIELD_STEP`. */}
+              deste passo e precisa saber o balde. Ver `FIELD_STEP`.
+
+              Valor e CODIGO, rotulo e palavra: e o codigo que a coluna
+              `players.preferred_position` guarda, e o valor daqui chega ao
+              insert sem passar por conversao nenhuma. */}
           <select {...fieldProps("preferred_position")} aria-label="Posição preferida" value={form.preferred_position} onChange={(e) => onPositionChange(e.target.value)}>
-            <option>Zagueiro</option><option>Meia</option><option>Atacante</option><option>Goleiro</option>
+            <option value="">Selecione…</option>
+            {CANONICAL_POSITIONS.map((codigo) => (
+              <option key={codigo} value={codigo}>{POSITION_LABELS[codigo]}</option>
+            ))}
           </select>
           {err("preferred_position")}
           <button onClick={onCpfContinue} disabled={looking}
@@ -907,7 +925,9 @@ export default function RegistrationWizard({
 
         <StepShell index={stepNumber(7, minor)} title="Revisão & envio" open={step === 7} done={false} onToggle={() => open(7)}>
           <div className="text-sm text-[var(--gala-ink-dim)] space-y-1">
-            <div><b className="text-[var(--gala-ink)]">{form.name || "—"}</b> · {form.preferred_position}</div>
+            {/* Rotulo, e nao o codigo: a revisao e a ultima tela antes de o
+                jogador confirmar, e "GOL" nao e o que ele escolheu ler. */}
+            <div><b className="text-[var(--gala-ink)]">{form.name || "—"}</b> · {POSITION_LABELS[form.preferred_position] ?? "—"}</div>
             <div>{form.group_affiliation || "—"}</div>
             <div>Total: {formatBRL(total)}{waitlisted ? " · Lista de espera" : ""}</div>
           </div>

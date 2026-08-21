@@ -3,8 +3,11 @@
 import { useState } from "react";
 import { calculateOverall, Evaluation, SkillType } from "./OverallCalculator";
 import { toast } from "sonner";
-
-type Position = "Zagueiro" | "Meia" | "Atacante" | "Goleiro";
+import {
+  CANONICAL_POSITIONS,
+  type CanonicalPosition,
+} from "@/features/players/position";
+import { POSITION_LABELS } from "@/lib/public/types";
 
 const linha = [
   "visao",
@@ -26,7 +29,7 @@ const goleiro = [
 
 export default function PlayerForm() {
   const [name, setName] = useState("");
-  const [position, setPosition] = useState<Position>("Meia");
+  const [position, setPosition] = useState<CanonicalPosition>("MEI");
 
   const initialEvaluations = Object.fromEntries(
     [...linha, ...goleiro].map((skill) => [
@@ -68,7 +71,10 @@ export default function PlayerForm() {
     toast.success("Jogador salvo com sucesso");
   }
 
-  const skillsToShow = position === "Goleiro" ? goleiro : linha;
+  // `GOL`, e nao `Goleiro`: o vocabulario da coluna virou codigo na
+  // 20260821010000. Errar aqui nao quebra a tela — oferece as habilidades de
+  // LINHA para quem escolheu goleiro, calado.
+  const skillsToShow = position === "GOL" ? goleiro : linha;
 
   return (
     <form
@@ -89,12 +95,13 @@ export default function PlayerForm() {
         <select
           className="border rounded px-3 py-2 w-full"
           value={position}
-          onChange={(e) => setPosition(e.target.value as Position)}
+          onChange={(e) => setPosition(e.target.value as CanonicalPosition)}
         >
-          <option value="Zagueiro">Zagueiro</option>
-          <option value="Meia">Meia</option>
-          <option value="Atacante">Atacante</option>
-          <option value="Goleiro">Goleiro</option>
+          {CANONICAL_POSITIONS.map((codigo) => (
+            <option key={codigo} value={codigo}>
+              {POSITION_LABELS[codigo]}
+            </option>
+          ))}
         </select>
       </div>
 

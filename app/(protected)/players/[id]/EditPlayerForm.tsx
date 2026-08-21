@@ -9,6 +9,7 @@ import {
   CANONICAL_POSITIONS,
   normalizePreferredPosition,
 } from "@/features/players/position";
+import { POSITION_LABELS } from "@/lib/public/types";
 
 export default function EditPlayerForm({ player }: { player: Player }) {
   const router = useRouter();
@@ -76,7 +77,9 @@ export default function EditPlayerForm({ player }: { player: Player }) {
           {normalized.position ? (
             <>
               A posicao estava gravada como <b>{stored}</b> e foi convertida para{" "}
-              <b>{normalized.position}</b>. Confira o campo antes de salvar.
+              {/* O rotulo, e nao o codigo: o aviso serve para o admin conferir
+                  a conversao, e ele confere contra o que o select mostra. */}
+              <b>{POSITION_LABELS[normalized.position]}</b>. Confira o campo antes de salvar.
             </>
           ) : (
             <>
@@ -122,9 +125,12 @@ export default function EditPlayerForm({ player }: { player: Player }) {
           onChange={(e) => setPosition(e.target.value)}
         >
           <option value="">Nao informada</option>
-          {CANONICAL_POSITIONS.map((p) => (
-            <option key={p} value={p}>
-              {p}
+          {/* Valor e o CODIGO que a coluna guarda; rotulo e a palavra. Desde a
+              20260821010000 a constante virou `GOL`/`ZAG`/`MEI`/`ATA`, e
+              renderiza-la crua deixou o admin escolhendo sigla. */}
+          {CANONICAL_POSITIONS.map((codigo) => (
+            <option key={codigo} value={codigo}>
+              {POSITION_LABELS[codigo]}
             </option>
           ))}
         </select>

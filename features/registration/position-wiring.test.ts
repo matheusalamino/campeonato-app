@@ -1,0 +1,146 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { semComentario } from "@/features/testing/sem-comentario";
+import { CANONICAL_POSITIONS } from "@/features/players/position";
+import { POSITION_LABELS } from "@/lib/public/types";
+
+/**
+ * Os quatro formularios que ESCREVEM posicao, lidos como texto.
+ *
+ * ── POR QUE COMO TEXTO ──
+ *
+ * Tres deles vivem em `app/**` e `components/**`, que o `include` do
+ * `vitest.config.ts` nao alcanca (o porque esta escrito la). O quarto,
+ * `features/registration/schema.ts`, TEM teste de runtime em `schema.test.ts` —
+ * e o que aquele teste nao consegue ver e a DERIVACAO: um enum digitado a mao
+ * com os quatro codigos passa identico ao enum derivado da constante. A lista
+ * duplicada so diverge no dia em que uma das duas muda, e nesse dia o runtime
+ * ainda esta verde.
+ *
+ * ── O QUE ESTAS ASSERTIVAS SEGURAM ──
+ *
+ * Desde a 20260821010000 a coluna `players.preferred_position` guarda codigo, e
+ * a CHECK `players_preferred_position_known` esta VALIDADA — palavra nao entra:
+ *
+ *     INSERT INTO players (name, preferred_position) VALUES ('X','Meia');
+ *     ERROR: violates check constraint "players_preferred_position_known"
+ *
+ * Cada edicao abaixo devolve exatamente esse erro ao usuario, e nenhuma delas
+ * acende no `tsc` (as chaves do `insert` do Supabase nao sao tipadas contra a
+ * CHECK) nem no lint:
+ *
+ *   z.enum(CANONICAL_POSITIONS)  ->  z.enum(["Zagueiro","Meia","Atacante","Goleiro"])
+ *       A inscricao publica para de gravar: o valor validado vai direto para o
+ *       `.from("players").insert(...)`.
+ *
+ *   <option value={codigo}>  ->  <option value={POSITION_LABELS[codigo]}>
+ *       O select passa a mandar a palavra de volta. Mesmo estouro, agora com o
+ *       Zod tambem recusando antes.
+ *
+ *   ?? ""  ->  ?? "Meia"  no preenchimento automatico do wizard
+ *       Volta o defeito que o proprio comentario ali diz prevenir, so que
+ *       invertido: o valor deixa de casar com qualquer `<option>`, o campo
+ *       aparece em branco, e o jogador leva erro do Zod num campo que nao tocou.
+ *       Pior — a decisao do usuario e que posicao NAO reconhecida obrigue a
+ *       escolha, porque a cota do A6 conta `GOL` contra todo o resto e um
+ *       goleiro silenciosamente jogado no balde de linha nao deixa rastro.
+ *
+ *   === "GOL"  ->  === "Goleiro"  em `PlayerForm`
+ *       O formulario passa a oferecer as habilidades de LINHA para o goleiro.
+ *
+ * A varredura de palavra por extenso (`SEM_PALAVRA`) e o que fecha o conjunto:
+ * ela pega a lista nova que alguem escrever a mao ao lado da constante.
+ */
+
+const RAIZ = process.cwd();
+
+function fonteDe(caminho: string): string {
+  return semComentario(readFileSync(join(RAIZ, caminho), "utf8"));
+}
+
+const SCHEMA = "features/registration/schema.ts";
+const WIZARD = "app/(public)/inscrever/[slug]/RegistrationWizard.tsx";
+const CRIAR_JOGADOR = "components/CreatePlayerForm.tsx";
+const FORM_JOGADOR = "app/(protected)/players/components/PlayerForm.tsx";
+const EDITAR_JOGADOR = "app/(protected)/players/[id]/EditPlayerForm.tsx";
+
+const schema = fonteDe(SCHEMA);
+const wizard = fonteDe(WIZARD);
+const criarJogador = fonteDe(CRIAR_JOGADOR);
+const formJogador = fonteDe(FORM_JOGADOR);
+const editarJogador = fonteDe(EDITAR_JOGADOR);
+
+/**
+ * Palavra por extenso como LITERAL de string.
+ *
+ * So o literal, e de proposito: `const goleiro = [...]` em `PlayerForm` e nome
+ * de variavel de habilidade e nao tem nada com o vocabulario da coluna. O
+ * `semComentario` ja tirou a prosa antes — sem ele esta varredura reprovaria os
+ * proprios docblocks que explicam a virada.
+ */
+const SEM_PALAVRA = /["'`](Goleiro|Zagueiro|Meia|Atacante)["'`]/;
+
+describe("os formularios que escrevem posicao falam CODIGO", () => {
+  // Sentinela: um arquivo movido de lugar leria vazio, e toda assertiva de
+  // ausencia abaixo passaria medindo o nada.
+  it("le os cinco arquivos, e cada um ainda e o que este teste pensa que e", () => {
+    expect(schema).toContain("preferred_position:");
+    expect(wizard).toContain("normalizePreferredPosition(");
+    expect(criarJogador).toContain('.from("players").insert(');
+    expect(formJogador).toContain("skillsToShow");
+    expect(editarJogador).toContain('.from("players")');
+  });
+
+  it("a constante e o rotulo cobrem as quatro posicoes, e o rotulo nao e o codigo", () => {
+    // Prende as duas pontas que todas as assertivas de texto abaixo assumem: se
+    // `POSITION_LABELS` perdesse uma entrada, o select mostraria `undefined` e
+    // nenhuma leitura de fonte perceberia.
+    expect([...CANONICAL_POSITIONS]).toEqual(["GOL", "ZAG", "MEI", "ATA"]);
+    for (const codigo of CANONICAL_POSITIONS) {
+      expect(POSITION_LABELS[codigo]).toBeTruthy();
+      expect(POSITION_LABELS[codigo]).not.toBe(codigo);
+    }
+  });
+
+  it("o Zod da inscricao deriva da constante, em vez de repetir a lista", () => {
+    expect(schema).toMatch(/preferred_position:\s*z\.enum\(\s*CANONICAL_POSITIONS/);
+    expect(schema).toMatch(/from\s+["']@\/features\/players\/position["']/);
+    expect(schema).not.toMatch(SEM_PALAVRA);
+  });
+
+  it("o wizard nasce sem posicao escolhida, e o nao reconhecido nao vira Meia", () => {
+    expect(wizard).toMatch(/preferred_position:\s*""/);
+    expect(wizard).toMatch(
+      /normalizePreferredPosition\(\s*p\.preferred_position\s*\)\.position\s*\?\?\s*""/,
+    );
+    expect(wizard).not.toMatch(SEM_PALAVRA);
+  });
+
+  it("o select do wizard oferece o codigo como valor e a palavra como rotulo", () => {
+    expect(wizard).toMatch(/CANONICAL_POSITIONS\.map\(/);
+    expect(wizard).toMatch(/<option\s+key=\{\w+\}\s+value=\{\w+\}>\{POSITION_LABELS\[\w+\]\}/);
+    // A opcao vazia e o que torna a escolha obrigatoria na tela: sem ela o
+    // select mostraria a primeira posicao ja selecionada e o jogador enviaria
+    // `GOL` sem ter escolhido nada.
+    expect(wizard).toMatch(/<option value="">/);
+  });
+
+  it("o cadastro de jogador do admin sai da constante", () => {
+    expect(criarJogador).toMatch(/CANONICAL_POSITIONS\.map\(/);
+    expect(criarJogador).toMatch(/POSITION_LABELS\[/);
+    expect(criarJogador).not.toMatch(SEM_PALAVRA);
+  });
+
+  it("o formulario de avaliacao decide o goleiro pelo codigo", () => {
+    expect(formJogador).toMatch(/===\s*"GOL"/);
+    expect(formJogador).toMatch(/CANONICAL_POSITIONS\.map\(/);
+    expect(formJogador).not.toMatch(SEM_PALAVRA);
+  });
+
+  it("a edicao de jogador mostra a palavra, e nao o codigo cru", () => {
+    expect(editarJogador).toMatch(/CANONICAL_POSITIONS\.map\(/);
+    expect(editarJogador).toMatch(/POSITION_LABELS\[/);
+    expect(editarJogador).not.toMatch(SEM_PALAVRA);
+  });
+});

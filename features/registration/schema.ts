@@ -7,6 +7,7 @@ import { groupRequiresInviteCode } from "./groups";
 import { skillsFor } from "./skills";
 import { SHIRT_SIZES } from "./shirt-sizes";
 import { extraTicketsCap } from "./extra-tickets";
+import { CANONICAL_POSITIONS } from "@/features/players/position";
 import type { GroupOption } from "@/types/championship";
 
 const rating = z.coerce.number().int().min(1).max(5);
@@ -41,7 +42,18 @@ export function makeRegistrationSchema(
       birth_date: z.string().min(1, "Data de nascimento é obrigatória"),
       birth_state: z.string().trim().min(1, "Estado é obrigatório"),
       instagram: z.string().trim().optional().default(""),
-      preferred_position: z.enum(["Zagueiro", "Meia", "Atacante", "Goleiro"]),
+      /*
+       * A MESMA lista da CHECK do banco, e nao uma copia dela.
+       *
+       * O valor validado aqui vai direto para o `.from("players").insert(...)`
+       * de `services/public-registration.ts` — sem conversao no meio. Enquanto
+       * este enum guardou as palavras por extenso, toda inscricao publica
+       * estourava na CHECK `players_preferred_position_known` e o jogador lia o
+       * erro cru do Postgres.
+       */
+      preferred_position: z.enum(CANONICAL_POSITIONS, {
+        message: "Posição é obrigatória",
+      }),
       height: decimalBR("Altura inválida"),
       weight: decimalBR("Peso inválido"),
       group_affiliation: z.string().trim().min(1, "Grupo é obrigatório"),
