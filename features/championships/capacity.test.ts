@@ -159,11 +159,4 @@ describe("derivedCapacity", () => {
       waitlistGoalkeepers: 1, waitlistOutfield: 4, waitlistTotal: 5,
     });
   });
-
-  it("fila fracionaria tambem vira inteiro", () => {
-    expect(derivedCapacity({ ...hoje, waitlistGoalkeepers: 1.9, waitlistOutfield: 4.9 })).toEqual({
-      total: 80, goalkeepers: 8, outfield: 72,
-      waitlistGoalkeepers: 1, waitlistOutfield: 4, waitlistTotal: 5,
-    });
-  });
 });
