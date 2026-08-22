@@ -44,6 +44,13 @@ import { fonteDe, SEM_PALAVRA } from "@/features/testing/fonte";
  * castiga quem organiza o codigo. Pela mesma razao tudo que costura tokens usa
  * `\s*`: quebrar uma chamada em linhas nao pode ficar vermelho.
  *
+ * A regra e facil de escrever e facil de furar: quando este arquivo nasceu,
+ * UMA das assertivas dele — a da cor do `PlayerSearchCard` — trazia
+ * `positionColors[position]` com o nome fixo, tres paragrafos abaixo do texto
+ * que proibia isso. Renomear o binding do prop para `posicao` deixava o `tsc`
+ * limpo, o comportamento identico, e o teste VERMELHO. Regra em prosa nao se
+ * cumpre sozinha; quem a cumpre e a mutacao de renome que roda contra ela.
+ *
  * O `,?` antes do parenteses de fecho tem a mesma origem, e ele custou uma
  * medicao: `\s*\)` sozinho REPROVAVA quando a chamada era quebrada em linhas,
  * porque o prettier poe virgula final no ultimo argumento ao faze-lo. Assertiva
@@ -81,10 +88,17 @@ describe("positionLabel", () => {
     expect(positionLabel("ATA")).toBe("Atacante");
   });
 
-  // Staging e producao ainda nao rodaram a 20260821010000: la a coluna devolve
-  // `Goleiro`. Passar pela normalizacao, em vez de indexar o mapa cru, e o que
-  // faz a tela ficar certa nos tres ambientes ao mesmo tempo.
-  it("aceita a palavra legada, que e o que staging e producao ainda devolvem", () => {
+  // MEDIDO, e as duas linhas nao valem o mesmo: trocar a normalizacao pelo
+  // `Object.hasOwn` do irmao do pote so reprova a SEGUNDA. `Goleiro` sai
+  // `Goleiro` pelos dois caminhos — a palavra canonica exata cai no ramo do
+  // bruto e renderiza igual —, entao aquela linha e tautologia, e fica so como
+  // documentacao de que a palavra legada nao QUEBRA.
+  //
+  // O ganho real da normalizacao e a variante: caixa e espaco sobrando. E ele e
+  // barato, nao urgente — `features/players/position.ts` registra que os tres
+  // ambientes estao 100% nas quatro palavras canonicas exatas, sem variante
+  // nenhuma. Vale por ser a mesma defesa de fronteira que `mapPlayer` ja faz.
+  it("aceita a palavra legada, e tambem a variante dela, que e onde ganha", () => {
     expect(positionLabel("Goleiro")).toBe("Goleiro");
     expect(positionLabel("atacante")).toBe("Atacante");
   });
@@ -145,7 +159,7 @@ describe("quem exibe posicao de jogador nao imprime o codigo cru", () => {
 
     expect(fonte).toMatch(ROTULADA_PROP);
     expect(fonte).not.toMatch(CRU_PROP);
-    expect(fonte).toMatch(/positionColors\[\s*position\s*\]/);
+    expect(fonte).toMatch(/positionColors\[\s*\w+\s*\]/);
   });
 
   it("auction-fiscal rotula os quatro sitios da troca", () => {

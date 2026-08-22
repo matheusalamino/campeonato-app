@@ -102,12 +102,19 @@ export const POSITION_LABELS: Record<CanonicalPosition, string> = {
  * mesmo problema de tipo com `Object.hasOwn`, e para o pote isso basta: ali o
  * unico vocabulario que existe e o codigo.
  *
- * Para o jogador nao basta, porque ha vocabulario LEGADO vivo. A 20260821010000
- * ainda nao chegou a staging nem a producao — a razao esta escrita no docblock
- * de `lib/public/map-player.ts`, que normaliza pelo mesmo motivo — e la a
- * coluna devolve `Goleiro`. Com `Object.hasOwn` a palavra legada cairia no
- * ramo do bruto; pela normalizacao ela vira codigo e volta como palavra, entao
- * a mesma tela fica certa nos tres ambientes. De quebra fecha o furo do
+ * Para o jogador ha vocabulario LEGADO vivo: a 20260821010000 ainda nao chegou
+ * a staging nem a producao, e la a coluna devolve `Goleiro`.
+ *
+ * MEDIDO, e o ganho e menor do que parece: para a palavra canonica EXATA os
+ * dois caminhos empatam — `Object.hasOwn` nao acha `Goleiro`, devolve o bruto,
+ * e o bruto ja e a palavra certa. O que so a normalizacao pega e a VARIANTE:
+ * `atacante` em caixa baixa, `' goleiro '` com espaco sobrando, `Pivo`.
+ *
+ * E `features/players/position.ts` registra que variante assim NAO existe em
+ * dado real — os tres ambientes estao 100% nas quatro palavras exatas. Entao
+ * isto nao e conserto de um defeito que roda hoje; e a mesma defesa de
+ * fronteira que `mapPlayer` faz, pelo mesmo argumento: o `tsc` ve `string`, e
+ * promessa ao compilador nao e garantia de runtime. De quebra fecha o furo do
  * prototipo de Object que `POSITION_ALIASES` teve.
  *
  * Devolve o BRUTO para o que ninguem reconhece — inclusive para a string vazia,
