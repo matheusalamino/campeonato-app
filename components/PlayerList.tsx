@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { positionLabel } from "@/lib/public/types";
 import { useState } from "react";
 
 export function PlayerList({
@@ -43,8 +44,18 @@ export function PlayerList({
             className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 hover:bg-zinc-800"
           >
             <div className="flex items-center gap-3">
+              {/*
+                A etiqueta tem `uppercase`, entao a tela mostra `GOLEIRO` e nao
+                `Goleiro` — e e isso mesmo que ela mostrava ANTES da virada do
+                vocabulario, quando a coluna guardava a palavra. Sem o rotulo
+                aqui a etiqueta passaria a dizer `GOL`, que e outra coisa.
+
+                Nao confundir com as seis etiquetas `uppercase tracking-widest`
+                de `games/[id]`, `BestPlayerVoteModal` e `LineupControl`: aquelas
+                MOSTRAM a sigla por decisao do usuario, e esta nao e uma delas.
+              */}
               <div className="bg-blue-600 text-xs font-bold px-3 py-1 rounded-full uppercase">
-                {player.preferred_position}
+                {positionLabel(player.preferred_position)}
               </div>
 
               <span className="font-medium">{player.name}</span>

@@ -2,6 +2,7 @@
 
 import { Star } from "lucide-react";
 import Image from "next/image";
+import { positionLabel } from "@/lib/public/types";
 import { cn } from "@/lib/utils";
 
 type PlayerSearchCardProps = {
@@ -103,7 +104,17 @@ export function PlayerSearchCard({
               positionColors[position] ?? "bg-zinc-700 text-zinc-300",
             )}
           >
-            {position}
+            {/*
+              O prop segue chegando em CODIGO, e tem de seguir: e ele que
+              escolhe a cor logo acima. Quem vira palavra e so o TEXTO.
+
+              `PotPreviewTab` chama este card com a posicao do POTE quando o
+              jogador nao esta no catalogo, e la existe `EXT`, que nao e posicao
+              de ninguem. `positionLabel` devolve o bruto nesse caso, entao a
+              etiqueta diz `EXT` — mesmo destino que a cor ja tinha, porque
+              `positionColors` tambem nao tem essa entrada.
+            */}
+            {positionLabel(position)}
           </span>
           {isPurchased && (
             <>

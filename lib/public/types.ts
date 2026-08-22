@@ -1,6 +1,9 @@
 // Tipos compartilhados das páginas públicas (telão e estatísticas)
 
-import type { CanonicalPosition } from "@/features/players/position";
+import {
+  normalizePreferredPosition,
+  type CanonicalPosition,
+} from "@/features/players/position";
 
 export type PublicPlayer = {
   registrationId: string;
@@ -75,3 +78,39 @@ export const POSITION_LABELS: Record<CanonicalPosition, string> = {
   MEI: "Meia",
   ATA: "Atacante",
 };
+
+/**
+ * A palavra de uma posicao vinda do BANCO, que o `tsc` ve como `string`.
+ *
+ * ── POR QUE UMA FUNCAO, E NAO `POSITION_LABELS[x] ?? x` ──
+ *
+ * Onde o valor ja e `CanonicalPosition` — `PublicPlayer.position`, que
+ * `mapPlayer` normaliza — indexar o mapa direto e o certo, e as telas publicas
+ * fazem exatamente isso. Esta funcao e para o OUTRO lado: `Player`,
+ * `PlayerSearchCard` e o `auction-fiscal` tipam a posicao como `string`, e ali
+ * `POSITION_LABELS[x]` nem compila, porque o mapa e tipado por
+ * `CanonicalPosition` de proposito.
+ *
+ * O jeito errado de calar o `tsc` seria alargar o mapa para
+ * `Record<string, string>`, e o docblock acima diz o que isso custa: codigo sem
+ * rotulo voltaria a compilar e sumir na tela. Entao o estreitamento acontece
+ * AQUI, uma vez, em vez de virar oito copias espalhadas pelas telas.
+ *
+ * ── POR QUE `normalizePreferredPosition`, E NAO `Object.hasOwn` ──
+ *
+ * O irmao do pote (`potLabel`, em `features/draft/pot-position.ts`) usa
+ * `Object.hasOwn` porque a coluna de pote ja subiu convertida nos tres
+ * ambientes. A de jogador NAO: a 20260821010000 ainda nao chegou a staging nem
+ * a producao, e la `players.preferred_position` devolve `Goleiro`. Passar pela
+ * normalizacao faz a mesma tela ficar certa nos tres ambientes ao mesmo tempo,
+ * e de quebra fecha o furo do prototipo de Object que `POSITION_ALIASES` teve.
+ *
+ * Devolve o BRUTO para o que ninguem reconhece — inclusive para a string vazia,
+ * e isso e load-bearing: `auction-fiscal` escreve
+ * `positionLabel(p.position) || "Sem posicao"`, e um rotulo no lugar do vazio
+ * desarmaria aquele guarda.
+ */
+export function positionLabel(position: string): string {
+  const canonical = normalizePreferredPosition(position).position;
+  return canonical ? POSITION_LABELS[canonical] : position;
+}
