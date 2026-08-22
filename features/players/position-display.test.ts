@@ -43,6 +43,12 @@ import { fonteDe, SEM_PALAVRA } from "@/features/testing/fonte";
  * um local e refatoracao, nao regressao, e assertiva que reprova contra renome
  * castiga quem organiza o codigo. Pela mesma razao tudo que costura tokens usa
  * `\s*`: quebrar uma chamada em linhas nao pode ficar vermelho.
+ *
+ * O `,?` antes do parenteses de fecho tem a mesma origem, e ele custou uma
+ * medicao: `\s*\)` sozinho REPROVAVA quando a chamada era quebrada em linhas,
+ * porque o prettier poe virgula final no ultimo argumento ao faze-lo. Assertiva
+ * que so aceita a chamada em uma linha manda o autor desfazer a formatacao do
+ * proprio repo para ficar verde.
  */
 
 /** `{jogador.preferred_position}` — o valor cru direto no JSX. */
@@ -50,13 +56,13 @@ const CRU_PREFERIDA = /\{\s*\w+\.preferred_position\s*\}/;
 
 /** `{positionLabel(jogador.preferred_position)}` — a forma consertada. */
 const ROTULADA_PREFERIDA =
-  /\{\s*positionLabel\(\s*\w+\.preferred_position\s*\)\s*\}/;
+  /\{\s*positionLabel\(\s*\w+\.preferred_position\s*,?\s*\)\s*\}/;
 
 /** `{position}` — o prop cru direto no JSX. */
 const CRU_PROP = /\{\s*position\s*\}/;
 
 /** `{positionLabel(position)}` — a forma consertada, com o nome livre. */
-const ROTULADA_PROP = /\{\s*positionLabel\(\s*\w+\s*\)\s*\}/;
+const ROTULADA_PROP = /\{\s*positionLabel\(\s*\w+\s*,?\s*\)\s*\}/;
 
 /** `{p.position || "Sem posição"}` — cru com o guarda de vazio na frente. */
 const CRU_COM_FALLBACK = /\{\s*\w+\.position\s*\|\|/;
@@ -65,7 +71,7 @@ const CRU_COM_FALLBACK = /\{\s*\w+\.position\s*\|\|/;
 const CRU_EM_TEMPLATE = /\$\{\s*\w+\.position\s*\}/;
 
 /** `positionLabel(p.position)` — a forma consertada do auction-fiscal. */
-const ROTULADA_PONTO_POSITION = /positionLabel\(\s*\w+\.position\s*\)/g;
+const ROTULADA_PONTO_POSITION = /positionLabel\(\s*\w+\.position\s*,?\s*\)/g;
 
 describe("positionLabel", () => {
   it("troca o codigo pela palavra que o usuario le", () => {
