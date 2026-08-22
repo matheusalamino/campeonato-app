@@ -126,7 +126,7 @@ describe("quem exibe posicao de jogador nao imprime o codigo cru", () => {
     expect(fonte).not.toMatch(CRU_PREFERIDA);
   });
 
-  // O conserto entra AQUI, e nao em `PlayersSection:377` que passa o valor,
+  // O conserto entra AQUI, e nao no `PlayersSection` que passa o valor ao prop,
   // porque este e o ponto por onde todo chamador do modal passa.
   it("PlayerRadarModal rotula a posicao do cabecalho", () => {
     const fonte = fonteDe(

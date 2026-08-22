@@ -826,7 +826,9 @@ export default function AuctionFiscalPage() {
             <p>
               <span className="text-zinc-500">Jogador X:</span>{" "}
               <span className="font-medium text-zinc-100">
-                {playerA ? `${playerA.name} (${positionLabel(playerA.position)})` : "—"}
+                {playerA
+                  ? `${playerA.name} (${positionLabel(playerA.position)})`
+                  : "—"}
               </span>
             </p>
             <p>
@@ -838,7 +840,9 @@ export default function AuctionFiscalPage() {
             <p>
               <span className="text-zinc-500">Jogador Y:</span>{" "}
               <span className="font-medium text-zinc-100">
-                {playerB ? `${playerB.name} (${positionLabel(playerB.position)})` : "—"}
+                {playerB
+                  ? `${playerB.name} (${positionLabel(playerB.position)})`
+                  : "—"}
               </span>
             </p>
             <p className="pt-1 text-xs text-zinc-500">

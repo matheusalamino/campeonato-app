@@ -98,12 +98,17 @@ export const POSITION_LABELS: Record<CanonicalPosition, string> = {
  *
  * ── POR QUE `normalizePreferredPosition`, E NAO `Object.hasOwn` ──
  *
- * O irmao do pote (`potLabel`, em `features/draft/pot-position.ts`) usa
- * `Object.hasOwn` porque a coluna de pote ja subiu convertida nos tres
- * ambientes. A de jogador NAO: a 20260821010000 ainda nao chegou a staging nem
- * a producao, e la `players.preferred_position` devolve `Goleiro`. Passar pela
- * normalizacao faz a mesma tela ficar certa nos tres ambientes ao mesmo tempo,
- * e de quebra fecha o furo do prototipo de Object que `POSITION_ALIASES` teve.
+ * O irmao do pote (`potLabel`, em `features/draft/pot-position.ts`) resolve o
+ * mesmo problema de tipo com `Object.hasOwn`, e para o pote isso basta: ali o
+ * unico vocabulario que existe e o codigo.
+ *
+ * Para o jogador nao basta, porque ha vocabulario LEGADO vivo. A 20260821010000
+ * ainda nao chegou a staging nem a producao — a razao esta escrita no docblock
+ * de `lib/public/map-player.ts`, que normaliza pelo mesmo motivo — e la a
+ * coluna devolve `Goleiro`. Com `Object.hasOwn` a palavra legada cairia no
+ * ramo do bruto; pela normalizacao ela vira codigo e volta como palavra, entao
+ * a mesma tela fica certa nos tres ambientes. De quebra fecha o furo do
+ * prototipo de Object que `POSITION_ALIASES` teve.
  *
  * Devolve o BRUTO para o que ninguem reconhece — inclusive para a string vazia,
  * e isso e load-bearing: `auction-fiscal` escreve
