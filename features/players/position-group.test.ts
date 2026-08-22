@@ -10,6 +10,7 @@ import { normalizePositionGroup } from "./position-group";
  * vez de ler o arquivo e casar regex como os testes de fiacao vizinhos fazem
  * com o que mora em `app/**`.
  */
+
 /**
  * Um codigo de linha qualquer, tirado do enum em vez de citado a mao.
  *
@@ -58,12 +59,24 @@ describe("normalizePositionGroup", () => {
     expect(normalizePositionGroup(" goleiro ")).not.toBe("goalkeeper");
   });
 
-  it("nenhuma palavra por extenso vira goleiro", () => {
-    // Contraprova do teste acima pelo outro lado: o que sobra de vocabulario
-    // antigo e de planilha cai em `line`, e nao em `goalkeeper`.
-    for (const palavra of ["Goleiro", "Zagueiro", "Meia", "Atacante", "Fixo", "Pivo"]) {
-      expect(normalizePositionGroup(palavra)).toBe("line");
+  it("o que esta fora do enum e desconhecido, e nao jogador de linha", () => {
+    // Decisao do usuario em 2026-08-22: falha FECHADA. Valor que o sistema nao
+    // entende nao vira afirmacao positiva sobre o jogador.
+    const foraDoEnum = ["Goleiro", "Zagueiro", "Meia", "Atacante", "Fixo", "???"];
+    for (const fora of foraDoEnum) {
+      expect(normalizePositionGroup(fora)).toBe("unknown");
     }
+  });
+
+  it("goleiro escrito por extenso nao forma par com jogador de linha", () => {
+    // A CONSEQUENCIA DE DOMINIO, e a razao de a mudanca existir. Os dois
+    // chamadores liberam a troca por igualdade de grupo
+    // (`auction-fiscal/page.tsx:191-197` e `apply-transfer/route.ts:181`). Com a
+    // palavra caindo em `line`, um goleiro nao convertido casava com um jogador
+    // de linha em codigo e a troca passava. Agora ela e barrada.
+    expect(normalizePositionGroup("Goleiro")).not.toBe(
+      normalizePositionGroup(UM_CODIGO_DE_LINHA),
+    );
   });
 
   it("espaco e caixa nao mudam o desfecho", () => {
