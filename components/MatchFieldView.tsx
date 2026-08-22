@@ -11,8 +11,10 @@ import type { MatchDetail, MatchPlayer, MatchEventItem } from "@/features/hooks/
 // casar, e entrada morta em mapa de conversao e o que faz o proximo leitor
 // acreditar que o repo suporta dois vocabularios de proposito.
 //
-// O que sobra tem funcao: `LAT`/`VOL` (codigos de rotulo que a CHECK da coluna
-// nao aceita) e qualquer vocabulario novo caem no `?? "MEI"` do corredor.
+// O que sobra tem funcao: `LAT`/`VOL` (codigos que a CHECK da coluna nao
+// aceita, e que desde a Task 2 do A8 nem rotulo tem -- sobrevivem so como
+// apelido de ENTRADA em `POSITION_ALIASES`) e qualquer vocabulario novo caem
+// no `?? "MEI"` do corredor.
 const POSITION_KEY: Record<string, string> = {
   GOL: "GOL",
   ZAG: "ZAG",

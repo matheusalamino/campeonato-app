@@ -80,7 +80,10 @@ export default function MobilePlayersTab({
     [rankings.players],
   );
   const positions = useMemo(
-    () => [...new Set(rankings.players.map((p) => p.position).filter(Boolean))].sort() as CanonicalPosition[],
+    () =>
+      [...new Set(rankings.players.map((p) => p.position))]
+        .filter((p): p is CanonicalPosition => p !== null)
+        .sort(),
     [rankings.players],
   );
 

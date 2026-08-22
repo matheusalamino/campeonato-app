@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { PublicPlayer, PublicPlayerStats, RankingEntry } from "@/lib/public/types";
+import { mapPlayer } from "@/lib/public/map-player";
 import {
   sumVotePoints,
   buildStatRanking,
@@ -55,24 +56,6 @@ const EMPTY: PublicRankings = {
 };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-function mapPlayer(r: any): PublicPlayer {
-  return {
-    registrationId: r.registration_id,
-    championshipId: r.championship_id,
-    playerName: r.player_name,
-    officialName: r.official_name,
-    // Sem normalizar: a view `public_players` expoe `p.preferred_position AS
-    // "position"`, e essa coluna tem CHECK validada em GOL/ZAG/MEI/ATA. Nao e
-    // borda nao-confiavel como a planilha do CSV -- e dado que o banco validou.
-    position: r.position,
-    photoUrl: r.photo_url,
-    finalOverall: r.final_overall === null ? null : Number(r.final_overall),
-    championshipTeamId: r.championship_team_id,
-    teamName: r.team_name,
-    teamLogoUrl: r.team_logo_url,
-  };
-}
-
 function mapStats(r: any, minutesPerMatch: number): PublicPlayerStats {
   return {
     registrationId: r.registration_id,

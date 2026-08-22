@@ -73,8 +73,10 @@ describe("normalizePreferredPosition", () => {
   });
 
   // LAT e VOL sao codigos que a CHECK nao aceita, e que a Task 2 do A8 tirou de
-  // POSITION_LABELS. Continuam entrando por aqui porque planilha velha e dump
-  // antigo ainda os mandam: precisam de um canonico de chegada, e os quatro
+  // POSITION_LABELS. Seguem cobertos pela MESMA razao do vocabulario de futsal,
+  // e nao por outra: nao existem em dado real (ver ALCANCE em position.ts), e o
+  // que os mantem e a defesa de ENTRADA -- o CSV de import aceita celula
+  // arbitraria de planilha. Precisam de um canonico de chegada; os quatro
   // canonicos passam por identidade.
   it("os codigos entram, inclusive LAT e VOL que a CHECK recusa", () => {
     expect(pos("GOL")).toBe("GOL");

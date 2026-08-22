@@ -25,9 +25,10 @@ type FootballFieldProps = {
  * proximo leitor acreditar que o repo suporta dois vocabularios de proposito.
  *
  * O que sobra tem funcao propria: o campo so tem QUATRO faixas, e `LAT`/`VOL`
- * (codigos de rotulo que a CHECK da coluna nao aceita) ou qualquer vocabulario
- * novo caem no `?? "MEI"` do corredor, em vez de estourar um `grouped` sem a
- * chave.
+ * (codigos que a CHECK da coluna nao aceita, e que desde a Task 2 do A8 nem
+ * rotulo tem -- sobrevivem so como apelido de ENTRADA em `POSITION_ALIASES`)
+ * ou qualquer vocabulario novo caem no `?? "MEI"` do corredor, em vez de
+ * estourar um `grouped` sem a chave.
  */
 const positionMap: Record<string, string> = {
   GOL: "GOL",
