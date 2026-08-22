@@ -88,6 +88,12 @@ const previaDoPote = fonteDe(PREVIA_DO_POTE);
  * zero — reindentar o miolo, quebrar argumentos em linhas ou trocar aspas nao
  * mexe em nada disso.
  *
+ * Pelo mesmo motivo o operador nao entra: as assertivas abaixo aceitam
+ * `=== "GOL"` E `case "GOL":`. Reescrever um detector de tres ramos como
+ * `switch` tem `tsc` limpo, comportamento identico e codigo melhor; a versao
+ * anterior destas assertivas reprovava contra ele, o que transformava uma
+ * limpeza legitima em "desfaca para voltar ao verde". Medido pela revisao.
+ *
  * O `export` sem `default` no TERMINADOR e load-bearing, e a primeira versao
  * nao o tinha: `PotPreviewTab.tsx` declara `export function PotPreviewTab(`, o
  * corte nao achava fim nenhum e o "corpo" de `positionHeaderClass` seguia ate o
@@ -133,7 +139,7 @@ describe("quem le a categoria de pote fala CODIGO", () => {
     // aqui o PRODUTOR VALIDA: `auction-window` so grava
     // `draft_auction_pot_position` depois de achar a linha em `draft_pots` com
     // `.eq("position", ...)`, e essa coluna tem CHECK desde a 20260821020000.
-    expect(multaGeral).toMatch(/===\s*["']GOL["']/);
+    expect(multaGeral).toMatch(/(?:===|case)\s*["']GOL["']/);
     expect(multaGeral).not.toMatch(/toUpperCase|toLowerCase/);
     expect(multaGeral).not.toMatch(SEM_PALAVRA_DE_POTE);
   });
@@ -141,22 +147,22 @@ describe("quem le a categoria de pote fala CODIGO", () => {
   // ── Os quatro que perdiam a guarda do pote de goleiro ─────────────────────
 
   it("a janela de habilitacao recusa o pote de goleiro pelo codigo", () => {
-    expect(janelaHabilitacao).toMatch(/===\s*["']GOL["']/);
+    expect(janelaHabilitacao).toMatch(/(?:===|case)\s*["']GOL["']/);
     expect(janelaHabilitacao).not.toMatch(SEM_PALAVRA_DE_POTE);
   });
 
   it("a apuracao da habilitacao recusa o pote de goleiro pelo codigo", () => {
-    expect(resolveHabilitacao).toMatch(/===\s*["']GOL["']/);
+    expect(resolveHabilitacao).toMatch(/(?:===|case)\s*["']GOL["']/);
     expect(resolveHabilitacao).not.toMatch(SEM_PALAVRA_DE_POTE);
   });
 
   it("o estorno dos perdedores pula o pote de goleiro pelo codigo", () => {
-    expect(estornoHabilitacao).toMatch(/===\s*["']GOL["']/);
+    expect(estornoHabilitacao).toMatch(/(?:===|case)\s*["']GOL["']/);
     expect(estornoHabilitacao).not.toMatch(SEM_PALAVRA_DE_POTE);
   });
 
   it("a entrada no lance cego recusa o pote de goleiro pelo codigo", () => {
-    expect(entrarNoLance).toMatch(/===\s*["']GOL["']/);
+    expect(entrarNoLance).toMatch(/(?:===|case)\s*["']GOL["']/);
     expect(entrarNoLance).not.toMatch(SEM_PALAVRA_DE_POTE);
   });
 
@@ -167,8 +173,8 @@ describe("quem le a categoria de pote fala CODIGO", () => {
     // arquivo, e o `isGoalkeeper` sozinho seguraria o verde com o `isExtra`
     // quebrado — que e exatamente o defeito que a virada introduziria, porque o
     // `isGoalkeeper` ja hedgeava com `=== "gol"` e o `isExtra` nao.
-    expect(estadoDeEntrada).toMatch(/===\s*["']GOL["']/);
-    expect(estadoDeEntrada).toMatch(/===\s*["']EXT["']/);
+    expect(estadoDeEntrada).toMatch(/(?:===|case)\s*["']GOL["']/);
+    expect(estadoDeEntrada).toMatch(/(?:===|case)\s*["']EXT["']/);
     expect(estadoDeEntrada).not.toMatch(SEM_PALAVRA_DE_POTE);
   });
 
@@ -185,7 +191,7 @@ describe("quem le a categoria de pote fala CODIGO", () => {
   // ── A noite de draft ─────────────────────────────────────────────────────
 
   it("a tela de lances reconhece o pote de goleiro pelo codigo", () => {
-    expect(telaDeLances).toMatch(/===\s*["']GOL["']/);
+    expect(telaDeLances).toMatch(/(?:===|case)\s*["']GOL["']/);
     expect(telaDeLances).not.toMatch(SEM_PALAVRA_DE_POTE);
   });
 
@@ -194,16 +200,16 @@ describe("quem le a categoria de pote fala CODIGO", () => {
     // e a estrela e o `return` final. Prender os TRES separadamente e o que
     // impede que um deles morra escondido atras dos outros dois.
     const icone = corpoDaFuncao(menuDePotes, "PositionIcon");
-    expect(icone).toMatch(/===\s*["']GOL["']/);
-    expect(icone).toMatch(/===\s*["']ZAG["']/);
-    expect(icone).toMatch(/===\s*["']MEI["']/);
+    expect(icone).toMatch(/(?:===|case)\s*["']GOL["']/);
+    expect(icone).toMatch(/(?:===|case)\s*["']ZAG["']/);
+    expect(icone).toMatch(/(?:===|case)\s*["']MEI["']/);
     expect(icone).not.toMatch(SEM_PALAVRA_DE_POTE);
   });
 
   it("o cartao do pote reconhece goleiro E pote extra pelo codigo", () => {
     const cartao = corpoDaFuncao(menuDePotes, "PotCard");
-    expect(cartao).toMatch(/===\s*["']GOL["']/);
-    expect(cartao).toMatch(/===\s*["']EXT["']/);
+    expect(cartao).toMatch(/(?:===|case)\s*["']GOL["']/);
+    expect(cartao).toMatch(/(?:===|case)\s*["']EXT["']/);
     expect(cartao).not.toMatch(SEM_PALAVRA_DE_POTE);
   });
 
@@ -221,7 +227,7 @@ describe("quem le a categoria de pote fala CODIGO", () => {
     // esperar palavra de volta.
     const cabecalho = corpoDaFuncao(previaDoPote, "positionHeaderClass");
     for (const codigo of ["GOL", "ZAG", "MEI", "ATA"]) {
-      expect(cabecalho).toMatch(new RegExp(`===\\s*["']${codigo}["']`));
+      expect(cabecalho).toMatch(new RegExp(`(?:===|case)\\s*["']${codigo}["']`));
     }
     expect(cabecalho).not.toMatch(/includes\(/);
     expect(cabecalho).not.toMatch(SEM_PALAVRA_DE_POTE);
@@ -332,7 +338,12 @@ describe("quem EXIBE a categoria de pote mostra a PALAVRA", () => {
     // a query string vira `.eq("pot_position", ...)` do outro lado, e o banco
     // guarda codigo. Uma varredura de "nao ha codigo cru neste arquivo"
     // empurraria justamente para esse erro.
-    expect(menuDePotes).toMatch(/\$\{p\.pot_number\}:\$\{p\.position\}/);
+    //
+    // O SEPARADOR nao entra: trocar o `:` por `-` na chave e no-op puro --
+    // chave de React so precisa ser unica e estavel -- e prender o texto
+    // literal reprovaria contra codigo certo. O que se prende e que a chave
+    // ainda e montada com `p.position` CRU, ao lado do numero do pote.
+    expect(menuDePotes).toMatch(/\$\{p\.pot_number\}\W{1,3}\$\{p\.position\}/);
     expect(leilao).toMatch(/encodeURIComponent\(pot\.position\)/);
   });
 });

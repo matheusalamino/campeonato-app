@@ -3,8 +3,12 @@
 --
 -- ── O QUE MUDA ──
 --
--- As sete colunas que guardam categoria de pote passam a guardar
+-- As NOVE colunas que guardam categoria de pote passam a guardar
 -- GOL/ZAG/MEI/ATA/EXT. A palavra por extenso existe so na exibicao.
+--
+-- Sete sao dado do draft (a lista logo abaixo); as outras duas sao o espelho
+-- transitorio do pote aberto, em `championships`, e a secao "8 e 9" la embaixo
+-- conta por que elas nao estavam na lista original e por que entraram.
 --
 -- ── AS DUAS CHECK SAO DIFERENTES DE PROPOSITO ──
 --
@@ -46,7 +50,8 @@
 -- ninguem mapeou, ninguem quer descobrir isso meses depois, num UPDATE que nem
 -- toca em posicao.
 --
--- Sete blocos explicitos, e nao um laco em PL/pgSQL sobre a lista de tabelas.
+-- Oito blocos explicitos para nove constraints (as duas de `championships`
+-- saem de um bloco so), e nao um laco em PL/pgSQL sobre a lista de tabelas.
 -- O laco seria mais curto de escrever e ilegivel num diff daqui a seis meses.
 --
 -- ── ORDEM DE DEPLOY: MIGRATION PRIMEIRO, APP DEPOIS ──

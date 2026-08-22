@@ -29,7 +29,7 @@ import { CANONICAL_POSITIONS } from "@/features/players/position";
 /** O pote que nao e posicao: destino de quem nao foi vendido no leilao. */
 export const EXTRA_POT_POSITION = "EXT";
 
-/** Os cinco valores da CHECK das sete colunas de pote. */
+/** Os cinco valores da CHECK das nove colunas de pote. */
 export const POT_POSITIONS = [
   ...CANONICAL_POSITIONS,
   EXTRA_POT_POSITION,
