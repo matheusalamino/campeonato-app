@@ -23,9 +23,11 @@ import { toast } from "sonner";
  * na 20260821020000, que converteu `draft_pots.position` para codigo. Com elas,
  * os QUATRO potes cairiam no fallback e a tela inteira viraria estrela.
  *
- * Sairam junto `defensor` e `lateral`, e esses nunca foram dado: a coluna copia
- * `players.preferred_position`, que nunca aceitou nenhum dos dois. Eram
- * vocabulario que so morava neste `if`.
+ * Sairam junto `defensor` e `lateral`, e esses nunca foram DADO. Nao "a coluna
+ * nao aceitava": ate a 20260820010000 `players.preferred_position` nao tinha
+ * CHECK nenhuma e teria aceitado os dois. O que se mediu foi o conteudo — em
+ * 2026-08-21, nos tres ambientes, 100% dos jogadores nos quatro canonicos, zero
+ * `Lateral`. Era vocabulario que so morava neste `if`.
  */
 function PositionIcon({ position }: { position: string }) {
   if (position === "GOL") {

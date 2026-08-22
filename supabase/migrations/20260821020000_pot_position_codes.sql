@@ -56,9 +56,12 @@
 --
 -- La o motivo era que a CHECK velha recusaria o valor novo, entao com o app na
 -- frente NENHUMA INSCRICAO GRAVA. Aqui isso nao existe: ate esta migration,
--- NENHUMA das nove colunas tinha CHECK alguma (medido em `pg_constraint`; nas
--- sete so havia as de `type`, `result` e valor minimo). O banco aceitava
--- qualquer texto, e o app novo na frente gravaria `EXT` sem reclamacao.
+-- NENHUMA das nove colunas tinha CHECK DE VOCABULARIO. Medido em
+-- `pg_constraint`: nas sete so havia as de `type`, `result` e valor minimo, e
+-- as duas de `championships` so eram tocadas pelas
+-- `draft_*_window_consistent`, que exigem "nao nulo e nao vazio com a janela
+-- aberta" e nao olham o CONTEUDO. O banco aceitava qualquer texto, e o app novo
+-- na frente gravaria `EXT` sem reclamacao.
 --
 -- O que decide a ordem e que as duas migrations sobem JUNTAS, na mesma pilha, e
 -- a 20260821010000 ja escolheu migration primeiro por uma razao mais dura.

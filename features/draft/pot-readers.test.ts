@@ -46,9 +46,11 @@ import { fonteDe, SEM_PALAVRA_DE_POTE } from "@/features/testing/fonte";
  * ── POR QUE ASSERTIVA POR SITIO ──
  *
  * Mesma razao do irmao `features/players/position-detectors.test.ts`:
- * `PotMenuSlide` tem QUATRO detectores em duas funcoes, e uma assertiva unica
- * de `=== "GOL"` deixaria tres sem rede, porque o primeiro segura o verde
- * sozinho. Dai o `corpoDaFuncao` abaixo.
+ * `PotMenuSlide` tem CINCO detectores em duas funcoes — tres no icone
+ * (`GOL`/`ZAG`/`MEI`) e dois no cartao (goleiro e pote extra) — e uma assertiva
+ * unica de `=== "GOL"` deixaria quatro sem rede, porque o primeiro segura o
+ * verde sozinho. Dai o `corpoDaFuncao` abaixo, e MEDIDO: quebrar so o
+ * `isGoalkeeper` do cartao reprova so o `it` do cartao, com o do icone verde.
  */
 
 const MULTA_GERAL = "app/api/draft/fiscal/bulk-general-fine/route.ts";
