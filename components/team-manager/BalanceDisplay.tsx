@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { potLabel } from "@/features/draft/pot-position";
 
 type BalanceDisplayProps = {
   currentBalance: number;
@@ -58,7 +59,7 @@ export function BalanceDisplay({
       {potBudget && (
         <div className="rounded-2xl bg-zinc-900 border border-amber-900/40 p-4">
           <p className="text-xs text-amber-400/80 uppercase tracking-wider">
-            Pote {potBudget.potNumber} — {potBudget.potPosition}
+            Pote {potBudget.potNumber} — {potLabel(potBudget.potPosition)}
           </p>
           <p className="text-xl font-bold text-amber-300 mt-1 tabular-nums">
             {formatCC(potBudget.remainingBudget)}

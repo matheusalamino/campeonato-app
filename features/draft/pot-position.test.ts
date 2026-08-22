@@ -3,7 +3,13 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { semComentarioSql } from "@/features/testing/sem-comentario";
 import { CANONICAL_POSITIONS } from "@/features/players/position";
-import { POT_POSITIONS, EXTRA_POT_POSITION } from "./pot-position";
+import {
+  POT_POSITIONS,
+  EXTRA_POT_POSITION,
+  POT_LABELS,
+  potLabel,
+  potTitle,
+} from "./pot-position";
 
 /**
  * O vocabulario do POTE, e a migration que o impoe no banco.
@@ -203,5 +209,45 @@ describe("a migration do vocabulario do pote", () => {
         .sort();
       expect(doSql).toEqual([...POT_POSITIONS].sort());
     }
+  });
+});
+
+describe("o rotulo do pote", () => {
+  it("cobre os cinco codigos, e nenhum a mais", () => {
+    // CONJUNTO, e por isso `.sort()` dos DOIS lados: `toEqual` sobre array
+    // compara SEQUENCIA, e sem ordenar, reordenar as cinco entradas do mapa —
+    // no-op puro num `Record` — reprovaria contra codigo certo. Este bloco ja
+    // teve uma assertiva que se dizia "de conjunto" e comparava sequencia.
+    //
+    // Chave A MAIS reprova igual a chave a menos: foi entrada morta num mapa
+    // assim que fez alguem acreditar que o repo suportava dois vocabularios.
+    expect(Object.keys(POT_LABELS).sort()).toEqual([...POT_POSITIONS].sort());
+  });
+
+  it("o rotulo e a PALAVRA, e nunca o proprio codigo", () => {
+    for (const codigo of POT_POSITIONS) {
+      expect(POT_LABELS[codigo]).toBeTruthy();
+      expect(POT_LABELS[codigo]).not.toBe(codigo);
+    }
+    // O quinto, nomeado: `EXT` e o unico rotulo que nao existe no mapa do
+    // JOGADOR, e e o motivo de este mapa ser separado daquele.
+    expect(POT_LABELS[EXTRA_POT_POSITION]).toBe("Extra");
+  });
+
+  it("valor desconhecido sai BRUTO, e nunca como undefined ou funcao", () => {
+    // A CHECK garante o dominio no banco; o `tsc` ve `string`. Indexar cru
+    // imprimiria `undefined` na tela, e `constructor` imprimiria uma FUNCAO --
+    // o mesmo furo de prototipo que `POSITION_ALIASES` ja teve.
+    expect(potLabel("Goleiro")).toBe("Goleiro");
+    expect(potLabel("XYZ")).toBe("XYZ");
+    for (const veneno of ["constructor", "toString", "valueOf"]) {
+      expect(typeof potLabel(veneno)).toBe("string");
+      expect(potLabel(veneno)).toBe(veneno);
+    }
+  });
+
+  it("o titulo do extrato leva o rotulo, e nao o codigo", () => {
+    expect(potTitle(3, "MEI")).toBe("Pote 3 (Meia)");
+    expect(potTitle(9, "EXT")).toBe("Pote 9 (Extra)");
   });
 });

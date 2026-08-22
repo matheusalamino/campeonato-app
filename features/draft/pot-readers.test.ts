@@ -227,3 +227,112 @@ describe("quem le a categoria de pote fala CODIGO", () => {
     expect(cabecalho).not.toMatch(SEM_PALAVRA_DE_POTE);
   });
 });
+
+/**
+ * Quem EXIBE a categoria de pote, e mostra a PALAVRA.
+ *
+ * A virada para codigo tem um efeito que nao e defeito de logica e aparece na
+ * tela: `Pote 3 (MEI)` no extrato do cartola, onde antes lia `(Meia)`. Decisao
+ * do usuario: mapa proprio do pote (`POT_LABELS`), com cinco entradas, e nao
+ * estender o mapa de QUATRO do jogador — que autorizaria `EXT` em
+ * `players.preferred_position`.
+ *
+ * ── O ACOPLAMENTO QUE ESTA VARREDURA ACHOU ──
+ *
+ * `team-manager/balance/page.tsx` casa transacao com o pote aberto procurando
+ * `Pote N (Pos)` DENTRO da `description` que os routes gravam, no caminho em
+ * que a linha nao tem `pot_position`. Produtor e consumidor montavam o texto
+ * separados. Trocar o rotulo so no produtor quebraria o casamento CALADO: a aba
+ * de saldo pararia de destacar as transacoes do pote ativo, sem erro nenhum.
+ * Dai `potTitle` ser funcao, e dai o `it` que prende os dois lados nela.
+ *
+ * ── O QUE NAO ENTRA ──
+ *
+ * Chave de React e query string (`key={...}`, `potKey`, `encodeURIComponent`)
+ * seguem no CODIGO CRU, e trocar por rotulo seria defeito: a query string vira
+ * `.eq("pot_position", ...)` do outro lado, e o banco guarda codigo. Por isso as
+ * assertivas abaixo pedem o rotulo em sitio de EXIBICAO, e nao "sem codigo cru
+ * no arquivo".
+ *
+ * `draftNight/PlayerCard.tsx` tambem fica de fora, e por decisao da Task 4: a
+ * etiqueta da CARTA e o codigo de proposito, como num card de FIFA.
+ */
+
+const COMPRA = "app/api/draft/purchase-player/route.ts";
+const PAINEL_FISCAL = "app/(auction-fiscal)/auction-fiscal/page.tsx";
+const AVISO_MULTA = "components/team-manager/AutoFineNotifier.tsx";
+const SALDO = "components/team-manager/BalanceDisplay.tsx";
+const ABA_SALDO = "app/(team-manager)/team-manager/balance/page.tsx";
+const LEILAO = "components/draftNight/PotAuctionSlide.tsx";
+
+const compra = fonteDe(COMPRA);
+const painelFiscal = fonteDe(PAINEL_FISCAL);
+const avisoMulta = fonteDe(AVISO_MULTA);
+const saldo = fonteDe(SALDO);
+const abaSaldo = fonteDe(ABA_SALDO);
+const leilao = fonteDe(LEILAO);
+
+/** Um `Pote ${n} (${p})` montado a mao, que e o que `potTitle` veio substituir. */
+const TITULO_NA_MAO = /Pote \$\{[^}]*\}\s*\(\$\{/;
+
+describe("quem EXIBE a categoria de pote mostra a PALAVRA", () => {
+  it("le os seis arquivos novos, e cada um ainda e o que este teste pensa que e", () => {
+    expect(compra).toContain("draft_player_purchases");
+    expect(painelFiscal).toContain("auctionOpen");
+    expect(avisoMulta).toContain("Multa automática");
+    expect(saldo).toContain("potBudget");
+    expect(abaSaldo).toContain("transactionMatchesActivePot");
+    expect(leilao).toContain("pot_letter");
+  });
+
+  // ── O extrato do cartola: cinco routes gravam a descricao ─────────────────
+
+  for (const [nome, fonte] of [
+    ["a finalizacao do pote", finalizarPote],
+    ["o estorno dos perdedores", estornoHabilitacao],
+    ["a compra de jogador", compra],
+    ["a multa geral do leilao", multaGeral],
+    ["a entrada no lance cego", entrarNoLance],
+  ] as const) {
+    it(`${nome} grava o rotulo na descricao, e nao o codigo`, () => {
+      expect(fonte).toMatch(/potTitle\(/);
+      // A outra metade, e ela e o que mata a mutacao de verdade: com o template
+      // a mao de volta AO LADO da chamada, o `toMatch` acima seguiria verde.
+      expect(fonte).not.toMatch(TITULO_NA_MAO);
+    });
+  }
+
+  // ── O consumidor da mesma string ─────────────────────────────────────────
+
+  it("a aba de saldo procura a transacao pelo MESMO texto que os routes gravam", () => {
+    // Os dois lados na mesma funcao: e isto que impede a agulha e a descricao
+    // de divergirem no dia em que o rotulo mudar.
+    expect(abaSaldo).toMatch(/potTitle\(/);
+    expect(abaSaldo).not.toMatch(TITULO_NA_MAO);
+  });
+
+  // ── As telas ─────────────────────────────────────────────────────────────
+
+  for (const [nome, fonte] of [
+    ["o painel do fiscal de leilao", painelFiscal],
+    ["o aviso de multa automatica", avisoMulta],
+    ["o resumo de saldo do cartola", saldo],
+    ["a tela de lances da noite de draft", telaDeLances],
+    ["o menu de potes da noite de draft", menuDePotes],
+    ["a tela de leilao da noite de draft", leilao],
+    ["a previa do pote do cartola", previaDoPote],
+  ] as const) {
+    it(`${nome} exibe o rotulo, e nao o codigo`, () => {
+      expect(fonte).toMatch(/potLabel\(|potTitle\(/);
+    });
+  }
+
+  it("as chaves de React e a query string seguem no codigo CRU", () => {
+    // O contrapeso das assertivas acima. Trocar por rotulo aqui seria DEFEITO:
+    // a query string vira `.eq("pot_position", ...)` do outro lado, e o banco
+    // guarda codigo. Uma varredura de "nao ha codigo cru neste arquivo"
+    // empurraria justamente para esse erro.
+    expect(menuDePotes).toMatch(/\$\{p\.pot_number\}:\$\{p\.position\}/);
+    expect(leilao).toMatch(/encodeURIComponent\(pot\.position\)/);
+  });
+});

@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { potLabel } from "@/features/draft/pot-position";
 
 /**
  * O icone do pote, escolhido pelo CODIGO.
@@ -177,7 +178,7 @@ function PotCard({
         <p className="pm-pot-label" style={{ whiteSpace: "nowrap" }}>
           Pote {pot.pot_letter}
         </p>
-        <p className="pm-position">{pot.position}</p>
+        <p className="pm-position">{potLabel(pot.position)}</p>
         {(isGoalkeeper || isExtra) && (
           <p className="pm-gk-note">Sem habilitação</p>
         )}
@@ -393,7 +394,7 @@ export default function PotMenuSlide({
           </DialogHeader>
           {resetTarget && (
             <p className="text-sm text-zinc-300">
-              Confirmar reset do <span className="font-medium">Pote {resetTarget.pot_letter} ({resetTarget.position})</span>?
+              Confirmar reset do <span className="font-medium">Pote {resetTarget.pot_letter} ({potLabel(resetTarget.position)})</span>?
             </p>
           )}
           <DialogFooter className="gap-2">

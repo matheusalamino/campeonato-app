@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { potTitle } from "@/features/draft/pot-position";
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -137,7 +138,7 @@ export async function POST(req: Request) {
 
     const newBalance = cm.current_balance - bidAmount;
 
-    const potLabel = `Pote ${potNumber} (${potPosition})`;
+    const potLabel = potTitle(potNumber, potPosition);
 
     const { error: txError } = await supabase
       .from("draft_balance_transactions")

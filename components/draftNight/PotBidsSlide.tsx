@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePotBidsStatus } from "@/features/hooks/usePotBidsStatus";
 import type { ManagerBidStatus } from "@/app/api/draft/pot-bids-status/route";
 import type { DraftPot } from "@/features/hooks/useDraftPots";
+import { potLabel } from "@/features/draft/pot-position";
 
 // ── Helpers ────────────────────────────────────────────────
 function computeRanking(
@@ -425,7 +426,7 @@ export default function PotBidsSlide({
             ← Potes
           </button>
           <p className="pb-pot-letter">Pote {pot.pot_letter}</p>
-          <p className="pb-position">{pot.position}</p>
+          <p className="pb-position">{potLabel(pot.position)}</p>
           <div className="pb-divider">
             <div className="pb-dline" />
             <div className="pb-dgem" />

@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { potTitle } from "@/features/draft/pot-position";
 
 const supabase = createClient();
 let alertHornAudio: HTMLAudioElement | null = null;
@@ -164,7 +165,7 @@ export default function AuctionFiscalPage() {
     ) {
       return null;
     }
-    return `Pote ${payload.potNumber} (${payload.potPosition})`;
+    return potTitle(payload.potNumber, payload.potPosition);
   }, [payload]);
 
   const qualifiedParticipantsCount = useMemo(() => {

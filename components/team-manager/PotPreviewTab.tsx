@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { PlayerSearchCard } from "@/components/team-manager/PlayerSearchCard";
 import { cn } from "@/lib/utils";
+import { potLabel } from "@/features/draft/pot-position";
 
 type PotPlayer = {
   id: string;
@@ -41,8 +42,9 @@ type PotPreviewTabProps = {
  *
  * ── POR QUE ISTO DEIXOU DE SER `includes` ──
  *
- * Ate a Task 4 do A8 a comparacao aqui era por SUBSTRING, e era rede de
- * proposito: `"GOLEIRO"` contem `"GOL"` e `"MEIA"` contem `"MEI"`, entao o
+ * A comparacao aqui era por SUBSTRING desde muito antes do A8; o que a Task 4
+ * fez foi consertar o `MEIA` para `MEI` e ESCREVER por que a substring ficava.
+ * E era rede de proposito: `"GOLEIRO"` contem `"GOL"` e `"MEIA"` contem `"MEI"`, entao o
  * cabecalho pintava certo nos dois vocabularios e atravessava sem perder cor o
  * pote gerado ANTES da virada da coluna do jogador. O comentario que estava
  * neste lugar pedia, com todas as letras, que ninguem trocasse por `===` antes
@@ -188,7 +190,7 @@ export function PotPreviewTab({
                 Pote {pot.pot_number}
               </h2>
               <span className="text-xs font-medium opacity-90">
-                {pot.position}
+                {potLabel(pot.position)}
               </span>
             </div>
             <div className="flex items-center gap-2 text-[11px] tabular-nums opacity-90">

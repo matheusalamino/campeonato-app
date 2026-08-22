@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/draft-auth";
 import { computePotRemainderSettlement } from "@/lib/pot-settlement";
-import { EXTRA_POT_POSITION } from "@/features/draft/pot-position";
+import { EXTRA_POT_POSITION, potTitle } from "@/features/draft/pot-position";
 
 export async function POST(req: Request) {
   const auth = await requireAdmin();
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
       const remaining = row.remaining_budget;
       const { fine, returned } = computePotRemainderSettlement(remaining);
 
-      const potLabel = `Pote ${potNumber} (${normalizedPosition})`;
+      const potLabel = potTitle(potNumber, normalizedPosition);
 
       if (remaining > 0) {
         // Log the full leftover amount first; fine debit below makes net effect = returned.

@@ -36,3 +36,64 @@ export const POT_POSITIONS = [
 ] as const;
 
 export type PotPosition = (typeof POT_POSITIONS)[number];
+
+/**
+ * O rotulo por extenso de cada categoria de pote.
+ *
+ * ── POR QUE UM MAPA PROPRIO, E NAO O `POSITION_LABELS` ──
+ *
+ * Porque estender `POSITION_LABELS` com `EXT` seria juntar os dois
+ * vocabularios, e e exatamente o que a 20260821020000 proibe em letras
+ * maiusculas: aquele mapa e tipado por `CanonicalPosition`, e um `EXT` la
+ * dentro autorizaria gravar `EXT` em `players.preferred_position`.
+ *
+ * Mapa proprio nao uniformiza nada — RECONHECE que o pote tem vocabulario
+ * proprio. Sao dois dominios e dois mapas: quatro entradas la, cinco aqui.
+ *
+ * Tipado por `PotPosition`, entao entrada faltando NAO compila. Isso resolve
+ * metade do problema; a outra metade e que a fonte real e a coluna, que o `tsc`
+ * ve como `string`. Dai o `potLabel` abaixo, e nao indexacao crua.
+ */
+export const POT_LABELS: Record<PotPosition, string> = {
+  GOL: "Goleiro",
+  ZAG: "Zagueiro",
+  MEI: "Meia",
+  ATA: "Atacante",
+  EXT: "Extra",
+};
+
+/**
+ * O rotulo de uma categoria de pote vinda do BANCO, que o `tsc` ve como
+ * `string`.
+ *
+ * A CHECK das nove colunas garante o dominio no banco, mas garantia de banco
+ * nao e tipo: o valor chega aqui como `string` e indexar o `Record` cru
+ * imprimiria `undefined` na tela para qualquer coisa fora dos cinco. Devolve o
+ * BRUTO nesse caso — pote com rotulo estranho e legivel; pote escrito
+ * `undefined` nao.
+ *
+ * O `Object.hasOwn` nao e cerimonia: sem ele, `POT_LABELS["constructor"]`
+ * alcanca o prototipo de Object e a tela renderiza uma FUNCAO. Mesmo furo que
+ * `POSITION_ALIASES` teve em `features/players/position.ts`, e o conserto entrou
+ * la depois de acontecer.
+ */
+export function potLabel(position: string): string {
+  return Object.hasOwn(POT_LABELS, position)
+    ? POT_LABELS[position as PotPosition]
+    : position;
+}
+
+/**
+ * `Pote 3 (Meia)` — o titulo que aparece no extrato do cartola.
+ *
+ * Existe como funcao, e nao como template solto em cada chamador, por causa de
+ * um acoplamento MEDIDO: `team-manager/balance/page.tsx` casa transacao com o
+ * pote ativo procurando esta string DENTRO da `description` gravada pelos
+ * routes, quando a linha nao tem `pot_position` preenchido. Produtor e
+ * consumidor montavam o texto separados, cada um com seu template. Trocar o
+ * rotulo em um so quebraria o casamento em silencio — a aba de saldo pararia de
+ * destacar as transacoes do pote aberto, sem erro nenhum.
+ */
+export function potTitle(potNumber: number | string, position: string): string {
+  return `Pote ${potNumber} (${potLabel(position)})`;
+}

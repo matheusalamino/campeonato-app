@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { potTitle } from "@/features/draft/pot-position";
 import { useTeamManagerDraft } from "@/components/TeamManagerDraftContext";
 import { useDraftSession } from "@/features/hooks/useDraftSession";
 import { BalanceDisplay } from "@/components/team-manager/BalanceDisplay";
@@ -57,10 +58,20 @@ function transactionMatchesActivePot(
     return tx.pot_number === wantN && normalizePotPos(tx.pot_position) === wantP;
   }
 
+  // A agulha sai da MESMA funcao que os routes usam para gravar a descricao.
+  // Montada a mao dos dois lados, ela divergiria calada no dia em que o rotulo
+  // mudasse -- que e exatamente o que a Task 5 do A8 fez -- e esta aba pararia
+  // de destacar as transacoes do pote aberto, sem erro nenhum.
+  //
+  // Este caminho so vale para linha SEM `pot_position`; com a coluna
+  // preenchida, o `return` acima ja casou pelos campos estruturados.
   const desc = tx.description ?? "";
-  const needleA = `Pote ${wantN} (${active.potPosition.trim()})`;
-  const needleB = `Pote ${wantN} (${wantP})`;
-  return desc.includes(needleA) || desc.toLowerCase().includes(needleB.toLowerCase());
+  // UMA agulha, e nao duas. A segunda era `potTitle` sobre a posicao ja em
+  // MINUSCULA, e com o rotulo por extenso ela virou lixo: `Pote 3 (mei)` nao e
+  // prefixo nem sufixo de `Pote 3 (Meia)`. O que ela cobria -- caixa diferente
+  // na descricao gravada -- o `toLowerCase` dos dois lados ja cobre.
+  const agulha = potTitle(wantN, active.potPosition.trim());
+  return desc.toLowerCase().includes(agulha.toLowerCase());
 }
 
 function txsEqual(a: Transaction[], b: Transaction[]): boolean {

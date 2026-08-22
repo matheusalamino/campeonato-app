@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { potTitle } from "@/features/draft/pot-position";
 import { requireAdminOrAuctionFiscal } from "@/lib/draft-auth";
 
 const FIXED_FINE = 2000;
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
 
     const potNumber = ch.draft_auction_pot_number;
     const potPosition = ch.draft_auction_pot_position.trim();
-    const potLabel = `Pote ${potNumber} (${potPosition})`;
+    const potLabel = potTitle(potNumber, potPosition);
     // ESTE SITIO ESTAVA QUEBRADO, e nao e teoria: ate a 20260821020000 a coluna
     // guardava a palavra, e `"Goleiro".toUpperCase()` e `"GOLEIRO"` — nunca
     // `"GOL"`. Toda multa geral do pote de goleiro saia como `no_bid_player`,
