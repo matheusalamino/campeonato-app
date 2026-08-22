@@ -1,11 +1,15 @@
 // Tipos compartilhados das páginas públicas (telão e estatísticas)
 
+import type { CanonicalPosition } from "@/features/players/position";
+
 export type PublicPlayer = {
   registrationId: string;
   championshipId: string;
   playerName: string;
   officialName: string | null;
-  position: string | null;
+  // Codigo, nao palavra: vem da view `public_players`, que expoe a coluna com
+  // CHECK validada. E o que deixa `POSITION_LABELS[p.position]` compilar.
+  position: CanonicalPosition | null;
   photoUrl: string | null;
   finalOverall: number | null;
   championshipTeamId: string | null;
@@ -33,35 +37,35 @@ export type RankingEntry = {
   teamName: string | null;
   teamLogoUrl: string | null;
   photoUrl: string | null;
-  position: string | null;
+  position: CanonicalPosition | null;
   value: number;       // gols, assistências, pontos, IOG...
   detail?: string;     // ex.: "OVR 78"
   isOverride?: boolean;
 };
 
-export const POSITION_LABELS: Record<string, string> = {
+/**
+ * Codigo -> palavra por extenso. O UNICO conversor de exibicao do app: e daqui
+ * que as telas publicas, os formularios do admin e o wizard de inscricao tiram
+ * a palavra que o usuario le.
+ *
+ * Tipado por `CanonicalPosition`, e nao por `string`, e a diferenca e o que o
+ * `tsc` pega: com `Record<string, string>` um codigo novo sem rotulo COMPILAVA
+ * e sumia na tela. Agora nao compila.
+ *
+ * `LAT` e `VOL` sairam porque eram rotulo sem dado possivel. A CHECK
+ * `players_preferred_position_known` -- validada, conferida no banco local em
+ * 2026-08-22 -- so aceita GOL/ZAG/MEI/ATA ou NULL, entao a coluna nao guarda
+ * nenhum dos dois; e as duas telas de filtro montam as opcoes com
+ * `Object.entries(POSITION_LABELS)`, ou seja, os dois rendiam botao que nunca
+ * casaria com jogador nenhum.
+ *
+ * Isto NAO revoga os apelidos `lateral`/`volante` de `POSITION_ALIASES`: la e
+ * borda de ENTRADA, e o CSV continua recebendo essas palavras de planilha
+ * alheia. O que acabou e a pretensao de exibi-las.
+ */
+export const POSITION_LABELS: Record<CanonicalPosition, string> = {
   GOL: "Goleiro",
   ZAG: "Zagueiro",
-  LAT: "Lateral",
-  VOL: "Volante",
   MEI: "Meia",
   ATA: "Atacante",
 };
-
-// Palavra por extenso -> codigo. O "(as stored in DB)" que estava escrito aqui
-// PAROU DE VALER na 20260821010000: `players.preferred_position` guarda o
-// codigo, e a CHECK `players_preferred_position_known` recusa a palavra. Isto
-// aqui virou defesa de LEITURA -- dump antigo, planilha, resposta de terceiro --
-// e nao a descricao da coluna. Vale dizer porque e deste arquivo que os cinco
-// formularios importam `POSITION_LABELS`.
-const LABEL_TO_CODE: Record<string, string> = {
-  Goleiro: "GOL", Zagueiro: "ZAG", Lateral: "LAT",
-  Volante: "VOL", Meia: "MEI", Atacante: "ATA",
-  // tolerate codes already being codes
-  GOL: "GOL", ZAG: "ZAG", LAT: "LAT", VOL: "VOL", MEI: "MEI", ATA: "ATA",
-};
-
-export function normalizePosition(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  return LABEL_TO_CODE[raw] ?? LABEL_TO_CODE[raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()] ?? raw;
-}

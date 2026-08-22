@@ -77,9 +77,11 @@ function fold(raw: string): string {
  *    extenso. As palavras nao sao ornamento: e nelas que todo o dado historico
  *    dos tres ambientes estava, e e o que a planilha do CSV continua trazendo.
  *    Tirar a palavra daqui faria todo import antigo recusar linha.
- *  - excedentes de POSITION_LABELS: `LAT` e `VOL` sao codigos de rotulo que a
- *    CHECK nao aceita, entao precisam de um canonico de chegada (ambos `MEI`;
- *    a decisao do `lateral` esta anotada no proprio mapa abaixo).
+ *  - `LAT` e `VOL`: codigos que a CHECK nao aceita. Eram rotulo de exibicao ate
+ *    a Task 2 do A8 tira-los de POSITION_LABELS; sair da EXIBICAO nao os tira
+ *    da ENTRADA, que e o que este mapa cobre, entao seguem precisando de um
+ *    canonico de chegada (ambos `MEI`; a decisao do `lateral` esta anotada no
+ *    proprio mapa abaixo).
  *  - futsal: vocabulario que NAO existe em dado real (ver ALCANCE acima); entra
  *    so por planilha. O fixo e o
  *    defensor; as alas sao o corredor, meio-campo na taxonomia de quatro; o pivo

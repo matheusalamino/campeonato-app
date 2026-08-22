@@ -72,9 +72,11 @@ describe("normalizePreferredPosition", () => {
     expect(pos("Goleiro")).toBe("GOL");
   });
 
-  // LAT e VOL sao os dois codigos de POSITION_LABELS que a CHECK nao aceita:
-  // precisam de um canonico de chegada, e os outros quatro passam por identidade.
-  it("os codigos de POSITION_LABELS entram, inclusive LAT e VOL", () => {
+  // LAT e VOL sao codigos que a CHECK nao aceita, e que a Task 2 do A8 tirou de
+  // POSITION_LABELS. Continuam entrando por aqui porque planilha velha e dump
+  // antigo ainda os mandam: precisam de um canonico de chegada, e os quatro
+  // canonicos passam por identidade.
+  it("os codigos entram, inclusive LAT e VOL que a CHECK recusa", () => {
     expect(pos("GOL")).toBe("GOL");
     expect(pos("ZAG")).toBe("ZAG");
     expect(pos("MEI")).toBe("MEI");

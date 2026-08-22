@@ -605,6 +605,12 @@ export default function RegistrationWizard({
   // ao escolher a posicao, sem explicacao nenhuma.
   const posicaoEscolhida = form.preferred_position !== "";
   const activeSkills = posicaoEscolhida ? skillsFor(form.preferred_position) : [];
+  // O estado do form e `string` porque o select tem a opcao vazia, e
+  // `POSITION_LABELS` so aceita codigo canonico. Quem estreita e a
+  // normalizacao, e nao um cast: ela devolve `CanonicalPosition | null`, e o
+  // null e exatamente o "ainda nao escolheu" que a revisao mostra como
+  // travessao.
+  const posicaoCanonica = normalizePreferredPosition(form.preferred_position).position;
   const total = computeTicketsTotal({
     basePrice: championship.base_price,
     extraTicketPrice: championship.extra_ticket_price,
@@ -954,7 +960,7 @@ export default function RegistrationWizard({
           <div className="text-sm text-[var(--gala-ink-dim)] space-y-1">
             {/* Rotulo, e nao o codigo: a revisao e a ultima tela antes de o
                 jogador confirmar, e "GOL" nao e o que ele escolheu ler. */}
-            <div><b className="text-[var(--gala-ink)]">{form.name || "—"}</b> · {POSITION_LABELS[form.preferred_position] ?? "—"}</div>
+            <div><b className="text-[var(--gala-ink)]">{form.name || "—"}</b> · {posicaoCanonica ? POSITION_LABELS[posicaoCanonica] : "—"}</div>
             <div>{form.group_affiliation || "—"}</div>
             <div>Total: {formatBRL(total)}{waitlisted ? " · Lista de espera" : ""}</div>
           </div>

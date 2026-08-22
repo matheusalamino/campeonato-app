@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import PlayerRadar from "@/components/PlayerRadar";
 import type { PublicPlayer, PublicPlayerStats } from "@/lib/public/types";
 import { POSITION_LABELS } from "@/lib/public/types";
+import type { CanonicalPosition } from "@/features/players/position";
 import type { PublicRankings } from "@/features/hooks/usePublicRankings";
 import { sumVotePoints } from "@/lib/public/match-stats";
 
@@ -69,7 +70,7 @@ export default function PlayersTab({ championshipId, rankings }: {
     [rankings.players],
   );
   const positions = useMemo(
-    () => [...new Set(rankings.players.map((p) => p.position).filter(Boolean))].sort() as string[],
+    () => [...new Set(rankings.players.map((p) => p.position).filter(Boolean))].sort() as CanonicalPosition[],
     [rankings.players],
   );
 
