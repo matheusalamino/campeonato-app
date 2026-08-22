@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
+import { normalizePositionGroup } from "@/features/players/position-group";
 import {
   Dialog,
   DialogContent,
@@ -56,13 +57,6 @@ type TransferManagerOption = {
 };
 
 const LS_KEY = "auctionFiscalChampionshipId";
-
-function normalizePositionGroup(position: string | null | undefined) {
-  const p = (position ?? "").trim().toLowerCase();
-  if (!p) return "unknown" as const;
-  if (p === "gol" || p.includes("goleiro")) return "goalkeeper" as const;
-  return "line" as const;
-}
 
 function playAlertHorn() {
   try {
