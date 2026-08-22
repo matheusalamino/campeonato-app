@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { semComentario, semComentarioSql } from "./sem-comentario";
+import {
+  semComentario,
+  semComentarioMantendoLinhas,
+  semComentarioSql,
+} from "./sem-comentario";
 
 /**
  * O kit de quem assevera lendo ARQUIVO COMO TEXTO.
@@ -33,6 +37,22 @@ const RAIZ = process.cwd();
 /** Codigo TypeScript/TSX do repo, sem comentario, pronto para assertiva. */
 export function fonteDe(caminho: string): string {
   return semComentario(readFileSync(join(RAIZ, caminho), "utf8"));
+}
+
+/**
+ * O mesmo codigo, em LINHAS, com a numeracao intacta: `linhas[i]` e a linha
+ * `i + 1` do arquivo de verdade.
+ *
+ * Serve a quem VARRE e precisa dizer ONDE: `vocabulary-sweep.test.ts` cita
+ * `caminho:linha` na mensagem de falha, e com `fonteDe` ela citava quinze
+ * linhas ACIMA do defeito, porque o docblock do arquivo tinha sumido junto com
+ * as suas quebras de linha. Quem assevera com regex sobre o arquivo inteiro nao
+ * paga esse preco e fica com `fonteDe`.
+ */
+export function linhasDe(caminho: string): string[] {
+  return semComentarioMantendoLinhas(
+    readFileSync(join(RAIZ, caminho), "utf8"),
+  ).split("\n");
 }
 
 /**

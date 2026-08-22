@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync } from "node:fs";
 import { join, relative } from "node:path";
-import { fonteDe } from "@/features/testing/fonte";
+import { linhasDe } from "@/features/testing/fonte";
 
 /**
  * A rede que pega o LEITOR ESQUECIDO.
@@ -62,8 +62,8 @@ import { fonteDe } from "@/features/testing/fonte";
  * Porque metade do alvo vive em `app/**` e `services/**`, que o `include` do
  * vitest nao alcanca (o motivo esta escrito em `vitest.config.ts`). Assertiva
  * que le texto tem um modo de falha proprio — casar a PROSA em vez do codigo —
- * e por isso a leitura passa por `fonteDe`, que tira comentario antes. Sem ele,
- * o proprio docblock que voce esta lendo reprovaria a varredura.
+ * e por isso a leitura passa por `linhasDe`, que tira comentario antes. Sem
+ * isso, o proprio docblock que voce esta lendo reprovaria a varredura.
  */
 
 /** As cinco pastas de codigo de produto. Nada fora delas grava posicao. */
@@ -179,8 +179,12 @@ describe("nenhuma palavra de posicao sobrevive fora da fonte e do rotulo", () =>
       if (caminho.includes(".test.")) continue;
       if (caminho in LIBERADOS) continue;
 
-      const linhas = fonteDe(caminho).split("\n");
-      linhas.forEach((linha, i) => {
+      // `linhasDe`, e nao `fonteDe`: a numeracao TEM de bater com o arquivo de
+      // verdade. MEDIDO — a mutacao em `features/registration/skills.ts:41` era
+      // acusada como `:26` com `fonteDe`, porque o strip come as quebras de
+      // linha de dentro dos blocos `/* */`. Mensagem cujo trabalho e dizer ONDE
+      // e que aponta comentario nao vale mais do que mensagem sem linha.
+      linhasDe(caminho).forEach((linha, i) => {
         for (const palavra of PALAVRAS) {
           if (detector(palavra).test(linha)) {
             achados.push(`${caminho}:${i + 1} -> ${palavra}`);
