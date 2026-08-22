@@ -346,9 +346,14 @@ describe("quem EXIBE a categoria de pote mostra a PALAVRA", () => {
   // `{pot.position}` como substring. Sem o lookbehind este negativo reprovaria
   // contra a chave, que tem de seguir no codigo cru — falso vermelho contra
   // codigo certo, exatamente o modo de falha que o `it` logo abaixo protege.
+  //
+  // O identificador e `\w+` e nao `pot` pela razao de sempre, e esta MEDIDA:
+  // com `pot` fixo, renomear o local do laco para `pote` reprovava — renome e
+  // refatoracao, nao regressao. O `,?` cobre a virgula que o prettier poe ao
+  // quebrar a chamada em linhas.
   it("o cabecalho da noite de draft nao imprime a categoria crua", () => {
-    expect(noiteDeDraft).toMatch(/potLabel\(\s*pot\.position\s*,?\s*\)/);
-    expect(noiteDeDraft).not.toMatch(/(?<!\$)\{\s*pot\.position\s*\}/);
+    expect(noiteDeDraft).toMatch(/potLabel\(\s*\w+\.position\s*,?\s*\)/);
+    expect(noiteDeDraft).not.toMatch(/(?<!\$)\{\s*\w+\.position\s*\}/);
   });
 
   it("as chaves de React e a query string seguem no codigo CRU", () => {
