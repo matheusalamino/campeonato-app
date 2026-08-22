@@ -3,6 +3,7 @@
 import { useChampionship } from "@/components/ChampionshipContext";
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { potLabel } from "@/features/draft/pot-position";
 
 // ── TYPES ─────────────────────────────
 type PotPlayer = {
@@ -160,8 +161,8 @@ export default function DraftNightPage() {
                 {/* HEADER */}
                 <div className="flex justify-between items-center">
                   <span className="font-medium">
-                    Pote {String.fromCharCode(65 + index)} • {pot.position} •
-                    Média: {pot.average_overall}
+                    Pote {String.fromCharCode(65 + index)} •{" "}
+                    {potLabel(pot.position)} • Média: {pot.average_overall}
                   </span>
 
                   <span className="text-xs text-zinc-400">

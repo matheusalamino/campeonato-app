@@ -207,14 +207,18 @@ export function PotPreviewTab({
             {pot.players.map((pl) => {
               const rid = pl.registrationId;
               const meta = rid ? catalogByRegistration.get(rid) : undefined;
-              const positionLabel = meta?.position ?? pot.position;
+              // CODIGO, e nao rotulo: e ele que escolhe a cor da etiqueta
+              // dentro do card. Ja se chamou `positionLabel`, o que era duas
+              // mentiras — nao e rotulo, e sombraria o `positionLabel` de
+              // `lib/public/types.ts` no dia em que este arquivo o importasse.
+              const codigoDaEtiqueta = meta?.position ?? pot.position;
 
               if (rid) {
                 return (
                   <PlayerSearchCard
                     key={`${pot.pot_number}-${pot.position}-${rid}`}
                     name={pl.name}
-                    position={positionLabel}
+                    position={codigoDaEtiqueta}
                     overall={pl.overall ?? null}
                     photoUrl={pl.photo}
                     isPurchased={meta?.isPurchased ?? false}

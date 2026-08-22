@@ -270,6 +270,7 @@ const AVISO_MULTA = "components/team-manager/AutoFineNotifier.tsx";
 const SALDO = "components/team-manager/BalanceDisplay.tsx";
 const ABA_SALDO = "app/(team-manager)/team-manager/balance/page.tsx";
 const LEILAO = "components/draftNight/PotAuctionSlide.tsx";
+const NOITE_DE_DRAFT = "app/(protected)/draft-night/page.tsx";
 
 const compra = fonteDe(COMPRA);
 const painelFiscal = fonteDe(PAINEL_FISCAL);
@@ -277,6 +278,7 @@ const avisoMulta = fonteDe(AVISO_MULTA);
 const saldo = fonteDe(SALDO);
 const abaSaldo = fonteDe(ABA_SALDO);
 const leilao = fonteDe(LEILAO);
+const noiteDeDraft = fonteDe(NOITE_DE_DRAFT);
 
 /** Um `Pote ${n} (${p})` montado a mao, que e o que `potTitle` veio substituir. */
 const TITULO_NA_MAO = /Pote \$\{[^}]*\}\s*\(\$\{/;
@@ -289,6 +291,7 @@ describe("quem EXIBE a categoria de pote mostra a PALAVRA", () => {
     expect(saldo).toContain("potBudget");
     expect(abaSaldo).toContain("transactionMatchesActivePot");
     expect(leilao).toContain("pot_letter");
+    expect(noiteDeDraft).toContain("expandedPot");
   });
 
   // ── O extrato do cartola: cinco routes gravam a descricao ─────────────────
@@ -327,11 +330,26 @@ describe("quem EXIBE a categoria de pote mostra a PALAVRA", () => {
     ["o menu de potes da noite de draft", menuDePotes],
     ["a tela de leilao da noite de draft", leilao],
     ["a previa do pote do cartola", previaDoPote],
+    ["o cabecalho de pote da noite de draft", noiteDeDraft],
   ] as const) {
     it(`${nome} exibe o rotulo, e nao o codigo`, () => {
       expect(fonte).toMatch(/potLabel\(|potTitle\(/);
     });
   }
+
+  // O laco acima e um POSITIVO, e positivo sozinho nao mata reversao de um
+  // sitio quando o arquivo tem outros certos. Este negativo e o par do
+  // `draft-night`, que so tem UM sitio de exibicao e o tinha cru.
+  //
+  // O `(?<!\$)` e load-bearing e nao cerimonia: a chave de React da mesma tela
+  // e `key={`${pot.position}-...`}`, e `${pot.position}` CONTEM
+  // `{pot.position}` como substring. Sem o lookbehind este negativo reprovaria
+  // contra a chave, que tem de seguir no codigo cru — falso vermelho contra
+  // codigo certo, exatamente o modo de falha que o `it` logo abaixo protege.
+  it("o cabecalho da noite de draft nao imprime a categoria crua", () => {
+    expect(noiteDeDraft).toMatch(/potLabel\(\s*pot\.position\s*,?\s*\)/);
+    expect(noiteDeDraft).not.toMatch(/(?<!\$)\{\s*pot\.position\s*\}/);
+  });
 
   it("as chaves de React e a query string seguem no codigo CRU", () => {
     // O contrapeso das assertivas acima. Trocar por rotulo aqui seria DEFEITO:
