@@ -160,7 +160,8 @@ describe("nenhuma palavra de posicao sobrevive fora da fonte e do rotulo", () =>
 
     // Se a varredura encolher, ela para de provar qualquer coisa em silencio.
     // O piso e frouxo de proposito: prende a ORDEM DE GRANDEZA, e nao o numero
-    // exato, que sobe a cada arquivo novo. MEDIDO em 2026-08-22: 332 arquivos.
+    // exato, que sobe a cada arquivo novo. MEDIDO em 2026-08-22: 333 arquivos
+    // (332 antes deste, que tambem se varre).
     //
     // Isto nao e cerimonia. O `git ls-files -- 'app/**/*.ts'` que a primeira
     // versao desta rede usava devolvia 281 dos 332: o glob do git exige um `/`
