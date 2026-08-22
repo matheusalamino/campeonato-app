@@ -824,11 +824,6 @@ export default function RegistrationWizard({
               {err("weight")}
             </div>
           </div>
-          {/* Preso abaixo do header (que e sticky top-0 z-50) enquanto as
-              estrelas rolam por baixo. Estatico, o radar sairia da tela na
-              terceira habilidade e o "ao vivo" se perderia onde mais importa.
-              O fundo repete a mesma tinta dourada do StepShell sobre o fundo da
-              pagina, para a banda opaca nao destoar do passo. */}
           {/* Sem posicao escolhida nao ha o que avaliar, e a tela diz isso em vez
               de desenhar as estrelas de linha por padrao. */}
           {!posicaoEscolhida && (
@@ -836,10 +831,17 @@ export default function RegistrationWizard({
               Escolha a posição acima para avaliar as habilidades certas.
             </p>
           )}
-          {/* A guarda tambem aqui, e nao so no `activeSkills`: `hasAnyRating`
-              passa pelo mesmo `skillsFor`, entao quem avaliou e depois voltou o
-              select para vazio veria o radar sozinho, com as habilidades de
-              linha e sem nenhuma estrela por perto. */}
+          {/* Preso abaixo do header (que e sticky top-0 z-50) enquanto as
+              estrelas rolam por baixo. Estatico, o radar sairia da tela na
+              terceira habilidade e o "ao vivo" se perderia onde mais importa.
+              O fundo repete a mesma tinta dourada do StepShell sobre o fundo da
+              pagina, para a banda opaca nao destoar do passo.
+
+              A guarda de `posicaoEscolhida` tambem aqui, e nao so no
+              `activeSkills`: `hasAnyRating` passa pelo mesmo `skillsFor`, entao
+              quem avaliou e depois voltou o select para vazio veria o radar
+              sozinho, com as habilidades de linha e sem nenhuma estrela por
+              perto. MEDIDO: `hasAnyRating({visao: 4}, "")` devolve `true`. */}
           {posicaoEscolhida && hasAnyRating(form.skills, form.preferred_position) && (
             <div className="sticky top-14 z-10 -mx-4 px-4 py-2"
                  style={{ background: "linear-gradient(rgba(230,180,34,.06), rgba(230,180,34,.06)), var(--gala-bg-0)" }}>

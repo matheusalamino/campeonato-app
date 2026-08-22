@@ -1,7 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { semComentario } from "@/features/testing/sem-comentario";
+import { fonteDe, SEM_PALAVRA } from "@/features/testing/fonte";
 import { CANONICAL_POSITIONS } from "@/features/players/position";
 import { POSITION_LABELS } from "@/lib/public/types";
 
@@ -53,12 +51,6 @@ import { POSITION_LABELS } from "@/lib/public/types";
  * ela pega a lista nova que alguem escrever a mao ao lado da constante.
  */
 
-const RAIZ = process.cwd();
-
-function fonteDe(caminho: string): string {
-  return semComentario(readFileSync(join(RAIZ, caminho), "utf8"));
-}
-
 const SCHEMA = "features/registration/schema.ts";
 const WIZARD = "app/(public)/inscrever/[slug]/RegistrationWizard.tsx";
 const CRIAR_JOGADOR = "components/CreatePlayerForm.tsx";
@@ -70,16 +62,6 @@ const wizard = fonteDe(WIZARD);
 const criarJogador = fonteDe(CRIAR_JOGADOR);
 const formJogador = fonteDe(FORM_JOGADOR);
 const editarJogador = fonteDe(EDITAR_JOGADOR);
-
-/**
- * Palavra por extenso como LITERAL de string.
- *
- * So o literal, e de proposito: `const goleiro = [...]` em `PlayerForm` e nome
- * de variavel de habilidade e nao tem nada com o vocabulario da coluna. O
- * `semComentario` ja tirou a prosa antes — sem ele esta varredura reprovaria os
- * proprios docblocks que explicam a virada.
- */
-const SEM_PALAVRA = /["'`](Goleiro|Zagueiro|Meia|Atacante)["'`]/;
 
 /**
  * Uma `<option>` inteira: valor CODIGO, rotulo PALAVRA, e as duas amarradas ao

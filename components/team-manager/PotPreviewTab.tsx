@@ -44,6 +44,18 @@ function positionHeaderClass(position: string) {
   // CODIGO desde a 20260821010000. `"MEI".includes("MEIA")` e falso, e o
   // cabecalho do pote de meias caia no cinza do fallback — so cor, mas e o
   // mesmo defeito calado dos outros doze sitios desta varredura.
+  //
+  // RESSALVA, a mesma de `draftNight/PlayerCard.tsx`: NENHUMA migration converte
+  // `draft_pots.position`. A 20260821010000 so toca `public.players`, e as sete
+  // migrations que mexem em `draft_pots` sao todas de abril. Linha de pote
+  // gerada ANTES da virada ainda guarda a PALAVRA. A Task 5 do A8 converte as
+  // colunas de pote de vez.
+  //
+  // E POR ISSO A COMPARACAO E POR SUBSTRING, e nao por igualdade: `"GOLEIRO"`
+  // contem `"GOL"` e `"MEIA"` contem `"MEI"`, entao este sitio pinta certo nos
+  // DOIS vocabularios e atravessa o pote legado sem perder cor. Nao "conserte"
+  // trocando `includes` por `===` antes da Task 5 — aqui a tolerancia e a rede,
+  // e nao o hedge que o bloco A8 veio remover.
   if (p.includes("MEI")) return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (p.includes("ATA")) return "border-red-500/40 bg-red-500/10 text-red-200";
   return "border-zinc-600 bg-zinc-800/80 text-zinc-200";

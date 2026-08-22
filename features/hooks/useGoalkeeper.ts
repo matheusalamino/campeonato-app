@@ -17,6 +17,11 @@ const supabase = createClient();
  * Nao ha `ZAG`/`MEI`/`ATA` a enumerar aqui de proposito: a conta e `GOL` contra
  * tudo que nao e `GOL`, e e isso que tolera vocabulario novo entrando pelo CSV
  * sem transformar um jogador de linha desconhecido em goleiro.
+ *
+ * E SEGUE UM `Set` de um item so, de proposito, em vez de um `pos === "GOL"`
+ * solto la embaixo: e a costura nomeada onde o vocabulario de goleiro mora.
+ * Quem precisar mexer nele procura por um nome, e nao por um literal espalhado
+ * pelo corpo do hook -- que e como o `"Goleiro"` sobreviveu aqui por dois meses.
  */
 const GK_POSITIONS = new Set(["GOL"]);
 

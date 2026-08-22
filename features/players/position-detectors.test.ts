@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { semComentario, semComentarioSql } from "@/features/testing/sem-comentario";
+import { fonteDe, sqlDe, SEM_PALAVRA } from "@/features/testing/fonte";
+import { CANONICAL_POSITIONS } from "@/features/players/position";
 
 /**
  * Quem LE a posicao do jogador, lido como texto.
@@ -47,17 +46,7 @@ import { semComentario, semComentarioSql } from "@/features/testing/sem-comentar
  * sozinho. Cada `it` abaixo foi provado mutando o SEU sitio e so ele.
  */
 
-const RAIZ = process.cwd();
-
-function fonteDe(caminho: string): string {
-  return semComentario(readFileSync(join(RAIZ, caminho), "utf8"));
-}
-
-function sqlDe(caminho: string): string {
-  return semComentarioSql(readFileSync(join(RAIZ, caminho), "utf8"));
-}
-
-const AVALIAR = "app/(protected)/players/components/EvaluateModal.tsx";
+const AVALIAR ="app/(protected)/players/components/EvaluateModal.tsx";
 const INSCREVER = "app/(protected)/players/[id]/subscribe/SubscribeForm.tsx";
 const ESCALACAO = "components/LineupControl.tsx";
 const POTES = "app/api/draft/generate-pots/route.ts";
@@ -86,37 +75,40 @@ const hookGoleiro = fonteDe(HOOK_GOLEIRO);
 const wizard = fonteDe(WIZARD);
 
 /**
- * Palavra por extenso como LITERAL de string, igual ao irmao de
- * `position-wiring.test.ts`.
+ * As chaves de um mapa literal declarado como `const <nome> ... = { ... }`,
+ * ORDENADAS — porque o que se quer prender e o CONJUNTO.
  *
- * So o literal: `LineupControl` diz "Selecione 1 Goleiro + 5 Linha" em texto de
- * JSX, e isso e rotulo de tela, nao vocabulario de coluna. O `semComentario` ja
- * tirou a prosa antes — sem ele esta varredura reprovaria os proprios docblocks
- * que explicam a virada.
- */
-const SEM_PALAVRA = /["'`](Goleiro|Zagueiro|Meia|Atacante)["'`]/;
-
-/**
- * As chaves de um mapa literal declarado como `const <nome> ... = { ... }`.
+ * Um `toMatch(/GOL:/)` deixaria passar o mapa que hedgeia, com as quatro
+ * palavras de volta ao lado dos quatro codigos, e e justamente a metade morta
+ * que esta task veio tirar. Foi entrada morta num mapa desses que fez alguem
+ * acreditar que o repo suportava dois vocabularios de proposito.
  *
- * Existe para asseverar o CONJUNTO, e nao a presenca. Um `toMatch(/GOL:/)` deixa
- * passar o mapa que hedgeia — com as quatro palavras de volta ao lado dos
- * quatro codigos —, e e justamente a metade morta que esta task veio tirar. Foi
- * a entrada morta num mapa desses que fez alguem acreditar que o repo suportava
- * dois vocabularios de proposito.
+ * ORDENADAS, e o `.sort()` nao e enfeite: `toEqual` sobre array compara
+ * SEQUENCIA. Sem ele, trocar as linhas `ZAG` e `MEI` de lugar — no-op puro num
+ * `Record`, ninguem consulta mapa por ordem — reprovava contra codigo certo.
+ * Medido. Falso vermelho e a mesma doenca do falso verde pela porta dos fundos:
+ * o jeito de voltar ao verde vira desfazer uma limpeza legitima.
  *
- * O `[^}]*` para no primeiro `}`, o que basta porque nenhum destes quatro mapas
- * tem chave aninhada — os valores sao string.
+ * LIMITES conhecidos, os dois aceitos porque nenhum ocorre nos tres mapas que
+ * esta suite le:
+ *  - o `[^}]*` para no primeiro `}`, entao mapa com chave aninhada seria
+ *    truncado. Os valores aqui sao todos string.
+ *  - um valor que contenha `,` seguido de `palavra:` produziria chave fantasma
+ *    (o scanner nao tokeniza, so varre). Nenhum valor de cor ou de sigla tem
+ *    virgula.
  */
 function chavesDoMapa(fonte: string, nome: string): string[] {
   const bloco = fonte.match(new RegExp(`const\\s+${nome}\\b[^=]*=\\s*\\{([^}]*)\\}`));
   if (!bloco) throw new Error(`mapa ${nome} nao encontrado`);
-  return [...bloco[1].matchAll(/(?:^|,)\s*["']?([A-Za-z_][A-Za-z0-9_]*)["']?\s*:/g)].map(
-    (m) => m[1],
-  );
+  return [...bloco[1].matchAll(/(?:^|,)\s*["']?([A-Za-z_][A-Za-z0-9_]*)["']?\s*:/g)]
+    .map((m) => m[1])
+    .sort();
 }
 
-const CODIGOS = ["GOL", "ZAG", "MEI", "ATA"];
+// Da constante, e nao repetida a mao: `position.test.ts` ja prende
+// CANONICAL_POSITIONS ao `IN (...)` da CHECK no SQL. Uma copia local so diverge
+// no dia em que a CHECK mudar, e nesse dia estes testes seguem verdes.
+const CODIGOS = [...CANONICAL_POSITIONS].sort();
 
 describe("quem le a posicao do jogador fala CODIGO", () => {
   // Sentinela. Arquivo MOVIDO nao "leria vazio": o `readFileSync` estoura ENOENT
@@ -163,15 +155,21 @@ describe("quem le a posicao do jogador fala CODIGO", () => {
 
   // ── Grupo 2: detectores de goleiro que decidem regra ──────────────────────
 
+  // O `\(?\s*p\s*\)?` nas duas: o parenteses do parametro do arrow e formatacao,
+  // nao comportamento. Nao ha Prettier neste repo (nenhum `.prettierrc`, nenhuma
+  // dependencia), mas o proprio arquivo ja mistura as duas formas — `:36` e `:46`
+  // escrevem `(l) =>` — e um editor com `arrowParens: always` derrubaria a suite
+  // contra codigo certo.
+
   it("a escalacao ja salva conta goleiro pelo codigo ao dizer se esta configurada", () => {
     expect(escalacao).toMatch(
-      /gkCount\s*=\s*selected\.filter\(\s*p\s*=>\s*p\.position\s*===\s*["']GOL["']\s*\)/,
+      /gkCount\s*=\s*selected\.filter\(\s*\(?\s*p\s*\)?\s*=>\s*p\.position\s*===\s*["']GOL["']\s*\)/,
     );
   });
 
   it("a escalacao conta goleiro pelo codigo ao validar o salvamento", () => {
     expect(escalacao).toMatch(
-      /gkCount\s*=\s*selectedPlayers\.filter\(\s*p\s*=>\s*p\.position\s*===\s*["']GOL["']\s*\)/,
+      /gkCount\s*=\s*selectedPlayers\.filter\(\s*\(?\s*p\s*\)?\s*=>\s*p\.position\s*===\s*["']GOL["']\s*\)/,
     );
   });
 
@@ -217,8 +215,13 @@ describe("quem le a posicao do jogador fala CODIGO", () => {
     // consulta errava e o fallback devolvia o proprio codigo. Um mapa que so
     // acerta quando nao e consultado nao e rede: e ruido que o proximo leitor
     // toma por suporte a dois vocabularios.
+    //
+    // O nome do local nao entra: `\w+` em vez de `pos`, porque renomear para
+    // `codigoPosicao` e no-op e reprovava contra codigo certo. O que se prende e
+    // "sai DIRETO de `player.position`, sem tabela no meio" — e a outra metade
+    // disso e o `not.toMatch` logo acima, que mata a volta do mapa.
     expect(carta).not.toMatch(/POS_ABBR|posAbbr/);
-    expect(carta).toMatch(/const\s+pos\s*=\s*player\.position\s*;/);
+    expect(carta).toMatch(/const\s+\w+\s*=\s*player\.position\s*;/);
     expect(carta).not.toMatch(SEM_PALAVRA);
   });
 
@@ -239,6 +242,7 @@ describe("quem le a posicao do jogador fala CODIGO", () => {
     // o cabecalho do pote de meias perde a cor. So cor — mas e o mesmo defeito.
     expect(previaPote).toMatch(/includes\(\s*["']MEI["']\s*\)/);
     expect(previaPote).not.toMatch(/includes\(\s*["']MEIA["']\s*\)/);
+    expect(previaPote).not.toMatch(SEM_PALAVRA);
   });
 
   // ── Grupo 4: o hedge do hook ─────────────────────────────────────────────
@@ -249,8 +253,17 @@ describe("quem le a posicao do jogador fala CODIGO", () => {
     //
     // Nao ha `ZAG`/`MEI`/`ATA` a enumerar: a conta e `GOL` contra tudo que nao e
     // `GOL`, que e o que tolera vocabulario novo entrando pelo CSV.
-    expect(hookGoleiro).toMatch(/GK_POSITIONS\s*=\s*new Set\(\s*\[\s*["']GOL["']\s*\]\s*\)/);
+    // Sem prender a FORMA: `new Set([...])` de um item so e escolha declarada na
+    // constante (costura nomeada onde o vocabulario mora), mas trocar por um
+    // `pos === "GOL"` seria refatoracao legitima e nao pode reprovar aqui.
+    //
+    // O que se prende e a regra: reconhece `GOL`, nao reconhece a PALAVRA, e nao
+    // enumera os outros tres codigos — a conta e `GOL` contra tudo que nao e
+    // `GOL`, e e isso que tolera vocabulario novo entrando pelo CSV sem
+    // transformar um jogador de linha desconhecido em goleiro.
+    expect(hookGoleiro).toMatch(/GK_POSITIONS[^\n]*["']GOL["']/);
     expect(hookGoleiro).not.toMatch(SEM_PALAVRA);
+    expect(hookGoleiro).not.toMatch(/["'](ZAG|MEI|ATA)["']/);
   });
 
   // ── A borda do wizard: sem posicao escolhida, nada de estrelas ────────────

@@ -36,8 +36,17 @@ export default function InscricaoForm({
   const router = useRouter();
   const supabase = createClient();
   // `GOL`, e nao `Goleiro`: o vocabulario da coluna virou codigo na
-  // 20260821010000. Errar aqui nao quebra a tela — o goleiro se autoavalia com
-  // as seis habilidades de LINHA, e as notas gravam assim.
+  // 20260821010000. Errar aqui nao quebra a tela — o admin grava a
+  // autoavaliacao do goleiro com as seis habilidades de LINHA, e as notas ficam
+  // assim.
+  //
+  // O ADMIN, e nao o jogador: esta rota vive em `app/(protected)/`, cujo layout
+  // manda `manager` para /team-manager, `auction_fiscal` para /auction-fiscal e
+  // quem nao tem papel para /login. Jogador nao chega aqui.
+  //
+  // A tabela de destino se chama `self_evaluations` porque a NOTA e a
+  // autoavaliacao no modelo do dominio, e nao porque o proprio jogador a digita
+  // nesta tela.
   const skills = player.preferred_position === "GOL" ? skillsGol : skillsLinha;
 
   const [championshipId, setChampionshipId] = useState("");

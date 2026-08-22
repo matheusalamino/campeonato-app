@@ -130,9 +130,12 @@ export default function PlayerCard(props: PlayerCardProps) {
   //
   // Aqui havia uma tabela `POS_ABBR` so de PALAVRA, encoberta por um
   // `?? pos.slice(0, 3).toUpperCase()`, que e identidade para os quatro
-  // canonicos: com codigo na entrada toda consulta errava e o fallback devolvia
-  // o proprio codigo. Mapa que so acerta quando nao e consultado nao e rede — e
-  // ruido que o proximo leitor toma por suporte a dois vocabularios.
+  // canonicos: DEPOIS da virada toda consulta errava e o fallback devolvia o
+  // proprio codigo. Antes dela o mapa era consultado e acertava — foi util, e o
+  // que o aposentou foi a coluna virar codigo, nao ele nascer errado.
+  //
+  // Mapa que, depois da virada, so acerta quando NAO e consultado nao e rede —
+  // e ruido que o proximo leitor toma por suporte a dois vocabularios.
   const pos = player.position;
   const overall = player.overall ?? "—";
   const mid = Math.ceil(player.attributes.length / 2);
