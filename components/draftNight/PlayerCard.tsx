@@ -120,13 +120,12 @@ export default function PlayerCard(props: PlayerCardProps) {
   // `draft_pots.position`, que a geracao de potes copia de
   // `players.preferred_position` — codigo desde a 20260821010000.
   //
-  // COM UMA RESSALVA, e ela nao e teorica: NENHUMA migration converte
-  // `draft_pots.position`. A 20260821010000 so toca `players`. Linha de pote
-  // gerada ANTES da virada ainda guarda a PALAVRA, e nela a etiqueta imprime
-  // `Goleiro` cru no lugar de `GOL`. E so cosmetico, e some sozinho na proxima
-  // geracao de potes (que faz DELETE e regenera do zero) — e as colunas de pote
-  // sao convertidas de vez na Task 5 do A8. Nao da para observar aqui: o
-  // `draft_pots` local esta vazio.
+  // A RESSALVA QUE ESTAVA AQUI MORREU, e o registro fica porque ela era certa:
+  // ate a Task 5 do A8 nenhuma migration convertia `draft_pots.position`, e a
+  // linha de pote gerada antes da virada ainda guardava a PALAVRA — a etiqueta
+  // imprimia `Goleiro` cru no lugar de `GOL`. A 20260821020000 converteu as
+  // sete colunas de pote e pos CHECK nas sete, entao nao ha mais pote legado a
+  // atravessar: o que chega aqui e codigo, ou o insert nem grava.
   //
   // Aqui havia uma tabela `POS_ABBR` so de PALAVRA, encoberta por um
   // `?? pos.slice(0, 3).toUpperCase()`, que e identidade para os quatro

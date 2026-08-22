@@ -200,7 +200,11 @@ export default function PotBidsSlide({
   onBack,
   onProceedToAuction,
 }: Props) {
-  const isGoalkeeper = pot.position.toLowerCase().includes("goleiro");
+  // `GOL`, e nao `goleiro`: `pot.position` vem de `draft_pots.position`, que
+  // guarda CODIGO desde a 20260821020000. Com a palavra isto seria falso
+  // SEMPRE, e o `useEffect` logo abaixo abriria a janela de habilitacao para o
+  // pote de goleiro — que nao a usa.
+  const isGoalkeeper = pot.position === "GOL";
   const [windowOpened, setWindowOpened] = useState(false);
   const [windowError, setWindowError] = useState<string | null>(null);
   const [revealError, setRevealError] = useState<string | null>(null);

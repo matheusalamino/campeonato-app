@@ -56,9 +56,13 @@ const CAMPO_ELENCO = "components/team-manager/FootballField.tsx";
 const CAMPO_PARTIDA = "components/MatchFieldView.tsx";
 const CARTA = "components/draftNight/PlayerCard.tsx";
 const BUSCA = "components/team-manager/PlayerSearchCard.tsx";
-const PREVIA_POTE = "components/team-manager/PotPreviewTab.tsx";
 const HOOK_GOLEIRO = "features/hooks/useGoalkeeper.ts";
 const WIZARD = "app/(public)/inscrever/[slug]/RegistrationWizard.tsx";
+// O ultimo leitor de `players.preferred_position` que mora em SQL, e nao em
+// TypeScript: a funcao do IOG do goleiro. Ela e substituida pela migration do
+// pote porque foi ali que o ultimo `LIKE 'GOL%'` do repo caiu.
+const IOG_GOLEIRO =
+  "supabase/migrations/20260821020000_pot_position_codes.sql";
 
 const avaliar = fonteDe(AVALIAR);
 const inscrever = fonteDe(INSCREVER);
@@ -70,9 +74,9 @@ const campoElenco = fonteDe(CAMPO_ELENCO);
 const campoPartida = fonteDe(CAMPO_PARTIDA);
 const carta = fonteDe(CARTA);
 const busca = fonteDe(BUSCA);
-const previaPote = fonteDe(PREVIA_POTE);
 const hookGoleiro = fonteDe(HOOK_GOLEIRO);
 const wizard = fonteDe(WIZARD);
+const iogGoleiro = sqlDe(IOG_GOLEIRO);
 
 /**
  * As chaves de um mapa literal declarado como `const <nome> ... = { ... }`,
@@ -117,7 +121,8 @@ describe("quem le a posicao do jogador fala CODIGO", () => {
   // O que este `it` pega e o caso silencioso — o arquivo continua existindo mas
   // deixou de ser o que as assertivas abaixo supoem, e ai todo `not.toMatch`
   // segue verde medindo um arquivo que nao guarda mais a leitura.
-  it("le os treze arquivos, e cada um ainda e o que este teste pensa que e", () => {
+  it("le os treze sitios, e cada um ainda e o que este teste pensa que e", () => {
+    expect(iogGoleiro).toContain("public_goalkeeper_iog");
     expect(avaliar).toContain("skillsGol");
     expect(inscrever).toContain("skillsGol");
     expect(escalacao).toContain("gkCount");
@@ -128,7 +133,6 @@ describe("quem le a posicao do jogador fala CODIGO", () => {
     expect(campoPartida).toContain("POSITION_KEY");
     expect(carta).toContain("player.position");
     expect(busca).toContain("positionColors");
-    expect(previaPote).toContain("positionHeaderClass");
     expect(hookGoleiro).toContain("GK_POSITIONS");
     expect(wizard).toContain("activeSkills");
   });
@@ -197,6 +201,29 @@ describe("quem le a posicao do jogador fala CODIGO", () => {
     expect(seed).not.toMatch(/'(Goleiro|Zagueiro|Meia|Atacante)'/);
   });
 
+  it("o IOG publico do goleiro compara o codigo INTEIRO, e nao o prefixo", () => {
+    // O ULTIMO "segundo vocabulario tolerado" do repo, e ele estava em SQL.
+    //
+    // `upper(p.preferred_position) LIKE 'GOL%'` casa `GOL` e `Goleiro`, e o
+    // comentario que a encimava na 20260616000000 dizia isso com todas as
+    // letras: "tolerante a formato". Nao quebrava — o prefixo pega os dois —
+    // mas era a ultima frase do repo prometendo suportar dois vocabularios, e
+    // a varredura de fonte destes testes NAO LE SQL: ficaria viva e invisivel.
+    //
+    // A migration aplicada nao foi editada. Este projeto mediu que comentario
+    // dentro da regiao de statements fica gravado em
+    // `supabase_migrations.schema_migrations.statements`; a funcao e
+    // substituida por `CREATE OR REPLACE` numa migration nova.
+    expect(iogGoleiro).toMatch(
+      /CREATE OR REPLACE FUNCTION public\.public_goalkeeper_iog/,
+    );
+    expect(iogGoleiro).toMatch(/p\.preferred_position\s*=\s*'GOL'/);
+    expect(iogGoleiro).not.toMatch(/LIKE\s*'GOL/i);
+    // O `upper()` sai junto: normalizar caixa so faz sentido contra vocabulario
+    // de caixa variavel, e a CHECK da 20260821010000 nao aceita nenhum.
+    expect(iogGoleiro).not.toMatch(/upper\s*\(\s*p\.preferred_position/i);
+  });
+
   // ── Grupo 3: mapas de exibicao, com a metade das palavras removida ────────
 
   it("o campo do elenco distribui os jogadores por um mapa so de codigos", () => {
@@ -237,13 +264,15 @@ describe("quem le a posicao do jogador fala CODIGO", () => {
     expect(busca).not.toMatch(SEM_PALAVRA);
   });
 
-  it("o cabecalho da previa do pote reconhece o meia pelo codigo", () => {
-    // `p.includes("MEIA")` sobre um pote que agora se chama `MEI` nunca casa, e
-    // o cabecalho do pote de meias perde a cor. So cor — mas e o mesmo defeito.
-    expect(previaPote).toMatch(/includes\(\s*["']MEI["']\s*\)/);
-    expect(previaPote).not.toMatch(/includes\(\s*["']MEIA["']\s*\)/);
-    expect(previaPote).not.toMatch(SEM_PALAVRA);
-  });
+  // O cabecalho da previa do pote MUDOU DE CASA. Ele nao le a posicao do
+  // JOGADOR: le `draft_pots.position`, que e vocabulario proprio — os mesmos
+  // quatro codigos MAIS o `EXT` do pote extra. Estava aqui porque, ate a Task
+  // 5, a coluna do pote ainda guardava palavra e este arquivo era o unico lugar
+  // com a varredura montada.
+  //
+  // A cobertura dele agora vive em `features/draft/pot-readers.test.ts`, junto
+  // com os outros nove sitios do pote. Deixar as duas metades separadas era o
+  // que fazia parecer que o pote nao tinha vocabulario nenhum.
 
   // ── Grupo 4: o hedge do hook ─────────────────────────────────────────────
 

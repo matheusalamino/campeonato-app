@@ -12,9 +12,23 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
+/**
+ * O icone do pote, escolhido pelo CODIGO.
+ *
+ * Tres ramos e um fallback, e o fallback nao e descuido: `ATA` nunca teve `if`
+ * proprio — a estrela sempre foi dele — e o pote `EXT` cai ali junto, como caia
+ * quando se chamava `Extra`.
+ *
+ * As palavras que estavam aqui (`goleiro`, `zagueiro`, `meia`, `meio`) sairam
+ * na 20260821020000, que converteu `draft_pots.position` para codigo. Com elas,
+ * os QUATRO potes cairiam no fallback e a tela inteira viraria estrela.
+ *
+ * Sairam junto `defensor` e `lateral`, e esses nunca foram dado: a coluna copia
+ * `players.preferred_position`, que nunca aceitou nenhum dos dois. Eram
+ * vocabulario que so morava neste `if`.
+ */
 function PositionIcon({ position }: { position: string }) {
-  const pos = position.toLowerCase();
-  if (pos.includes("goleiro")) {
+  if (position === "GOL") {
     return (
       <svg
         width="36"
@@ -31,11 +45,7 @@ function PositionIcon({ position }: { position: string }) {
       </svg>
     );
   }
-  if (
-    pos.includes("zagueiro") ||
-    pos.includes("defensor") ||
-    pos.includes("lateral")
-  ) {
+  if (position === "ZAG") {
     return (
       <svg
         width="36"
@@ -51,7 +61,7 @@ function PositionIcon({ position }: { position: string }) {
       </svg>
     );
   }
-  if (pos.includes("meia") || pos.includes("meio")) {
+  if (position === "MEI") {
     return (
       <svg
         width="36"
@@ -97,9 +107,12 @@ function PotCard({
   delay: number;
   completed: boolean;
 }) {
-  const pos = pot.position.toLowerCase();
-  const isGoalkeeper = pos === "gol" || pos.includes("goleiro");
-  const isExtra = pos === "extra" || pos.includes("adicional");
+  // CODIGO nos dois, desde a 20260821020000. O `isGoalkeeper` ja hedgeava com
+  // `"gol"` e teria sobrevivido a virada; o `isExtra` NAO — nem `"extra"` nem
+  // `"adicional"` casam `EXT`, e o cartao do pote extra perderia o aviso "Sem
+  // habilitacao" que diz ao cartola que ali nao se da lance cego.
+  const isGoalkeeper = pot.position === "GOL";
+  const isExtra = pot.position === "EXT";
   const locked = completed || pot.is_finalized;
 
   return (

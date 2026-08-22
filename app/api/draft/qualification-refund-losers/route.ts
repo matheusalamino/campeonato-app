@@ -57,7 +57,11 @@ export async function POST(req: Request) {
       );
     }
 
-    if (pos.toLowerCase() === "goleiro") {
+    // `GOL`, e nao `goleiro`: a coluna guarda CODIGO desde a 20260821020000.
+    // Aqui o desfecho e o mais silencioso dos quatro — sem a guarda, o estorno
+    // segue adiante e nao acha lance nenhum, devolvendo `refunded: 0` como se
+    // tivesse trabalhado.
+    if (pos === "GOL") {
       return NextResponse.json({
         success: true,
         refunded: 0,

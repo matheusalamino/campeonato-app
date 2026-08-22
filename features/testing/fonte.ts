@@ -60,3 +60,23 @@ export function sqlDe(caminho: string): string {
  * reprovaria contra codigo CERTO, castigando quem comentou bem.
  */
 export const SEM_PALAVRA = /["'`](Goleiro|Zagueiro|Meia|Atacante)["'`]/;
+
+/**
+ * O irmao para o vocabulario do POTE, e ele e mais largo em duas direcoes.
+ *
+ * MAIUSCULA NAO IMPORTA (`i`), porque no pote a palavra aparecia minuscula: os
+ * detectores de `qualification-*`, `join-pot-bid` e `PotBidsSlide` comparavam
+ * `pos.toLowerCase()` com `"goleiro"`. Sem o `i`, `SEM_PALAVRA` passaria por
+ * cima de todos eles.
+ *
+ * E TEM MAIS ENTRADAS: `extra` e `adicional`, que sao o pote que nao e posicao
+ * de ninguem (hoje `EXT`); e `meio`, `defensor` e `lateral`, que `PotMenuSlide`
+ * testava e que NUNCA existiram na coluna — vocabulario que so morava naquele
+ * `if`.
+ *
+ * O literal entre aspas segue sendo o alvo, e aqui isso rende mais do que no
+ * irmao: `"Saldo Extra"`, `Pote Extra` e `extraBalance` sao rotulo de tela e
+ * nome de variavel, nao vocabulario de coluna, e nenhum deles casa.
+ */
+export const SEM_PALAVRA_DE_POTE =
+  /["'`](goleiro|zagueiro|meia|meio|atacante|extra|adicional|defensor|lateral)["'`]/i;

@@ -36,28 +36,36 @@ type PotPreviewTabProps = {
   catalogByRegistration: Map<string, CatalogPlayer>;
 };
 
+/**
+ * A cor do cabecalho de cada pote, escolhida pelo CODIGO.
+ *
+ * ── POR QUE ISTO DEIXOU DE SER `includes` ──
+ *
+ * Ate a Task 4 do A8 a comparacao aqui era por SUBSTRING, e era rede de
+ * proposito: `"GOLEIRO"` contem `"GOL"` e `"MEIA"` contem `"MEI"`, entao o
+ * cabecalho pintava certo nos dois vocabularios e atravessava sem perder cor o
+ * pote gerado ANTES da virada da coluna do jogador. O comentario que estava
+ * neste lugar pedia, com todas as letras, que ninguem trocasse por `===` antes
+ * da Task 5.
+ *
+ * A Task 5 chegou: a 20260821020000 converteu `draft_pots.position` e as outras
+ * seis colunas de pote, e pos CHECK nas sete. Nao ha mais pote legado a
+ * tolerar, e substring sobre um dominio de cinco valores fixos deixa de ser
+ * rede — vira hedge, que e o que este bloco veio remover, e ensina o proximo
+ * leitor a esperar palavra de volta.
+ *
+ * O `EXT` nao tem ramo, e isso e o comportamento de sempre: `"Extra"` tambem
+ * nao continha nenhum dos quatro e ja caia no cinza do fallback.
+ */
 function positionHeaderClass(position: string) {
-  const p = position.toUpperCase();
-  if (p.includes("GOL")) return "border-amber-500/40 bg-amber-500/10 text-amber-200";
-  if (p.includes("ZAG")) return "border-blue-500/40 bg-blue-500/10 text-blue-200";
-  // `MEI`, e nao `MEIA`: o pote copia `players.preferred_position`, que guarda
-  // CODIGO desde a 20260821010000. `"MEI".includes("MEIA")` e falso, e o
-  // cabecalho do pote de meias caia no cinza do fallback — so cor, mas e o
-  // mesmo defeito calado dos outros doze sitios desta varredura.
-  //
-  // RESSALVA, a mesma de `draftNight/PlayerCard.tsx`: NENHUMA migration converte
-  // `draft_pots.position`. A 20260821010000 so toca `public.players`, e as sete
-  // migrations que mexem em `draft_pots` sao todas de abril. Linha de pote
-  // gerada ANTES da virada ainda guarda a PALAVRA. A Task 5 do A8 converte as
-  // colunas de pote de vez.
-  //
-  // E POR ISSO A COMPARACAO E POR SUBSTRING, e nao por igualdade: `"GOLEIRO"`
-  // contem `"GOL"` e `"MEIA"` contem `"MEI"`, entao este sitio pinta certo nos
-  // DOIS vocabularios e atravessa o pote legado sem perder cor. Nao "conserte"
-  // trocando `includes` por `===` antes da Task 5 — aqui a tolerancia e a rede,
-  // e nao o hedge que o bloco A8 veio remover.
-  if (p.includes("MEI")) return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
-  if (p.includes("ATA")) return "border-red-500/40 bg-red-500/10 text-red-200";
+  if (position === "GOL")
+    return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  if (position === "ZAG")
+    return "border-blue-500/40 bg-blue-500/10 text-blue-200";
+  if (position === "MEI")
+    return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (position === "ATA")
+    return "border-red-500/40 bg-red-500/10 text-red-200";
   return "border-zinc-600 bg-zinc-800/80 text-zinc-200";
 }
 

@@ -66,7 +66,14 @@ export async function POST(req: Request) {
       );
     }
 
-    if (potPosition.toLowerCase() === "goleiro") {
+    // `GOL`, e nao `goleiro`: a coluna guarda CODIGO desde a 20260821020000.
+    // Dos quatro guardas desta forma, este e o unico cujo valor NAO vem do
+    // corpo da requisicao: sai de
+    // `championships.draft_qualification_pot_position`. O que sustenta a
+    // igualdade exata nao e o route que gravou ali — e a CHECK
+    // `championships_draft_qualification_pot_position_known`, da
+    // 20260821020000.
+    if (potPosition === "GOL") {
       return NextResponse.json(
         { error: "Habilitação não se aplica ao pote de goleiros" },
         { status: 400 },
