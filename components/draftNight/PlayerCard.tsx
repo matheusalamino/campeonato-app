@@ -120,11 +120,19 @@ export default function PlayerCard(props: PlayerCardProps) {
   // `draft_pots.position`, que a geracao de potes copia de
   // `players.preferred_position` — codigo desde a 20260821010000.
   //
+  // COM UMA RESSALVA, e ela nao e teorica: NENHUMA migration converte
+  // `draft_pots.position`. A 20260821010000 so toca `players`. Linha de pote
+  // gerada ANTES da virada ainda guarda a PALAVRA, e nela a etiqueta imprime
+  // `Goleiro` cru no lugar de `GOL`. E so cosmetico, e some sozinho na proxima
+  // geracao de potes (que faz DELETE e regenera do zero) — e as colunas de pote
+  // sao convertidas de vez na Task 5 do A8. Nao da para observar aqui: o
+  // `draft_pots` local esta vazio.
+  //
   // Aqui havia uma tabela `POS_ABBR` so de PALAVRA, encoberta por um
-  // `?? pos.slice(0, 3).toUpperCase()`: com codigo na entrada toda consulta
-  // errava e o fallback devolvia o proprio codigo. Mapa que so acerta quando
-  // nao e consultado nao e rede — e ruido que o proximo leitor toma por suporte
-  // a dois vocabularios.
+  // `?? pos.slice(0, 3).toUpperCase()`, que e identidade para os quatro
+  // canonicos: com codigo na entrada toda consulta errava e o fallback devolvia
+  // o proprio codigo. Mapa que so acerta quando nao e consultado nao e rede — e
+  // ruido que o proximo leitor toma por suporte a dois vocabularios.
   const pos = player.position;
   const overall = player.overall ?? "—";
   const mid = Math.ceil(player.attributes.length / 2);

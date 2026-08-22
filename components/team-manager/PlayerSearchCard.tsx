@@ -21,10 +21,17 @@ type PlayerSearchCardProps = {
  * As quatro PALAVRAS que estavam aqui sairam na virada da 20260821010000 —
  * `players.preferred_position` guarda codigo, entao nenhuma voltaria a casar.
  *
- * A metade que parecia ser "de codigo" tambem estava furada: a chave do meia
- * era `MEIA`, que nao e codigo de nada. O meia ja caia no cinza do fallback bem
- * antes da virada, e ninguem viu — que e o argumento inteiro contra deixar
- * entrada morta "por seguranca" num mapa.
+ * A metade que parecia ser "de codigo" tinha a chave do meia escrita `MEIA`,
+ * que nao e codigo de nada. Era REDUNDANCIA, e nao um defeito que rodou: ate a
+ * virada a coluna guardava a PALAVRA, entao o meia era pintado de emerald pela
+ * chave `Meia` logo acima e nunca caiu no cinza do fallback. `MEIA` esta neste
+ * arquivo desde 0393c95 (15/04/2026) sem nunca ter sido consultada.
+ *
+ * O custo dela nao foi tela errada — foi que ninguem tinha como saber se era
+ * chave morta ou chave que importava, e por isso ela atravessou uma virada de
+ * vocabulario inteira sem ninguem questionar. E o argumento contra deixar
+ * entrada "por seguranca" num mapa: ela nao avisa quando para de fazer sentido,
+ * e quem chega depois nao tem como distinguir reserva de lixo.
  */
 const positionColors: Record<string, string> = {
   GOL: "bg-yellow-500/20 text-yellow-300",

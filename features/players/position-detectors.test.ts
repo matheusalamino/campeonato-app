@@ -223,8 +223,13 @@ describe("quem le a posicao do jogador fala CODIGO", () => {
   });
 
   it("a busca de jogador pinta a etiqueta por um mapa so de codigos", () => {
-    // A metade "de codigo" deste mapa estava com `MEIA`, que nao e codigo de
-    // nada: o meia ja caia no cinza do fallback antes mesmo da virada.
+    // A metade "de codigo" deste mapa tinha a chave do meia escrita `MEIA`, que
+    // nao e codigo de nada. Redundancia, e nao defeito que rodou: ate a virada a
+    // coluna guardava a PALAVRA, e o meia era pintado pela chave `Meia` vizinha.
+    //
+    // O custo foi nao dar para saber se era chave morta ou viva, e por isso ela
+    // atravessou uma virada de vocabulario inteira sem ninguem questionar. Dai a
+    // assertiva ser de CONJUNTO: chave a mais reprova igual a chave a menos.
     expect(chavesDoMapa(busca, "positionColors")).toEqual(CODIGOS);
     expect(busca).not.toMatch(SEM_PALAVRA);
   });
