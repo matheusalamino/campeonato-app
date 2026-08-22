@@ -19,9 +19,20 @@ const supabase = createClient();
  * sem transformar um jogador de linha desconhecido em goleiro.
  *
  * E SEGUE UM `Set` de um item so, de proposito, em vez de um `pos === "GOL"`
- * solto la embaixo: e a costura nomeada onde o vocabulario de goleiro mora.
- * Quem precisar mexer nele procura por um nome, e nao por um literal espalhado
- * pelo corpo do hook -- que e como o `"Goleiro"` sobreviveu aqui por dois meses.
+ * solto la embaixo: e a costura nomeada onde o vocabulario de goleiro mora, e
+ * quem precisar mexer nele procura por um nome.
+ *
+ * Mas nome NAO e guarda, e a prova esta neste proprio arquivo: o `"Goleiro"`
+ * NASCEU dentro desta constante em 7e44372 (2026-06-13), como
+ * `new Set(["GOL", "Goleiro"])`, e so saiu na b591e55 (2026-08-21). Foram dois
+ * meses hospedado justamente pelo nome que deveria dar visibilidade -- ele
+ * nunca esteve espalhado pelo corpo do hook.
+ *
+ * Quem RECUSA vocabulario errado e a CHECK `players_preferred_position_known`
+ * no banco e, onde um codigo e comparado em TypeScript, a ancora no tipo
+ * `CanonicalPosition` (ver `features/players/position-group.ts`, onde valor de
+ * fora do enum reprova o `tsc` com TS2322). Este `Set` e `Set<string>`: nao tem
+ * esse dente.
  */
 const GK_POSITIONS = new Set(["GOL"]);
 

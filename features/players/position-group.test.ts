@@ -10,6 +10,14 @@ import { normalizePositionGroup } from "./position-group";
  * vez de ler o arquivo e casar regex como os testes de fiacao vizinhos fazem
  * com o que mora em `app/**`.
  */
+/**
+ * Um codigo de linha qualquer, tirado do enum em vez de citado a mao.
+ *
+ * A politica do loop logo abaixo vale para os insumos tambem: `ZAG` escrito na
+ * unha envelhece junto com o catalogo, e um dia vira o nome de nada.
+ */
+const UM_CODIGO_DE_LINHA = CANONICAL_POSITIONS.filter((c) => c !== "GOL")[0];
+
 describe("normalizePositionGroup", () => {
   it("GOL e o goleiro", () => {
     expect(normalizePositionGroup("GOL")).toBe("goalkeeper");
@@ -35,7 +43,9 @@ describe("normalizePositionGroup", () => {
 
   it("jogador sem posicao nao forma par com jogador de linha", () => {
     // A conta que o chamador faz, escrita como o chamador a escreve.
-    expect(normalizePositionGroup(null)).not.toBe(normalizePositionGroup("ZAG"));
+    expect(normalizePositionGroup(null)).not.toBe(
+      normalizePositionGroup(UM_CODIGO_DE_LINHA),
+    );
   });
 
   it("a palavra Goleiro NAO e mais reconhecida como goleiro", () => {
@@ -62,6 +72,8 @@ describe("normalizePositionGroup", () => {
     for (const bruto of [" GOL ", "gol", "Gol", "\tGOL\n"]) {
       expect(normalizePositionGroup(bruto)).toBe("goalkeeper");
     }
-    expect(normalizePositionGroup(" zag ")).toBe("line");
+    expect(normalizePositionGroup(` ${UM_CODIGO_DE_LINHA.toLowerCase()} `)).toBe(
+      "line",
+    );
   });
 });

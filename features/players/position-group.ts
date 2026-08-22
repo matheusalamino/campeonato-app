@@ -13,8 +13,13 @@ import type { CanonicalPosition } from "./position";
  * A CONTA E `GOL` CONTRA O RESTO, e e de proposito que o resto nao esteja
  * enumerado aqui. Detector de goleiro que lista os codigos de linha para de
  * reconhecer o dia em que nasce um codigo novo, e o jogador novo entra calado no
- * balde errado. Quem for adicionar codigo canonico mexe em `CANONICAL_POSITIONS`
- * (em `./position`) e nao precisa passar por aqui.
+ * balde errado. Codigo canonico novo DE LINHA entra so em `CANONICAL_POSITIONS`
+ * (em `./position`) e cai em `line` sozinho, sem passar por aqui.
+ *
+ * A excecao e um SEGUNDO codigo de goleiro. Esse exige os dois lugares: a
+ * comparacao abaixo, que hoje e contra um codigo so, e o loop de
+ * `position-group.test.ts` que varre o enum -- ele afirma que todo canonico que
+ * nao e `GOL` e de linha, e passaria a afirmar o errado para o goleiro novo.
  *
  * A METADE MORTA SAIU. As duas copias traziam
  * `p === "gol" || p.includes("goleiro")`, tolerando os dois vocabularios da
@@ -25,11 +30,18 @@ import type { CanonicalPosition } from "./position";
  * `app/api/draft/fiscal/transfer-window-options/route.ts` na tela. Ficar era
  * pior do que inutil: mantinha viva a impressao de que a palavra ainda circula.
  *
- * O codigo do goleiro esta preso ao tipo do enum de proposito, e nao solto num
- * literal. Foi por literal solto que o `"Goleiro"` sobreviveu dois meses dentro
- * de `features/hooks/useGoalkeeper.ts` — a mesma licao que virou o
- * `GK_POSITIONS` nomeado de la. Com a anotacao, renomear o codigo no enum quebra
- * o `tsc` NESTA linha, em vez de degradar em silencio.
+ * O codigo do goleiro esta preso ao TIPO do enum, e a razao NAO e a que parece.
+ *
+ * Em `features/hooks/useGoalkeeper.ts` o `"Goleiro"` sobreviveu dois meses --
+ * 7e44372 (2026-06-13) ate b591e55 (2026-08-21). E ele nunca esteve solto pelo
+ * corpo do hook: NASCEU dentro da constante nomeada, como
+ * `new Set(["GOL", "Goleiro"])`. Nomear, portanto, nao impediu coisa nenhuma; o
+ * nome hospedou a palavra e ninguem viu por dois meses.
+ *
+ * Quem pega e a anotacao de tipo, e disso ha prova medida: com
+ * `: CanonicalPosition`, um valor de fora do enum reprova o `tsc` na linha do
+ * `GOALKEEPER_CODE` abaixo, com TS2322, antes de rodar. Constante nomeada serve
+ * para ACHAR o vocabulario; so o tipo RECUSA o vocabulario errado.
  */
 export type PositionGroup = "goalkeeper" | "line" | "unknown";
 
