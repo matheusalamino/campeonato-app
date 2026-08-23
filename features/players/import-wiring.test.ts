@@ -200,8 +200,24 @@ describe("fiacao: o prefill do wizard normaliza", () => {
 
   it("nao joga mais o valor cru do banco no select de quatro opcoes", () => {
     expect(src).not.toMatch(/preferred_position:\s*p\.preferred_position\s*\?\?/);
-    expect(src).toMatch(
-      /preferred_position:\s*[\s\S]{0,120}?normalizePreferredPosition\(\s*p\.preferred_position\s*\)\.position/,
-    );
+
+    // DUAS formas aceitas, porque as duas dizem a mesma coisa: normalizar
+    // inline dentro do `setForm`, ou normalizar para uma VARIAVEL e semear o
+    // `setForm` com ela. A segunda apareceu quando a posicao subiu para o passo
+    // 1: a reserva da vaga precisa do balde ANTES do proximo render, e o estado
+    // do formulario so chega la. A janela de 120 caracteres que estava aqui
+    // reprovava a variavel — e o defeito que ela guarda nao e a distancia entre
+    // as duas linhas, e sim o valor CRU chegar ao select.
+    //
+    // O que se prende nas duas e o mesmo caminho: o que entra em
+    // `preferred_position` nasceu de `normalizePreferredPosition`. No caminho da
+    // variavel, o NOME e lido do arquivo — renomear pelo atalho da IDE e no-op.
+    const semente = /normalizePreferredPosition\(\s*p\.preferred_position\s*\)\.position/;
+    const viaVariavel = src.match(new RegExp(`(\\w+)\\s*=\\s*${semente.source}`));
+    if (viaVariavel) {
+      expect(src).toMatch(new RegExp(`preferred_position:\\s*${viaVariavel[1]}\\s*,`));
+    } else {
+      expect(src).toMatch(new RegExp(`preferred_position:\\s*${semente.source}`));
+    }
   });
 });

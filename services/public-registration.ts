@@ -163,15 +163,26 @@ export async function checkLookupRateLimit(ip: string): Promise<boolean> {
  * a tentar de novo e a pausa dura 24h. Aqui sobra a chamada; a unica decisao que
  * ficou e o `error ? null : data`, e os dois lados dele significam a mesma
  * coisa: nao houve resposta.
+ *
+ * `isGoalkeeper` e o BALDE, ja decidido, e nao a posicao: a RPC recebe
+ * `p_is_goalkeeper boolean` de proposito, para a conversao palavra->booleano
+ * acontecer UMA VEZ, em TypeScript, na fronteira em que o jogador escolhe. E
+ * OBRIGATORIO aqui embora seja `DEFAULT NULL` no SQL — o default existe para
+ * chamada direta ao banco, e do lado do TypeScript deixa-lo opcional faria uma
+ * chamada que esquecesse o argumento cair calada no balde de linha, que e
+ * exatamente o defeito que este parametro veio fechar. Obrigatorio, o `tsc`
+ * cobra.
  */
 export async function reserveSlot(
   championshipId: string,
   cpf: string,
+  isGoalkeeper: boolean,
 ): Promise<SlotReservation> {
   const supabase = createAdminClient();
   const { data, error } = await supabase.rpc("reserve_registration_slot", {
     p_championship_id: championshipId,
     p_cpf: normalizeCpf(cpf),
+    p_is_goalkeeper: isGoalkeeper,
   });
   return reservationFromRpc(error ? null : data);
 }

@@ -95,16 +95,20 @@ describe("canOpenStep", () => {
 
   it("com a cota de goleiro cheia, o passo da POSICAO continua reabrivel", () => {
     // A diferenca em CONSEQUENCIA das outras recusas: a saida desta esta dentro
-    // do formulario, e a faixa manda ir ate ela. A posicao e o passo 4
-    // (`FIELD_STEP` em field-steps.ts), e nao o 1 — o 1 e so o CPF. Quem recebe
-    // esta razao acabou de sair do passo da posicao, entao ele esta em `done` e
-    // a regra dos passos concluidos ja o reabre. Trancado, a tela daria uma
-    // instrucao que a navegacao nao deixa cumprir.
-    expect(canOpenStep(PASSO_DA_POSICAO, COTA_DE_GOLEIRO, { [PASSO_DA_POSICAO]: true })).toBe(
-      true,
-    );
-    // E o passo do CPF, porta de volta de toda recusa, segue aberto.
-    expect(canOpenStep(1, COTA_DE_GOLEIRO, {})).toBe(true);
+    // do formulario, e a faixa manda ir ate ela — "escolha uma posicao de
+    // linha". Trancado, a tela daria uma instrucao que a navegacao nao deixa
+    // cumprir.
+    //
+    // `done` VAZIO, e nao `{ [PASSO_DA_POSICAO]: true }`, porque e assim que
+    // esta recusa chega: ela nasce na PRIMEIRA reserva, disparada ainda dentro
+    // do passo da posicao, antes de qualquer passo entrar em `done`. A regra dos
+    // passos concluidos nao ajuda aqui — quem abre a porta e a do passo 1.
+    //
+    // E por isso o mapa de campos esta nesta assercao: a promessa da faixa so se
+    // cumpre enquanto a posicao dividir o passo com o CPF. Devolve
+    // `preferred_position` para o passo 4 em field-steps.ts e esta linha fica
+    // vermelha, que e exatamente o aviso que faltava.
+    expect(canOpenStep(PASSO_DA_POSICAO, COTA_DE_GOLEIRO, {})).toBe(true);
   });
 
   it("mantem o passo do CPF aberto, senao a falha de rede prende para sempre", () => {

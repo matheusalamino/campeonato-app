@@ -133,22 +133,19 @@ function noticeFor(
        * Preenchido, ha reserva viva de outro goleiro que vence — e esperar sai
        * mais barato do que trocar de posicao.
        *
-       * "Volte ao passo da posicao", e nao "ao primeiro passo": a posicao e o
-       * passo 4 no `FIELD_STEP` (field-steps.ts) e o 1 e so o CPF.
+       * "Volte ao passo da posicao": ele e o passo 1, o MESMO do CPF — a posicao
+       * subiu para la justamente porque a reserva sai dali e precisa saber o
+       * balde (ver `FIELD_STEP`, em field-steps.ts).
        *
-       * HOJE NENHUM JOGADOR CHEGA A ESTA RECUSA PELO FORMULARIO, e a frase
-       * existe antes do caminho de proposito — a mesma situacao que o docblock
-       * de commit-refusal.ts descreve para a gemea dela. `reserveSlot`
-       * (services/public-registration.ts) e `reserveSlotAction` chamam a RPC com
-       * DOIS argumentos, sem `p_is_goalkeeper`, e la dentro
-       * `v_is_gk := coalesce(p_is_goalkeeper, false)`: o balde e sempre o de
-       * linha, na reserva inicial e em toda renovacao. A razao existe no banco
-       * para valer em chamada direta, que nao passa por esta tela.
+       * A INSTRUCAO E CUMPRIVEL, e isso foi medido, nao suposto. A recusa deixa
+       * a navegacao trancada por `canOpenStep`, e a saida so existe porque o
+       * passo 1 e a excecao dela: `target <= 1` devolve `true` em toda recusa,
+       * com `done` vazio. Enquanto a posicao morava no passo 4 essa frase
+       * mandava o jogador a um passo que `canOpenStep(4, recusa, {})` recusava
+       * abrir — a promessa quebrada que o A6 mediu antes de mover o campo.
        *
-       * Quando o balde for ligado, quem receber esta razao vira da renovacao que
-       * dispara ao sair do passo da posicao — a primeira chamada que pode saber
-       * que ele e goleiro —, entao o passo 4 ja estara em `done` e `canOpenStep`
-       * o reabre. Quem ligar confere isso: e o que torna a instrucao cumprivel.
+       * E ela se cumpre SEM RECARREGAR: o `onChange` do select refaz a reserva
+       * no balde novo, e a resposta repinta esta faixa.
        */
       return {
         urgent: true,

@@ -23,8 +23,16 @@ export async function submitRegistrationAction(input: unknown) {
   return submitRegistration(input);
 }
 
-export async function reserveSlotAction(championshipId: string, cpf: string) {
-  return reserveSlot(championshipId, cpf);
+/**
+ * `isGoalkeeper` e o BALDE — goleiro ou linha —, e nao a posicao: quem converte
+ * a palavra em booleano e a tela, uma vez so. Ver `reserveSlot`.
+ */
+export async function reserveSlotAction(
+  championshipId: string,
+  cpf: string,
+  isGoalkeeper: boolean,
+) {
+  return reserveSlot(championshipId, cpf, isGoalkeeper);
 }
 
 export async function deleteRegistrationFileAction(

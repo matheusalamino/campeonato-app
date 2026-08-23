@@ -7,6 +7,13 @@
  */
 export const FIELD_STEP: Readonly<Record<string, number>> = {
   cpf: 1,
+  // A posicao vem JUNTO do CPF, e nao com o resto do perfil de jogo, porque e
+  // na saida deste passo que a reserva da vaga e pedida — e a reserva precisa
+  // saber o BALDE, goleiro ou linha, para pedir a vaga certa. Perguntada
+  // depois, toda reserva sairia no balde de linha (`coalesce(p_is_goalkeeper,
+  // false)` na RPC) e o goleiro alem da cota so levaria a recusa no envio,
+  // depois de ter pago o PIX.
+  preferred_position: 1,
 
   name: 2,
   email: 2,
@@ -21,7 +28,6 @@ export const FIELD_STEP: Readonly<Record<string, number>> = {
   // impressa, assinada e digitalizada, o que nao cabe junto dos outros uploads.
   legal_authorization_link: 3,
 
-  preferred_position: 4,
   height: 4,
   weight: 4,
   skills: 4,

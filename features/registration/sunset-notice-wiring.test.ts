@@ -326,3 +326,66 @@ describe("a fiacao da faixa da vaga", () => {
     expect(prop(tags[0], "slot")).toBe(reserva);
   });
 });
+/**
+ * O BALDE da vaga, preso como texto — goleiro ou linha, junto de toda reserva.
+ *
+ * `reserve_registration_slot` recebe `p_is_goalkeeper boolean DEFAULT NULL` e
+ * dentro dela `v_is_gk := coalesce(p_is_goalkeeper, false)`. A chamada que
+ * esquece o argumento nao quebra: ela reserva no balde de LINHA, em silencio. O
+ * goleiro alem da cota preenche o formulario inteiro, paga o PIX, e leva a
+ * recusa no commit — o dano que o A4 gastou duas PRs prevenindo.
+ *
+ * Sao QUATRO chamadas, e cada uma tem um jeito proprio de sumir com o balde:
+ *
+ *   o passo do CPF          ->  a primeira reserva nasce no balde errado, e a
+ *                               faixa promete "vaga garantida" a quem nao tem.
+ *   a troca de posicao      ->  o jogador vira goleiro e ninguem pergunta ao
+ *                               servidor se ainda ha vaga de goleiro.
+ *   a renovacao do passo    ->  o balde errado faz a RPC RECONTAR: a renovacao
+ *   a batida de fundo           vira recusa para quem ja tinha vaga, ou move a
+ *                               reserva do goleiro para o balde de linha.
+ *
+ * As duas ultimas sao as que ninguem ve numa revisao de olho, porque o
+ * argumento sumido nao muda o resultado da chamada — muda o balde em que ela
+ * cai.
+ *
+ * Nao pin o NOME da variavel do balde, so a forma: tres argumentos, e o
+ * terceiro nao pode ser literal. `reserveSlotAction(id, cpf, false)` compila,
+ * passa em tudo, e e o mesmo desastre com uma linha a mais.
+ */
+describe("a fiacao do balde da reserva", () => {
+  it("toda reserva manda o balde junto, e nunca um literal no lugar dele", () => {
+    // Um nivel de parenteses balanceado: tolera `f(x)` como argumento sem abrir
+    // a chamada. As virgulas de dentro dele nao existem hoje, e o `filter`
+    // abaixo ja e o que absorve quebra de linha e virgula final.
+    const chamadas = [...wizard.matchAll(/reserveSlotAction\((?:[^()]|\([^()]*\))*\)/g)]
+      .map((m) => m[0].slice("reserveSlotAction(".length, -1));
+
+    // Quatro, e exatamente quatro. Zero seria o regex casando nada e o teste
+    // inteiro passando vazio; uma a menos e uma reserva que sumiu do wizard.
+    expect(chamadas).toHaveLength(4);
+
+    for (const chamada of chamadas) {
+      const argumentos = chamada.split(",").map((a) => a.trim()).filter(Boolean);
+      expect(argumentos).toHaveLength(3);
+      // O balde vem de uma variavel — a do formulario, ou a da reserva viva.
+      // Carimbado `true`/`false` na chamada, ele para de acompanhar a escolha
+      // do jogador e volta a ser o balde fixo que este argumento veio matar.
+      expect(argumentos[2]).not.toMatch(/^(true|false)$/);
+    }
+  });
+
+  it("o balde nasce do canonico, e nao da palavra crua do formulario", () => {
+    // O select do passo 1 grava a palavra que o jogador escolheu, mas o
+    // preenchimento automatico do CPF grava o que estiver no BANCO, e o CSV do
+    // admin aceita celula arbitraria de planilha. `' goleiro '` com espaco
+    // sobrando nao e igual a nenhuma palavra, e mandaria um goleiro para o
+    // balde de linha sem erro nenhum.
+    //
+    // Le a comparacao inteira em vez do nome da funcao que a envolve: renomear
+    // o helper pelo atalho da IDE continua sendo no-op.
+    const comparacoes = [...wizard.matchAll(/([\w.()]+)\s*===\s*"Goleiro"/g)];
+    expect(comparacoes).toHaveLength(1);
+    expect(comparacoes[0][1]).toContain("normalizePreferredPosition(");
+  });
+});
