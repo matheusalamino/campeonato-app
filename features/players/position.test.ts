@@ -125,8 +125,15 @@ describe("normalizePreferredPosition", () => {
     const seed = readFileSync(resolve(process.cwd(), "supabase/seed.sql"), "utf8");
 
     // A coluna de posicao do CTE `player_seed`, e nao qualquer string do arquivo.
+    //
+    // O `(?:true|false)` no meio e a coluna `is_goalkeeper`, que passou a ficar
+    // entre a posicao e o overall: o seed grava o BALDE da inscricao como dado
+    // proprio, em vez de deriva-lo da posicao. A ancora ficou mais forte, e nao
+    // mais fraca -- sem ela o casamento voltaria a terminar no primeiro numero
+    // depois da posicao, e o `toBeGreaterThan(0)` abaixo e quem avisa se a forma
+    // da linha mudar de novo.
     const posicoes = [
-      ...seed.matchAll(/'60000000-[0-9a-f-]+'[^\n]*?'([A-Za-zÀ-ÿ ]+)',\s*\d+\)/g),
+      ...seed.matchAll(/'60000000-[0-9a-f-]+'[^\n]*?'([A-Za-zÀ-ÿ ]+)',\s*(?:true|false),\s*\d+\)/g),
     ].map((m) => m[1]);
 
     expect(posicoes.length).toBeGreaterThan(0);
