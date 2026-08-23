@@ -83,8 +83,9 @@ describe("toRow", () => {
 // fila de 1 goleiro + 4 de linha.
 //
 // `max_players` e `max_waitlist_players` entram aqui com valor absurdo DE
-// PROPOSITO. Eles deixaram de ser campo do admin, e os testes abaixo provam que
-// o que chega na coluna sai da formula, e nao do que alguem digitou.
+// PROPOSITO. Os dois campos continuam na tela do admin e continuam sendo
+// enviados; o que mudou e que `toRow` os descarta. Os testes abaixo provam
+// isso: o que chega na coluna sai da formula, e nao do que alguem digitou.
 const formatoDeOitoTimes = {
   name: "Copa de 2026",
   status: "subscribing",

@@ -80,6 +80,21 @@ describe("championshipFormSchema", () => {
       max_waitlist_players: 0,
     });
     expect(r.success).toBe(false);
+    if (r.success) return;
+
+    // O titulo promete seis campos, entao a assertiva mede os seis. So o
+    // `success` nao mede nada disso: qualquer UM dos seis sozinho ja o derruba,
+    // e a lista de obrigatorios podia ser cortada pela metade sem este teste
+    // piscar.
+    const caminhos = r.error.issues.map((i) => i.path.join("."));
+    expect(caminhos.sort()).toEqual([
+      "gala_night_date",
+      "players_per_team",
+      "registration_end_date",
+      "registration_start_date",
+      "teams_count",
+      "tournament_start_date",
+    ]);
   });
 
   it("accepts a complete non-draft championship", () => {
@@ -258,9 +273,10 @@ describe("championshipFormSchema: a capacidade vem do formato", () => {
     const caminhos = r.error.issues.map((i) => i.path.join("."));
     expect(caminhos).toContain("teams_count");
     expect(caminhos).toContain("players_per_team");
-    // A outra metade da frase, e a que morde: `max_players` deixou de ser campo
-    // do admin. Se continuasse na lista de obrigatorios, todo campeonato fora
-    // de draft ficaria invalido sem ninguem ter como corrigir.
+    // A outra metade da frase, e a que morde: `max_players` virou SAIDA, e nao
+    // entrada — `toRow` descarta o que vier nele. O input continua na tela, mas
+    // exigi-lo aqui recusaria quem o deixasse em branco por um numero que nao e
+    // mais lido.
     expect(caminhos).not.toContain("max_players");
   });
 });

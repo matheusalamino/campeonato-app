@@ -111,9 +111,11 @@ function refineChampionship(
       ["registration_end_date", re],
       ["gala_night_date", gn],
       ["tournament_start_date", ts],
-      // O formato, e nao mais o total: `max_players` saiu daqui porque saiu do
-      // formulario. Cobrar um campo que o admin nao tem como preencher
-      // reprovaria todo campeonato fora de draft.
+      // O formato, e nao mais o total: `max_players` sai dos obrigatorios porque
+      // `toRow` o IGNORA — quem escreve a coluna e `derivedCapacity`. O input
+      // continua na tela e `buildPayload` continua mandando o valor; mante-lo
+      // aqui recusaria quem o deixasse em branco por causa de um numero que nao
+      // chega mais na coluna.
       ["teams_count", data.teams_count],
       ["players_per_team", data.players_per_team],
     ];
