@@ -1187,6 +1187,12 @@ limpar
 #      nome de uma constante do MESMO arquivo cujo valor e uma string literal
 #      (`const PREFILL_COLUMNS = "..."`). O segundo argumento
 #      (`{ count: "exact", head: true }`) e ignorado de proposito.
+#   4. nome de coluna em QUALQUER caixa. `preferredPosition` e conferido e
+#      acusado como qualquer outro nome que nao exista -- ver a nota em cima de
+#      emitir() para o porque de isso valer uma linha aqui.
+#   5. token que nao e nome de coluna simples nao e conferido, mas TAMBEM nao e
+#      engolido: sai numa lista propria, com arquivo e linha, e derruba a
+#      execucao. "Nao sei ler isto" e uma resposta; silencio nao e.
 #
 # O QUE ELA NAO COBRE -- por isso verde aqui NAO quer dizer "o schema bate":
 #
@@ -1203,6 +1209,12 @@ limpar
 #   - comentarios nao sao removidos antes da varredura. A ancora e o `.select(`,
 #     entao prosa solta nao entra; um `.select(` escrito DENTRO de um
 #     comentario entraria.
+#   - na cobertura de topo, o `.from()` so e reconhecido escrito
+#     `.from("players")`, com aspas DUPLAS. `.from('players')` e
+#     `.from(variavel)` saem da conta -- o select fica sem tabela e os campos de
+#     topo dele nao sao conferidos. Custo zero hoje (nenhuma das duas formas
+#     existe no repo, e o Prettier normaliza a aspa), mas custo zero medido nao
+#     e cobertura, e por isso esta escrito.
 #
 # A isca abaixo faz a rede provar que morde a CADA execucao, em vez de depender
 # de alguem ter mutado o repo uma vez, um dia.
@@ -1249,10 +1261,26 @@ function nomecampo(t,   x) {
   return x
 }
 
+# Todo token que entra aqui sai por um dos tres canos, e nenhum deles e o
+# silencio. Ate a revisao da 6b este filtro descartava calado qualquer token com
+# maiuscula: `players(id, nomeFantasma)` reportava so o `id` e o script ficava
+# verde. `preferred_position` -> `preferredPosition` e exatamente a forma do
+# deslize que este bloco existe para pegar, entao a rede engolia justo o caso
+# do assunto. Nome de coluna simples com maiuscula agora vai ao catalogo como
+# qualquer outro -- Postgres dobra identificador nao-citado para minusculo,
+# entao `nomeFantasma` so estaria la se alguem tivesse criado a coluna citada.
 function emitir(campo,   c) {
   c = nomecampo(campo)
   if (c == "" || c == "*") return
-  if (c !~ /^[a-z_][a-z0-9_]*$/) return
+  if (c !~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
+    # Nem nome de coluna simples: caminho JSON (`dados->>chave`), nome entre
+    # aspas, sintaxe do PostgREST que este varredor nao conhece. Conferir isso
+    # contra o catalogo daria falso alarme; engolir repetiria o bug do
+    # camelCase. Entao o varredor diz em voz alta que nao entendeu, e quem le
+    # decide.
+    print "naoentendido\t" arquivo ":" LINSEL "\t" c
+    return
+  }
   if (index(cols, "," c ",") > 0) print "ok\t" arquivo ":" LINSEL "\t" c
   else print "desconhecido\t" arquivo ":" LINSEL "\t" c
 }
@@ -1373,7 +1401,9 @@ await supabase
     final_overall,
     player:players!inner (
       name,
-      campo_de_embed_inexistente
+      campo_de_embed_inexistente,
+      nomeFantasma,
+      dados->>chave
     )
   `,
   );
@@ -1409,12 +1439,18 @@ varrer() {
 }
 
 # --- primeiro a isca, para saber que a rede morde antes de acreditar nela -----
+juntar() { cut -f3 | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//'; }
+
 saida_isca=$(varrer "$oficina" || true)
-plantados=$(echo "$saida_isca" | grep '^desconhecido' | cut -f3 | sort -u | tr '\n' ' ' | sed 's/ $//')
-legitimos=$(echo "$saida_isca" | grep '^ok' | cut -f3 | sort -u | tr '\n' ' ' | sed 's/ $//')
-checar "o varredor acusa os tres campos plantados na isca" \
-  "campo_aninhado_inexistente campo_de_constante_inexistente campo_de_embed_inexistente" \
+plantados=$(echo "$saida_isca" | grep '^desconhecido' | juntar)
+ilegiveis=$(echo "$saida_isca" | grep '^naoentendido' | juntar)
+legitimos=$(echo "$saida_isca" | grep '^ok' | juntar)
+checar "o varredor acusa os campos plantados na isca, camelCase junto" \
+  "campo_aninhado_inexistente campo_de_constante_inexistente campo_de_embed_inexistente nomeFantasma" \
   "$plantados"
+checar "o varredor confessa o token da isca que nao sabe ler" \
+  "dados->>chave" \
+  "$ilegiveis"
 checar "o varredor deixa passar os campos legitimos da mesma isca" \
   "id name preferred_position shirt_name" \
   "$legitimos"
@@ -1432,6 +1468,10 @@ checar "o varredor leu todo arquivo com select() do repo" "$listados" "$varridos
 desconhecidos=$(echo "$saida_repo" | grep '^desconhecido' |
   awk -F'\t' '{ printf "%s%s %s", (NR > 1 ? "; " : ""), $2, $3 }')
 checar "todo campo de players pedido em select() existe na tabela" "" "$desconhecidos"
+
+ilegiveis_repo=$(echo "$saida_repo" | grep '^naoentendido' |
+  awk -F'\t' '{ printf "%s%s %s", (NR > 1 ? "; " : ""), $2, $3 }')
+checar "o varredor entendeu todo token que leu de players no repo" "" "$ilegiveis_repo"
 
 rm -rf "$oficina"
 
