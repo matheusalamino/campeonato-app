@@ -122,8 +122,13 @@ describe("a fiacao do formulario de campeonato", () => {
     const [, vazioParaIndefinido] = achado(payload, /const (\w+) = \(v: string\) =>/);
 
     for (const campo of FORMATO) {
+      // O `,?` nao e zelo: sem ele a assertiva prende FORMATACAO, e nao efeito.
+      // MEDIDO — quebrar a chamada em tres linhas, que e como o prettier a
+      // quebraria, poe a virgula final antes do `)` e reprovava uma edicao que
+      // nao muda nada. Vermelho por formatacao manda o proximo cacar um bug que
+      // nao existe.
       expect(payload, `\`${campo}\` nao chega ao payload`).toMatch(
-        new RegExp(`\\b${campo}:\\s*${vazioParaIndefinido}\\(\\s*form\\.${campo}\\s*\\)`),
+        new RegExp(`\\b${campo}:\\s*${vazioParaIndefinido}\\(\\s*form\\.${campo}\\s*,?\\s*\\)`),
       );
     }
   });
