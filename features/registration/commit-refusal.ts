@@ -3,29 +3,31 @@
  *
  * A lista vem do COMMENT da funcao, hoje em
  * supabase/migrations/20260820040000_commit_respects_keeper_quota.sql, e esta
- * tabela cobre CINCO das SEIS que a funcao declara: not_found, sabbath,
- * not_open, already_registered, reservation_expired.
+ * tabela cobre as SEIS que a funcao declara: not_found, sabbath, not_open,
+ * already_registered, goalkeepers_full, reservation_expired.
  *
- * A sexta e `goalkeepers_full`, e a falta dela aqui e deliberada e TEMPORARIA. A
- * funcao so a produz para quem chega sem reserva viva no balde de goleiro, e
- * hoje nenhum jogador chega la: `submitRegistration` chama a RPC com cinco
- * argumentos, sem `p_is_goalkeeper`, entao o balde e sempre o de linha. A razao
- * existe no banco antes de existir no app de proposito -- a trava tem de valer
- * para chamada direta a server action, que nao passa por esta tabela.
+ * `goalkeepers_full` entrou aqui ANTES de o balde ser ligado no servico, e de
+ * proposito. Hoje `submitRegistration` chama a RPC com cinco argumentos, sem
+ * `p_is_goalkeeper`, entao o balde e sempre o de linha e nenhum jogador chega a
+ * esta recusa pelo formulario -- mas a trava vale para chamada direta a server
+ * action, e a frase precisa existir para quando o balde ligar. A versao anterior
+ * deste comentario pedia em prosa que quem ligasse o balde acrescentasse a frase
+ * no mesmo commit: pedido em prosa nao e guarda, e o `Record<CommitRefusalReason,
+ * CommitRefusal>` so cobra a frase depois que a chave entra na uniao -- o que ele
+ * NAO pega e a chave nunca entrar. Fechar antes tira o pedido do caminho.
  *
- * QUEM LIGAR O BALDE NO SERVICO TEM DE ACRESCENTAR A FRASE AQUI, no mesmo
- * commit. Sem ela a recusa cai no generico "as inscricoes nao estao abertas" --
- * que e exatamente o desfecho que esta tabela existe para matar, e agora para
- * um goleiro que possivelmente ja pagou o PIX. O `Record<CommitRefusalReason,
- * CommitRefusal>` obriga a frase assim que a chave entrar na uniao; o que ele
- * NAO pega e a chave nunca entrar. A gemea `reservationFromRpc`, em slot.ts,
- * esta na mesma situacao com a mesma razao vinda de reserve_registration_slot.
+ * A gemea e `SlotReservation`, em slot.ts, com a mesma razao vinda de
+ * reserve_registration_slot -- fechada no mesmo commit que esta. La ela tem
+ * forma propria, porque a RPC da reserva manda `retry_at` junto; aqui nao ha
+ * `retry_at`, e o COMMENT diz por que: a conta do commit olha so inscricoes
+ * confirmadas, entao nao ha reserva vencendo para esperar.
  */
 export type CommitRefusalReason =
   | "not_found"
   | "sabbath"
   | "not_open"
   | "already_registered"
+  | "goalkeepers_full"
   | "reservation_expired";
 
 /**
@@ -69,6 +71,20 @@ const MESSAGES: Record<CommitRefusalReason, CommitRefusal> = {
   },
   reservation_expired: {
     error: "Sua vaga expirou e as inscrições lotaram. Fale com a organização.",
+  },
+  // A vizinha exata de `reservation_expired`, e a frase daquela seria falsa
+  // aqui: "as inscricoes lotaram" nao vale num campeonato de 80 com 8 goleiros,
+  // onde a cota fecha com 72 vagas de linha abertas -- e a RPC so manda esta
+  // razao quando o CAMPEONATO ainda tem lugar.
+  //
+  // Esta e a unica frase da tabela que precisa falar de DINHEIRO. Quem chega ao
+  // commit passou pelo passo do pagamento e possivelmente ja pagou o PIX; sem
+  // "nao pague de novo" a leitura natural de "nao foi gravada" e refazer tudo,
+  // pagamento incluido. E a saida vem junto, porque existe: a posicao de linha
+  // continua aberta e o comprovante que ele ja tem continua valendo.
+  goalkeepers_full: {
+    error:
+      "As vagas de goleiro acabaram enquanto você preenchia e sua inscrição não foi gravada. Não pague de novo: as de linha ainda não acabaram — volte ao passo da posição, escolha uma posição de linha e envie outra vez com o mesmo comprovante.",
   },
   not_open: { error: "As inscrições não estão abertas para este campeonato." },
   // Campeonato que sumiu do ar (apagado, ou slug trocado) durante o

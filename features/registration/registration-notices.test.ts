@@ -266,6 +266,51 @@ describe("SlotNotice", () => {
     expect(html).not.toContain("rgba(220,38,38");
   });
 
+  it("a cota de goleiro nomeia o gol e aponta a saida do jogador", () => {
+    const html = faixaDaVaga({ ok: false, reason: "goalkeepers_full", retryAt: null });
+    // A palavra sem a qual esta faixa vira a do `full`. "As vagas se esgotaram"
+    // e falso justo quando mais importa: num campeonato de 80 com 8 goleiros a
+    // cota fecha com 72 vagas de linha ainda abertas.
+    expect(html).toContain("goleiro");
+    // A frase do `error`, que aqui e falsa por construcao: insistir nao cria
+    // vaga de goleiro. Foi por ela que esta razao passava antes de existir em
+    // TypeScript — `isKnownReason` a recusava e ela chegava como `error`.
+    expect(html).not.toContain("Tente novamente em instantes");
+    // A saida tem de estar na tela: sem ela sobra um diagnostico e nenhuma
+    // acao. E a unica coisa que o jogador ainda pode fazer aqui.
+    expect(html).toMatch(/posi[çc][ãa]o/i);
+    // Com a cota tomada por inscricao CONFIRMADA nao ha nada vencendo. Prometer
+    // que "algumas podem voltar" seria mandar esperar por uma vaga que nao vem.
+    expect(html).not.toContain("podem voltar");
+  });
+
+  it("a cota de goleiro e VERMELHA, ao contrario da pausa", () => {
+    // A pergunta que classifica a faixa e "isso e ma noticia para o jogador?".
+    // A pausa do sabado congela o campeonato para todo mundo e tem hora para
+    // voltar; aqui houve PERDA — as vagas de goleiro acabaram e, para ele, o
+    // campeonato fechou. Dourado aqui suavizaria a unica noticia da tela.
+    const html = faixaDaVaga({ ok: false, reason: "goalkeepers_full", retryAt: null });
+    expect(html).toContain("rgba(220,38,38,.10)");
+    expect(html).not.toContain("rgba(230,180,34,.08)");
+    expect(html.indexOf("goleiro")).toBeGreaterThan(html.indexOf('role="alert"'));
+  });
+
+  it("com reserva de goleiro viva, a faixa diz a hora da volta", () => {
+    // `retry_at` e a metade que o NOME da razao nao carrega, e a RPC a manda de
+    // proposito: preenchido, ha reserva viva de outro goleiro que vence, e
+    // esperar quinze minutos e barato perto de trocar de posicao. Sem ele na
+    // uniao esta faixa mandaria trocar de posicao um goleiro que so precisava
+    // esperar. A suite roda com TZ=UTC (ver vitest.config.ts).
+    const html = faixaDaVaga({
+      ok: false,
+      reason: "goalkeepers_full",
+      retryAt: "2026-08-19T12:00:00.000Z",
+    });
+    expect(html).toContain("12h00");
+    expect(html).toContain("goleiro");
+    expect(html).toMatch(/posi[çc][ãa]o/i);
+  });
+
   it("as duas regioes live estao no DOM antes de haver reserva", () => {
     // Sem reserva a faixa nao tem texto, mas as regioes precisam estar la: o
     // leitor de tela tem de ja estar observando quando o texto entra, e no

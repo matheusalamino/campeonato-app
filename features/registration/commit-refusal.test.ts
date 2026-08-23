@@ -29,6 +29,26 @@ describe("commitRefusal", () => {
     expect(alreadyRegistered).toBeUndefined();
   });
 
+  it("a cota de goleiro diz que nada foi gravado, e nao manda pagar de novo", () => {
+    const { error, alreadyRegistered } = commitRefusal("goalkeepers_full");
+    // Quem chega ao commit possivelmente ja pagou o PIX. As duas coisas que
+    // esta frase precisa dizer naquele segundo: que nada foi gravado e que nao
+    // e para pagar outra vez.
+    expect(error).toContain("não foi gravada");
+    expect(error).toContain("Não pague de novo");
+    // E a palavra que a separa de `reservation_expired`, cuja frase promete
+    // "as inscricoes lotaram" — falso com 72 vagas de linha abertas.
+    expect(error).toContain("goleiro");
+    expect(error).not.toContain("lotaram");
+    // A saida: a posicao de linha, que continua aberta. Sem ela a frase e um
+    // diagnostico sem acao para quem ja pagou.
+    expect(error).toMatch(/posi[çc][ãa]o/i);
+    // Nao e a frase vaga que esta tabela existe para matar.
+    expect(error).not.toContain("não estão abertas");
+    // A inscricao dele nao existe: nao e desfecho de "voce ja esta inscrito".
+    expect(alreadyRegistered).toBeUndefined();
+  });
+
   it("quem ja esta inscrito vai para o desfecho, e nao para um toast", () => {
     // `alreadyRegistered` e o que troca a tela; sem ele o jogador leria um aviso
     // sobre um formulario que nao tem mais o que fazer.

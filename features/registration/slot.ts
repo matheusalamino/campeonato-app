@@ -42,16 +42,25 @@ export type SimpleRefusalReason =
  * sobre vaga: nao sabemos se ha lugar ou nao. Dobra-lo em `not_found`, como era
  * antes, fazia uma falha passageira dizer ao jogador que o campeonato tinha
  * esgotado — e o bloqueava com uma informacao inventada.
+ *
+ * `goalkeepers_full` NAO cabe em `SimpleRefusalReason`, apesar de o nome ja
+ * dizer quase tudo: a RPC manda `retry_at` junto com ela, e esse campo carrega a
+ * metade que o nome nao carrega — nulo quando a cota esta tomada por inscricoes
+ * confirmadas (nao adianta voltar) e preenchido quando ha reserva viva de outro
+ * goleiro segurando (vale voltar, e a hora esta ali). Dobrada na forma sem dado
+ * nenhum, a faixa mandaria trocar de posicao um goleiro que so precisava esperar
+ * quinze minutos. Mesma forma de `all_reserved`, pelo mesmo motivo.
  */
 export type SlotReservation =
   | { ok: true; isWaitlist: boolean; expiresAt: string }
   | { ok: false; reason: SimpleRefusalReason }
   | { ok: false; reason: "all_reserved"; retryAt: string | null }
+  | { ok: false; reason: "goalkeepers_full"; retryAt: string | null }
   | { ok: false; reason: "error" };
 
 /**
- * Razoes que a RPC declara no seu COMMENT, fora `all_reserved`, que tem forma
- * propria.
+ * Razoes que a RPC declara no seu COMMENT, fora `all_reserved` e
+ * `goalkeepers_full`, que tem forma propria — as duas vem com `retry_at`.
  *
  * O `Record<SimpleRefusalReason, true>` e o guarda, e nao enfeite: e ele que
  * amarra esta tabela a uniao nos DOIS sentidos — chave a mais nao existe na
@@ -121,6 +130,14 @@ export function reservationFromRpc(payload: unknown): SlotReservation {
   }
   if (result.reason === "all_reserved") {
     return { ok: false, reason: "all_reserved", retryAt: result.retry_at ?? null };
+  }
+  // Ramo proprio, e nao uma chave em `RPC_REASONS`, porque `retry_at` vem junto
+  // — ver `SlotReservation`. O preco de estar aqui em vez de na tabela e que o
+  // `tsc` nao cobra esta linha: apagada, a razao cai em `isKnownReason`, e o
+  // guard a recusa e ela chega na tela como `error`. Quem segura sao os testes
+  // de `reservationFromRpc`, que e o mesmo que segura o vizinho `all_reserved`.
+  if (result.reason === "goalkeepers_full") {
+    return { ok: false, reason: "goalkeepers_full", retryAt: result.retry_at ?? null };
   }
   // O `as` que estava aqui carimbava qualquer string vinda do JSON como uma das
   // razoes da tabela, entao uma razao nova na RPC — ou uma resposta malformada —
@@ -240,9 +257,9 @@ export function paymentGate(
  * do celular no meio da troca. Ele voltaria do PIX para uma faixa vermelha e um
  * passo trancado.
  *
- * Os outros continuam passando: `full`, `all_reserved`, `not_open`,
- * `not_found`, `already_registered` e `sabbath` sao veredito, e veredito
- * precisa derrubar — e para isso que a reserva existe.
+ * Os outros continuam passando: `full`, `all_reserved`, `goalkeepers_full`,
+ * `not_open`, `not_found`, `already_registered` e `sabbath` sao veredito, e
+ * veredito precisa derrubar — e para isso que a reserva existe.
  *
  * `sabbath` e o caso em que isso pesa mais: quem chega nele esta preenchendo no
  * instante do por do sol e recebe a recusa pelo heartbeat, sem ter tocado em
