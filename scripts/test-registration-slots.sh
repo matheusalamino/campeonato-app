@@ -936,6 +936,99 @@ checar "o commit GRAVOU o balde de cada inscricao (o do 401 veio da reserva)" "t
 limpar
 
 # =============================================================================
+# O PASSE: reserva num balde, argumento no outro. Manda a RESERVA.
+#
+# A assertiva do 401, na secao acima, distingue "veio da reserva" de "veio do
+# DEFAULT da coluna" -- e so isso. Ela NAO distingue "veio da reserva" de "veio
+# do argumento", porque aquela chamada nao passa argumento nenhum: uma funcao que
+# lesse `coalesce(p_is_goalkeeper, is_goalkeeper)` cairia na reserva do mesmo
+# jeito e passaria verde. Medido: com esse coalesce no lugar, a suite inteira
+# ficava em 71 ok / 0 FALHOU.
+#
+# E nao e purismo. Sem esta trava, reservar no balde de LINHA -- que e o largo, e
+# quase sempre tem vaga -- e enviar com o argumento de goleiro gravaria um
+# goleiro que a cota NUNCA contou, usando a reserva de linha como passe. A cota
+# passaria a 2 de 1 sem ninguem ter furado fila.
+#
+# A reserva diz em que balde a vaga foi CONCEDIDA e contada; o argumento so vale
+# para quem nao tem vaga concedida.
+echo "== o balde vem da reserva, e nao do argumento =="
+preparar
+$DB -c "UPDATE championships SET max_players = 10, max_waitlist_players = 0,
+                                 teams_count = 1, players_per_team = 4,
+                                 goalkeepers_per_team = 1,
+                                 waitlist_goalkeepers = 0, waitlist_outfield = 0
+         WHERE id='$CHAMP';" > /dev/null
+$DB -c "INSERT INTO players (cpf, name) VALUES ('99900001601', 'Passe T6');" > /dev/null
+pid=$($DB -c "SELECT id FROM players WHERE cpf='99900001601';")
+
+# Reserva de LINHA...
+$DB -c "SELECT reserve_registration_slot('$CHAMP', '99900001601', false);" > /dev/null
+# ...e envio dizendo GOLEIRO. O envio e aceito (a reserva e a autorizacao), mas o
+# balde gravado tem de ser o da reserva.
+r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid', '99900001601',
+      '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0}'::jsonb,
+      '{\"visao\":4}'::jsonb, true)::text;")
+gravado=$($DB -c "SELECT is_goalkeeper::text FROM championship_registrations
+                   WHERE championship_id='$CHAMP' AND player_id='$pid';")
+# Uma assertiva so, com os dois valores: separadas, a do balde ficaria sem linha
+# para ler quando o envio fosse recusado, e a suite mudaria de aridade em vez de
+# apontar o defeito.
+checar "reserva de LINHA + argumento de goleiro grava LINHA" "true|false" \
+  "$(echo "$r" | sed 's/.*\"success\" : \([a-z]*\).*/\1/')|$(echo "$gravado" | tr -d ' ')"
+
+# =============================================================================
+# O DEFAULT: sem argumento nenhum, o balde e o de LINHA.
+#
+# `submitRegistration` chama esta RPC com CINCO argumentos hoje -- sem
+# `p_is_goalkeeper` --, entao este nao e um caminho de borda: e o unico caminho
+# que existe em producao neste minuto. A funcao afirma tres vezes em prosa que
+# nulo cai no balde largo, e ate aqui nao havia UMA assertiva.
+#
+# Medido: trocando `coalesce(p_is_goalkeeper, false)` por `coalesce(..., true)`,
+# a suite inteira ficava em 71 ok / 0 FALHOU. Com o default invertido, TODA
+# inscricao real nasceria goleiro; a 9a cairia na espera, a 10a ouviria
+# `goalkeepers_full` -- razao que features/registration/commit-refusal.ts ainda
+# nao traduz, entao ela sai como "as inscricoes nao estao abertas" --, e a coluna
+# `is_goalkeeper` ficaria corrompida para sempre, porque nada relê o perfil
+# depois.
+#
+# Os cenarios que ja existiam nao pegavam isso por dois motivos, e os dois
+# precisam ser evitados aqui: ou chamam COM reserva viva (e ai o balde vem dela,
+# nao do default), ou rodam sob `preparar`, onde a cota de goleiro e 8 e nunca
+# aperta. Por isso este cenario chega SEM reserva e com a cota de goleiro JA
+# TOMADA -- assim o default errado nao passa despercebido: ele recusa.
+echo "== sem argumento de balde, o commit trata como LINHA =="
+preparar
+$DB -c "UPDATE championships SET max_players = 10, max_waitlist_players = 0,
+                                 teams_count = 1, players_per_team = 4,
+                                 goalkeepers_per_team = 1,
+                                 waitlist_goalkeepers = 0, waitlist_outfield = 0
+         WHERE id='$CHAMP';" > /dev/null
+$DB -c "INSERT INTO players (cpf, name) VALUES
+          ('99900001701', 'Goleiro que toma a cota T6'),
+          ('99900001702', 'Cinco argumentos T6');" > /dev/null
+pid_gk=$($DB -c "SELECT id FROM players WHERE cpf='99900001701';")
+pid_5=$($DB -c "SELECT id FROM players WHERE cpf='99900001702';")
+
+# A cota de goleiro (1) fica tomada por uma inscricao confirmada.
+$DB -c "SELECT commit_registration('$CHAMP', '$pid_gk', '99900001701',
+      '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0}'::jsonb,
+      '{\"visao\":4}'::jsonb, true);" > /dev/null
+
+# E agora a chamada de CINCO argumentos, sem reserva. Ela tem de entrar como
+# linha: a cota de linha tem 3 vagas, e a de goleiro, zero.
+r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid_5', '99900001702',
+      '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0}'::jsonb,
+      '{\"visao\":4}'::jsonb)::text;")
+gravado=$($DB -c "SELECT is_goalkeeper::text FROM championship_registrations
+                   WHERE championship_id='$CHAMP' AND player_id='$pid_5';")
+checar "chamada de cinco argumentos entra como LINHA, e grava LINHA" "true|false" \
+  "$(echo "$r" | sed 's/.*\"success\" : \([a-z]*\).*/\1/')|$(echo "$gravado" | tr -d ' ')"
+
+limpar
+
+# =============================================================================
 # O entregavel de manchete da T2 -- a capacidade derivada -- nao tinha assertiva
 # NENHUMA. Tres mutacoes na DDL passavam nos 494 testes, no tsc e no lint:
 # trocar `max_players >= 0` de volta para `> 0`, apagar o NOT VALID, e apagar uma

@@ -237,8 +237,9 @@ BEGIN
     -- duplicacao e CONSCIENTE pelo motivo que 20260820030000 registra: a trava
     -- precisa valer no servidor, e o Postgres nao importa TypeScript. Herda dali
     -- a mesma divida conhecida, tambem: formato absurdo estoura a multiplicacao
-    -- com `integer out of range` em vez de responder JSON, e quem o impede hoje
-    -- e so o Zod do admin.
+    -- com `integer out of range` em vez de responder JSON, e hoje NADA o impede
+    -- -- o CHECK `championships_capacity_nonneg` so exige nao-negativo, e o Zod
+    -- do admin so tem `.min(0)`, sem teto nenhum. Medido nos dois lados.
     --
     -- O `least` contra o total nao e defensividade vaga: cota por time maior que
     -- o time inteiro faria a cota de goleiro admitir MAIS goleiros do que o
