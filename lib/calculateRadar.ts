@@ -1,46 +1,33 @@
+import { skillsFor } from "@/features/registration/skills";
+
 type Evaluation = {
   skill: string;
   rating: number;
 };
 
-const skillsLinha = [
-  "visao",
-  "controle",
-  "finalizacao",
-  "velocidade",
-  "desarme",
-  "drible",
-];
-
-const skillsGol = [
-  "reposicao",
-  "comunicacao",
-  "posicionamento",
-  "reflexo",
-  "jogoAereo",
-  "agilidade",
-];
-
+/**
+ * Media das notas dos organizadores, no dominio 0..100 do radar.
+ *
+ * A escolha "seis de goleiro ou seis de linha" vem de `skillsFor`, e nao de um
+ * par de arrays daqui. Ela ja morou aqui, e foi por isso que este arquivo ficou
+ * para tras: quando a coluna virou CODIGO, os irmaos que comparavam a posicao
+ * de um jeito parecido foram convertidos, e este, que comparava de outro jeito
+ * (`position?.toLowerCase().includes(...)`), nao. Todo goleiro passou a ver as
+ * seis habilidades de LINHA — sem erro, sem `tsc` reclamando (os dois lados sao
+ * `string`) e sem teste vermelho, porque nao havia teste sobre esta funcao.
+ * Delegando, o alvo da comparacao mora num lugar so, coberto pelos testes que
+ * ja existem em cima de `skillsFor`.
+ *
+ * `radarDataFrom` NAO serve aqui, apesar do parentesco: ele le UMA nota por
+ * habilidade (`Record<string, number>`), converte com `* 20` sem arredondar e
+ * ja rotula pelo `SKILL_LABELS` da inscricao. Aqui chegam VARIAS notas por
+ * habilidade, para tirar media e arredondar, e quem chama (`PlayerRadarModal`)
+ * rotula pelo `skill_labels` de `lib/skills.ts`, que escreve os mesmos nomes de
+ * outro jeito. So a escolha das habilidades e a mesma — e e so ela que se
+ * compartilha.
+ */
 export function calculateRadar(evaluations: Evaluation[], position: string) {
-  // CODIGO, e nao palavra. `position` chega cru de `players.preferred_position`
-  // (PlayersSection -> PlayerRadarModal), e essa coluna guarda `GOL` desde a
-  // 20260821010000. A comparacao antiga era
-  // `position?.toLowerCase().includes("goleiro")`, que nao lancava erro nenhum:
-  // `"GOL".toLowerCase()` simplesmente nao contem `"goleiro"`, entao TODO
-  // goleiro caia no ramo de linha e via o radar das seis habilidades erradas.
-  //
-  // A mesma escolha "seis de goleiro ou seis de linha" mora em outros lugares,
-  // e cada um batiza o par de arrays do seu jeito — por isso grepar
-  // `skillsGol` acha so uma parte deles. Sao EvaluateModal e SubscribeForm
-  // (`skillsGol`/`skillsLinha`, o mesmo par daqui), PlayerForm
-  // (`goleiro`/`linha`), o `skillsFor()` de features/registration/skills.ts
-  // (`KEEPER_SKILLS`/`LINE_SKILLS`) e o import de CSV
-  // (app/api/import-players/route.ts, com os dois pares escritos inline no
-  // ternario). Todos ja comparavam com `=== "GOL"`; este escapou da virada por
-  // escrever a comparacao de outro jeito.
-  const isGoalkeeper = position === "GOL";
-
-  const skills = isGoalkeeper ? skillsGol : skillsLinha;
+  const skills = skillsFor(position);
 
   return skills.map((skill) => {
     const skillRatings = evaluations
