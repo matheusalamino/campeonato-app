@@ -9,6 +9,7 @@ import {
   statusChangeSchema,
 } from "@/features/championships/schema";
 import { toRow } from "@/features/championships/row";
+import { opensRegistration, publishBlock } from "@/features/championships/publish-guard";
 import { reconcileChampionshipCapacity } from "@/services/championship-capacity";
 import { slugify } from "@/lib/slug";
 
@@ -99,9 +100,25 @@ export async function changeChampionshipStatus(input: unknown): Promise<ActionRe
     const updatePayload: { status: string; slug?: string } = { status: to };
     const { data: current } = await supabase
       .from("championships")
-      .select("name, season, slug")
+      .select("name, season, slug, max_players")
       .eq("id", id)
       .maybeSingle();
+
+    // A guarda de publicacao: validar A LINHA, e nao so a transicao.
+    //
+    // `statusChangeSchema` confere id/de/para e mais nada, e este action grava
+    // `{status}` sem passar por `championshipFormSchema` nem por `toRow` — ou
+    // seja, o menu de status passa ao lado da exigencia de formato que o A6 pos
+    // no formulario. Sem isto, uma linha sem capacidade chega a `subscribing` e
+    // a RPC recusa TODA inscricao dizendo que as vagas esgotaram.
+    //
+    // `current &&` porque linha inexistente nao e problema de capacidade: o
+    // UPDATE abaixo nao casa nada e a resposta certa e a de status desatualizado.
+    if (current && opensRegistration(to)) {
+      const block = publishBlock(current);
+      if (block) return { ok: false, error: block.message };
+    }
+
     if (current && !current.slug) {
       updatePayload.slug = slugify(
         current.season ? `${current.name}-${current.season}` : current.name,
