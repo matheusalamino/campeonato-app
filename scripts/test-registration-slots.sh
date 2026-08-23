@@ -1209,12 +1209,29 @@ limpar
 #   - comentarios nao sao removidos antes da varredura. A ancora e o `.select(`,
 #     entao prosa solta nao entra; um `.select(` escrito DENTRO de um
 #     comentario entraria.
+#   - o que sai calado, e por que. Token que nao nomeia nada -- virgula dupla,
+#     virgula final, `players()`, `apelido:` sem campo -- e `*` nao tem o que
+#     conferir. Spread (`...players(x)`) e agregado de coluna
+#     (`players(height.sum())`) nem chegam ao filtro de campo: o `(` faz o
+#     token virar embed, e embed que nao se chama `players` so e percorrido
+#     atras de um `players(` mais fundo. Literal com aspas desbalanceadas pula
+#     o .select() inteiro. Nenhum desses da falso alarme; todos custam
+#     COBERTURA, e nenhum deles avisa que custou.
 #   - na cobertura de topo, o `.from()` so e reconhecido escrito
-#     `.from("players")`, com aspas DUPLAS. `.from('players')` e
-#     `.from(variavel)` saem da conta -- o select fica sem tabela e os campos de
-#     topo dele nao sao conferidos. Custo zero hoje (nenhuma das duas formas
-#     existe no repo, e o Prettier normaliza a aspa), mas custo zero medido nao
-#     e cobertura, e por isso esta escrito.
+#     `.from("players")`, com aspas DUPLAS. `.from('players')` sai da conta: o
+#     select fica sem tabela e os campos de topo dele nao sao conferidos.
+#     Medido: zero aspas simples no repo hoje. E so isso -- nao ha Prettier
+#     neste projeto (nem dependencia, nem config) nem regra `quotes` no
+#     eslint.config.mjs, entao nada garante que continue assim. E o estado de
+#     hoje, nao uma promessa do projeto.
+#   - o casador de tabela nao sabe distinguir um `.from(` de tabela dos outros.
+#     Ele pega o ULTIMO `.from(` antes do select e le o argumento: literal de
+#     aspas duplas vira "a tabela" -- inclusive `.from("images")`, que e BUCKET
+#     do storage, nao tabela --, e qualquer outra forma (`.from(bucket)`, e todo
+#     `Array.from(` / `Buffer.from(` do repo, que sao muitos) zera a tabela.
+#     Como so `players` e conferido, nome errado nunca vira acusacao falsa: o
+#     preco e o select seguinte DO MESMO statement passar sem conferencia.
+#     Custa cobertura, nao alarme.
 #
 # A isca abaixo faz a rede provar que morde a CADA execucao, em vez de depender
 # de alguem ter mutado o repo uma vez, um dia.
@@ -1261,17 +1278,38 @@ function nomecampo(t,   x) {
   return x
 }
 
-# Todo token que entra aqui sai por um dos tres canos, e nenhum deles e o
-# silencio. Ate a revisao da 6b este filtro descartava calado qualquer token com
-# maiuscula: `players(id, nomeFantasma)` reportava so o `id` e o script ficava
-# verde. `preferred_position` -> `preferredPosition` e exatamente a forma do
-# deslize que este bloco existe para pegar, entao a rede engolia justo o caso
-# do assunto. Nome de coluna simples com maiuscula agora vai ao catalogo como
-# qualquer outro -- Postgres dobra identificador nao-citado para minusculo,
-# entao `nomeFantasma` so estaria la se alguem tivesse criado a coluna citada.
+# Todo token que NOMEIA algo sai por um destes quatro canos, e nenhum deles e o
+# silencio: `ok`, `desconhecido`, `naoentendido`, `agregado`. Token que nao
+# nomeia nada -- string vazia (virgula dupla, virgula final, `players()`,
+# `apelido:` sem campo) e `*` -- sai calado logo na primeira linha, de
+# proposito: nao ha nome para conferir. Ha ainda o que nem chega ate aqui
+# (spread, agregado de coluna, literal com aspas desbalanceadas); esta na lista
+# do cabecalho, com o motivo.
+#
+# A frase acima ja foi "todo token sai por um dos tres canos, e nenhum e o
+# silencio", com o contraexemplo duas linhas abaixo dela. Vale como aviso: este
+# filtro atrai frase generosa demais.
+#
+# Ate a revisao da 6b ele descartava calado qualquer token com maiuscula:
+# `players(id, nomeFantasma)` reportava so o `id` e o script ficava verde.
+# `preferred_position` -> `preferredPosition` e exatamente a forma do deslize
+# que este bloco existe para pegar, entao a rede engolia justo o caso do
+# assunto. Nome de coluna com maiuscula agora vai ao catalogo como qualquer
+# outro -- Postgres dobra identificador nao-citado para minusculo, entao
+# `nomeFantasma` so estaria la se alguem tivesse criado a coluna citada.
 function emitir(campo,   c) {
   c = nomecampo(campo)
   if (c == "" || c == "*") return
+  if (c == "count") {
+    # `players(count)` conta a tabela referenciada: sintaxe do supabase-js (o
+    # repo esta em ^2.98.0) e do PostgREST 12, nao nome de coluna. Acusar seria
+    # falso alarme sobre codigo legal, e chamar de "nao entendi" tambem seria
+    # falso -- entendi. Entao sai reconhecido e nao conferido. O preco, dito
+    # aqui para nao virar surpresa: se `players` ganhar um dia uma coluna
+    # `count`, ela deixa de ser conferida.
+    print "agregado\t" arquivo ":" LINSEL "\t" c
+    return
+  }
   if (c !~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
     # Nem nome de coluna simples: caminho JSON (`dados->>chave`), nome entre
     # aspas, sintaxe do PostgREST que este varredor nao conhece. Conferir isso
@@ -1411,7 +1449,7 @@ await supabase
 await supabase
   .from("championship_team_players")
   .select(
-    "id, championship_registrations(id, players(shirt_name, campo_aninhado_inexistente))",
+    "id, championship_registrations(id, players(shirt_name, campo_aninhado_inexistente, count))",
   );
 ISCA
 
@@ -1444,6 +1482,7 @@ juntar() { cut -f3 | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//'; }
 saida_isca=$(varrer "$oficina" || true)
 plantados=$(echo "$saida_isca" | grep '^desconhecido' | juntar)
 ilegiveis=$(echo "$saida_isca" | grep '^naoentendido' | juntar)
+agregados=$(echo "$saida_isca" | grep '^agregado' | juntar)
 legitimos=$(echo "$saida_isca" | grep '^ok' | juntar)
 checar "o varredor acusa os campos plantados na isca, camelCase junto" \
   "campo_aninhado_inexistente campo_de_constante_inexistente campo_de_embed_inexistente nomeFantasma" \
@@ -1451,6 +1490,9 @@ checar "o varredor acusa os campos plantados na isca, camelCase junto" \
 checar "o varredor confessa o token da isca que nao sabe ler" \
   "dados->>chave" \
   "$ilegiveis"
+checar "o varredor reconhece o agregado count da isca, sem acusar" \
+  "count" \
+  "$agregados"
 checar "o varredor deixa passar os campos legitimos da mesma isca" \
   "id name preferred_position shirt_name" \
   "$legitimos"
