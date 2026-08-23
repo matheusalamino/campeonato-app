@@ -8,7 +8,10 @@
 # sabado a suite falha inteira, e nao por regressao: reserve_registration_slot e
 # commit_registration chamam is_sabbath(now()), sem relogio injetavel, entao
 # TODA reserva e TODO commit devolvem `sabbath`. Medido com uma janela cobrindo
-# now(): 18 das 33 assertivas falham. Passam os cenarios que montam a janela
+# now(), quando a suite tinha 33 assertivas: 18 falhavam. Nao releia esse 18
+# como fracao de hoje -- a suite passou de 33 para 59, e as 20 assertivas da
+# cota de goleiro leem o relogio de fora, entao numa sexta a noite a proporcao
+# de falhas e MAIOR que aquela, e nao menor. Passam os cenarios que montam a janela
 # DENTRO de uma transacao; falham os QUATRO controles que dependem do relogio de
 # fora ("fora do sabado a reserva segue normal", "fora do sabado o ja inscrito
 # ouve already_registered", "sem sabado, a mesma reserva grava" e "fora do
@@ -543,6 +546,195 @@ r=$($DB -c "
 checar "is_sabbath precede a primeira escrita em commit_registration" "true" "$r"
 
 # =============================================================================
+# A cota de goleiro. Sao QUATRO baldes -- goleiro/linha x principal/espera -- e
+# o que estas secoes precisam provar nao e que a cota fecha (isso e facil), e
+# sim que ela fecha SO O BALDE DELA. Uma cota que fechasse o campeonato inteiro
+# passaria numa suite que so contasse recusas.
+#
+# O formato aqui e miniatura de proposito: 2 times de 2, 1 goleiro por time, e
+# um de espera em cada balde. Da cota de goleiro 2, cota de linha 2, espera 1 e
+# 1 -- limites que aparecem na quarta chamada em vez da octogesima.
+#
+# `preparar()` recria o campeonato do zero, entao as cinco colunas do formato
+# voltam ao valor dele a cada cenario e nenhum destes UPDATEs vaza para o
+# seguinte.
+echo "== a cota de goleiro fecha sozinha =="
+preparar
+$DB -c "UPDATE championships SET max_players = 4, max_waitlist_players = 2,
+                                 teams_count = 2, players_per_team = 2,
+                                 goalkeepers_per_team = 1,
+                                 waitlist_goalkeepers = 1, waitlist_outfield = 1
+         WHERE id='$CHAMP';" > /dev/null
+
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000701', true)::text;")
+checar "primeiro goleiro vai para a principal" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000702', true)::text;")
+checar "segundo goleiro fecha a cota da principal" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000703', true)::text;")
+checar "terceiro goleiro cai na espera DE GOLEIRO" "true" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000704', true)::text;")
+checar "quarto goleiro ouve goalkeepers_full" "goalkeepers_full" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+case "$r" in *retry_at*) v="tem" ;; *) v="nao tem" ;; esac
+checar "a recusa do goleiro traz retry_at" "tem" "$v"
+
+# O CONTROLE, e a assertiva mais importante desta secao: com a cota de goleiro
+# esgotada, a vaga de LINHA continua aberta. Sem esta linha, uma cota que
+# fechasse o campeonato inteiro -- o defeito oposto e igualmente silencioso --
+# passaria em todas as anteriores.
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000705', false)::text;")
+checar "CONTROLE: cota de goleiro cheia NAO fecha a de linha" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000706', false)::text;")
+checar "segundo de linha fecha a cota de linha" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000707', false)::text;")
+checar "terceiro de linha cai na espera DE LINHA" "true" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+# all_reserved, e nao goalkeepers_full: quem esgotou foi o balde de linha, e a
+# razao especifica do goleiro nao pode vazar para o outro balde.
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000708', false)::text;")
+checar "quarto de linha ouve all_reserved, e nao a razao do goleiro" "all_reserved" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+# Os quatro baldes existem de verdade na tabela, e cada um parou no seu teto.
+r=$($DB -c "
+  SELECT count(*) FILTER (WHERE is_goalkeeper AND NOT is_waitlist) || '|' ||
+         count(*) FILTER (WHERE is_goalkeeper AND is_waitlist) || '|' ||
+         count(*) FILTER (WHERE NOT is_goalkeeper AND NOT is_waitlist) || '|' ||
+         count(*) FILTER (WHERE NOT is_goalkeeper AND is_waitlist)
+    FROM registration_slot_reservations WHERE championship_id = '$CHAMP';")
+checar "os quatro baldes pararam em 2|1|2|1" "2|1|2|1" "$(echo "$r" | tr -d ' ')"
+
+# =============================================================================
+# De onde sai o balde de uma inscricao JA CONFIRMADA.
+#
+# Sai de `championship_registrations.is_goalkeeper`, gravado quando a vaga foi
+# concedida -- e nao de um JOIN com `players.preferred_position`. A diferenca
+# nao e de estilo: por JOIN, um jogador ja inscrito que editasse a posicao no
+# perfil mudaria de balde RETROATIVAMENTE, e a cota passaria a contar 9 de 8 ou
+# 7 de 8 sem ninguem ter se inscrito nem desistido.
+#
+# O jogador abaixo nao tem posicao NENHUMA no perfil (entra so com cpf e nome,
+# como todos os deste script). Se a contagem viesse do perfil, ele contaria como
+# jogador de linha e a primeira assertiva veria a vaga de goleiro ABERTA.
+#
+# Nenhuma das duas cita grafia de posicao, e isso e deliberado: o vocabulario de
+# `preferred_position` esta em transicao, e um teste que fixasse a grafia de hoje
+# quebraria junto com ela -- ou pior, passaria a testar outra coisa.
+echo "== o balde da inscricao vem da inscricao, e nao do perfil =="
+preparar
+$DB -c "UPDATE championships SET max_players = 4, max_waitlist_players = 0,
+                                 teams_count = 1, players_per_team = 4,
+                                 goalkeepers_per_team = 1,
+                                 waitlist_goalkeepers = 0, waitlist_outfield = 0
+         WHERE id='$CHAMP';" > /dev/null
+$DB -c "INSERT INTO players (cpf, name) VALUES ('99900000801', 'Teste A6 balde');" > /dev/null
+pid=$($DB -c "SELECT id FROM players WHERE cpf='99900000801';")
+# A linha que commit_registration vai gravar na T6, escrita aqui na mao.
+$DB -c "INSERT INTO championship_registrations (championship_id, player_id, is_waitlist, is_goalkeeper)
+        VALUES ('$CHAMP', '$pid', false, true);" > /dev/null
+
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000802', true)::text;")
+checar "inscricao marcada como goleiro OCUPA a cota (perfil sem posicao)" "goalkeepers_full" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+# O par da assertiva acima. Sem ele, "recusou" poderia significar "a cota ignora
+# tudo e recusa sempre": aqui a MESMA chamada passa a ser aceita so porque a
+# coluna da inscricao mudou.
+$DB -c "UPDATE championship_registrations SET is_goalkeeper = false WHERE championship_id = '$CHAMP';" > /dev/null
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000802', true)::text;")
+checar "e a mesma inscricao no balde de linha LIBERA a cota" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+# =============================================================================
+# Trocar de balde no meio do formulario.
+#
+# A regra: a reserva antiga NAO e solta antes de a nova existir. Solta-la
+# primeiro faria o jogador PERDER a vaga que tinha so para descobrir que o balde
+# que ele queria esta cheio -- e a vaga velha ja teria ido para outro.
+echo "== troca de balde: a vaga antiga so sai quando a nova existe =="
+preparar
+$DB -c "UPDATE championships SET max_players = 4, max_waitlist_players = 2,
+                                 teams_count = 2, players_per_team = 2,
+                                 goalkeepers_per_team = 1,
+                                 waitlist_goalkeepers = 1, waitlist_outfield = 1
+         WHERE id='$CHAMP';" > /dev/null
+$DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000901', false);" > /dev/null
+$DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000902', true);"  > /dev/null
+$DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000903', true);"  > /dev/null
+$DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000904', true);"  > /dev/null
+
+antes=$($DB -c "SELECT count(*) FROM registration_slot_reservations WHERE championship_id='$CHAMP';")
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000901', false)::text;")
+checar "renovar no MESMO balde devolve a mesma classificacao" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+depois=$($DB -c "SELECT count(*) FROM registration_slot_reservations WHERE championship_id='$CHAMP';")
+checar "renovar no MESMO balde nao cria linha" "$antes" "$depois"
+
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000901', true)::text;")
+checar "trocar para um balde cheio e recusado" "goalkeepers_full" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+r=$($DB -c "SELECT is_goalkeeper::text || '|' || is_waitlist::text || '|' ||
+                   (SELECT count(*) FROM registration_slot_reservations
+                     WHERE championship_id='$CHAMP' AND cpf='99900000901')
+              FROM registration_slot_reservations
+             WHERE championship_id='$CHAMP' AND cpf='99900000901';")
+checar "a reserva antiga SOBREVIVE a recusa, intacta" "false|false|1" "$(echo "$r" | tr -d ' ')"
+
+# Abre uma vaga no balde de goleiro e tenta de novo: agora a troca acontece, e
+# acontece MOVENDO a linha, sem deixar duas.
+$DB -c "UPDATE registration_slot_reservations SET expires_at = now() - interval '1 minute'
+         WHERE cpf='99900000902';" > /dev/null
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000901', true)::text;")
+checar "com vaga no balde novo, a troca e aceita" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+r=$($DB -c "SELECT is_goalkeeper::text || '|' || is_waitlist::text || '|' ||
+                   (SELECT count(*) FROM registration_slot_reservations
+                     WHERE championship_id='$CHAMP' AND cpf='99900000901')
+              FROM registration_slot_reservations
+             WHERE championship_id='$CHAMP' AND cpf='99900000901';")
+checar "a reserva MUDOU de balde, e continua sendo uma so" "true|false|1" "$(echo "$r" | tr -d ' ')"
+
+# =============================================================================
+# A corrida, agora pela ultima vaga DE GOLEIRO.
+#
+# O cenario de concorrencia la de cima disputa `max_players`, que existia antes
+# desta task. Este disputa a COTA: `max_players` tem folga (4 vagas, 1 tomada) e
+# quem barra a segunda transacao e o balde. Sem o `FOR UPDATE` no campeonato as
+# duas leriam "zero goleiros reservados" e passariam juntas.
+echo "== concorrencia: duas transacoes disputando a ultima vaga DE GOLEIRO =="
+preparar
+$DB -c "UPDATE championships SET max_players = 4, max_waitlist_players = 0,
+                                 teams_count = 1, players_per_team = 4,
+                                 goalkeepers_per_team = 1,
+                                 waitlist_goalkeepers = 0, waitlist_outfield = 0
+         WHERE id='$CHAMP';" > /dev/null
+
+docker exec -i supabase_db_campeonato-app psql -U postgres -d postgres -tA > /tmp/a6_sessao_a.txt 2>&1 <<'SQL' &
+BEGIN;
+SELECT reserve_registration_slot('aaaaaaaa-0000-4000-8000-00000000a4a4', '99900001001', true)::text;
+SELECT pg_sleep(3);
+COMMIT;
+SQL
+sleep 1
+
+inicio=$(date +%s)
+b=$(docker exec -i supabase_db_campeonato-app psql -U postgres -d postgres -tA -c \
+  "SELECT reserve_registration_slot('$CHAMP', '99900001002', true)::text;")
+fim=$(date +%s)
+wait
+
+espera=$((fim - inicio))
+if [ "$espera" -ge 2 ]; then
+  echo "  ok   a segunda transacao esperou o lock (${espera}s)"
+else
+  echo "  FALHOU a segunda nao esperou (${espera}s) — o lock nao esta segurando"
+  falhou=1
+fi
+checar "so um goleiro leva a ultima vaga de goleiro" "goalkeepers_full" "$(echo "$b" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+limpar
+
+# =============================================================================
 # O entregavel de manchete da T2 -- a capacidade derivada -- nao tinha assertiva
 # NENHUMA. Tres mutacoes na DDL passavam nos 494 testes, no tsc e no lint:
 # trocar `max_players >= 0` de volta para `> 0`, apagar o NOT VALID, e apagar uma
@@ -609,9 +801,14 @@ limpar
 
 # =============================================================================
 echo "== as RPCs publicas nao sao chamaveis por anon =="
+# A assinatura tem TRES argumentos desde 20260820030000, e a antiga foi DROPADA
+# la (um parametro a mais nao substitui a funcao -- cria uma sobrecarga, e ai
+# toda chamada de dois argumentos morre com `is not unique`). Nomear a assinatura
+# velha aqui nao daria "false": daria ERRO de funcao inexistente, o script
+# morreria no `set -e` e estas duas assertivas sumiriam sem nenhum FALHOU.
 r=$($DB -c "
-  SELECT has_function_privilege('anon','public.reserve_registration_slot(uuid, text)','EXECUTE')::text || '|' ||
-         has_function_privilege('authenticated','public.reserve_registration_slot(uuid, text)','EXECUTE')::text;")
+  SELECT has_function_privilege('anon','public.reserve_registration_slot(uuid, text, boolean)','EXECUTE')::text || '|' ||
+         has_function_privilege('authenticated','public.reserve_registration_slot(uuid, text, boolean)','EXECUTE')::text;")
 checar "reserve_registration_slot fechada para anon/authenticated" "false|false" "$(echo "$r" | tr -d ' ')"
 
 r=$($DB -c "
