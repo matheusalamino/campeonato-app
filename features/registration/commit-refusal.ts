@@ -1,9 +1,25 @@
 /**
  * As razoes com que `commit_registration` recusa a gravacao.
  *
- * A lista e a do COMMENT da funcao
- * (supabase/migrations/20260819050000_commit_respects_sabbath.sql): not_found,
- * sabbath, not_open, already_registered, reservation_expired.
+ * A lista vem do COMMENT da funcao, hoje em
+ * supabase/migrations/20260820040000_commit_respects_keeper_quota.sql, e esta
+ * tabela cobre CINCO das SEIS que a funcao declara: not_found, sabbath,
+ * not_open, already_registered, reservation_expired.
+ *
+ * A sexta e `goalkeepers_full`, e a falta dela aqui e deliberada e TEMPORARIA. A
+ * funcao so a produz para quem chega sem reserva viva no balde de goleiro, e
+ * hoje nenhum jogador chega la: `submitRegistration` chama a RPC com cinco
+ * argumentos, sem `p_is_goalkeeper`, entao o balde e sempre o de linha. A razao
+ * existe no banco antes de existir no app de proposito -- a trava tem de valer
+ * para chamada direta a server action, que nao passa por esta tabela.
+ *
+ * QUEM LIGAR O BALDE NO SERVICO TEM DE ACRESCENTAR A FRASE AQUI, no mesmo
+ * commit. Sem ela a recusa cai no generico "as inscricoes nao estao abertas" --
+ * que e exatamente o desfecho que esta tabela existe para matar, e agora para
+ * um goleiro que possivelmente ja pagou o PIX. O `Record<CommitRefusalReason,
+ * CommitRefusal>` obriga a frase assim que a chave entrar na uniao; o que ele
+ * NAO pega e a chave nunca entrar. A gemea `reservationFromRpc`, em slot.ts,
+ * esta na mesma situacao com a mesma razao vinda de reserve_registration_slot.
  */
 export type CommitRefusalReason =
   | "not_found"

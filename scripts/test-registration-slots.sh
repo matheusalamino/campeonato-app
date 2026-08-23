@@ -834,6 +834,108 @@ checar "so um goleiro leva a ultima vaga de goleiro" "goalkeepers_full" "$(echo 
 limpar
 
 # =============================================================================
+# O COMMIT reconfere a cota, e o par que mantem a inversao viva.
+#
+# A reserva pode ter VENCIDO entre o passo 1 e o envio, e ai o commit e o unico
+# guarda: ele aceita de proposito quem chega sem reserva viva. Sem a cota aqui,
+# um goleiro que perdeu a reserva entra por cima do formato, calado.
+#
+# E o par, que e o ponto todo desta secao: a cota mora DENTRO do
+# `IF NOT v_had_reservation`, junto do prazo, e NAO em cima como o sabado.
+#
+#   sem reserva  -> a cota morde        (`goalkeepers_full`)
+#   com reserva  -> a cota NAO morde    (grava)
+#
+# Quem tem reserva viva de goleiro ja foi contado na cota quando reservou;
+# recusa-lo aqui o barraria por uma vaga que ele mesmo ocupa -- o "pagou e foi
+# recusado" que a reserva existe para prevenir. Mover o bloco da cota para FORA
+# do ramo "por consistencia" com o sabado derruba SO o segundo cenario e deixa o
+# primeiro passando. Foi medido assim, nesta ordem: se os dois morrerem, ou
+# nenhum, o par nao esta medindo o que promete.
+#
+# `max_players` FICA FOLGADO (10 para uma cota de 1) de proposito. Com a lotacao
+# apertada o excedente e barrado pela LOTACAO de qualquer jeito, e a assertiva
+# passaria verde com a cota inteira apagada -- ela mediria lotacao achando que
+# mede cota.
+echo "== o commit reconfere a cota de goleiro =="
+preparar
+$DB -c "UPDATE championships SET max_players = 10, max_waitlist_players = 0,
+                                 teams_count = 1, players_per_team = 4,
+                                 goalkeepers_per_team = 1,
+                                 waitlist_goalkeepers = 0, waitlist_outfield = 0
+         WHERE id='$CHAMP';" > /dev/null
+$DB -c "INSERT INTO players (cpf, name) VALUES
+          ('99900001401', 'Goleiro com reserva T6'),
+          ('99900001402', 'Goleiro que cabe T6'),
+          ('99900001403', 'Goleiro excedente T6'),
+          ('99900001404', 'Jogador de linha T6');" > /dev/null
+pid_res=$($DB -c "SELECT id FROM players WHERE cpf='99900001401';")
+pid_cabe=$($DB -c "SELECT id FROM players WHERE cpf='99900001402';")
+pid_exc=$($DB -c "SELECT id FROM players WHERE cpf='99900001403';")
+pid_lin=$($DB -c "SELECT id FROM players WHERE cpf='99900001404';")
+
+# Este reserva PRIMEIRO, com a cota ainda vazia, e so envia no fim. E o estado
+# que o cenario do par precisa: reserva viva de goleiro numa cota que, quando ele
+# enviar, ja vai estar tomada.
+$DB -c "SELECT reserve_registration_slot('$CHAMP', '99900001401', true);" > /dev/null
+
+# E este chega SEM reserva e passa, porque a cota ainda tem vaga: o commit conta
+# so inscricoes CONFIRMADAS, e a reserva viva acima nao entra na conta dele. Nao
+# e brecha -- e a mesma escolha que a checagem de lotacao ao lado ja fazia, e e o
+# que enche a cota por um caminho que as proprias RPCs alcancam.
+r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid_cabe', '99900001402',
+      '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0}'::jsonb,
+      '{\"visao\":4}'::jsonb, true)::text;")
+checar "sem reserva, o goleiro grava enquanto a cota tem vaga" "true" "$(echo "$r" | sed 's/.*\"success\" : \([a-z]*\).*/\1/')"
+
+# CENARIO 1 do par. A cota de goleiro agora esta tomada por UMA inscricao
+# confirmada, e a lotacao tem 9 vagas sobrando -- entao quem recusa so pode ser a
+# cota.
+r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid_exc', '99900001403',
+      '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0}'::jsonb,
+      '{\"visao\":4}'::jsonb, true)::text;")
+checar "sem reserva viva, o goleiro excedente e RECUSADO" "goalkeepers_full" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+# O antidoto do cenario acima: sem ele, "recusou" poderia significar "a cota
+# recusa todo mundo". A cota de goleiro continua cheia, a de linha tem 3 vagas, e
+# a MESMA chamada sem reserva passa -- ou seja, a cota fecha SO o balde dela.
+r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid_lin', '99900001404',
+      '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0}'::jsonb,
+      '{\"visao\":4}'::jsonb, false)::text;")
+checar "e a cota fecha SO o balde dela: o jogador de linha entra" "true" "$(echo "$r" | sed 's/.*\"success\" : \([a-z]*\).*/\1/')"
+
+# CENARIO 2 do par -- o que morre se alguem mover a cota para fora do ramo.
+#
+# Mesmo instante, mesma cota cheia, mesmo balde que o excedente acima: a UNICA
+# diferenca e a reserva viva. E ele e enviado com CINCO argumentos, sem
+# `p_is_goalkeeper` nenhum, de proposito: o balde tem de vir da RESERVA, e a
+# assertiva seguinte confere que veio.
+r=$($DB -c "SELECT commit_registration('$CHAMP', '$pid_res', '99900001401',
+      '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0}'::jsonb,
+      '{\"visao\":4}'::jsonb)::text;")
+checar "com reserva viva, o goleiro excedente GRAVA" "true" "$(echo "$r" | sed 's/.*\"success\" : \([a-z]*\).*/\1/')"
+
+# A coluna que 20260820030000 criou passou a ser ALIMENTADA. Ate a T6 ela so
+# tinha o backfill: inscricao nova nascia `false` pelo DEFAULT, e a cota
+# subcontava para sempre.
+#
+# Os TRES valores juntos, e nao um: um `is_goalkeeper` cravado em `true` passaria
+# numa assertiva sozinha, e o jogador de linha no meio da lista e quem mata isso.
+# A ordem e por CPF -- 401 (reserva, goleiro), 402 (goleiro), 404 (linha).
+#
+# O 401 e a assertiva do balde que veio da RESERVA: o commit dele nao recebeu
+# argumento de balde, entao `true` ali so pode ter saido de
+# registration_slot_reservations.is_goalkeeper. Se saisse do DEFAULT da coluna,
+# viria `false`.
+r=$($DB -c "SELECT string_agg(cr.is_goalkeeper::text, '|' ORDER BY p.cpf)
+              FROM championship_registrations cr
+              JOIN players p ON p.id = cr.player_id
+             WHERE cr.championship_id = '$CHAMP';")
+checar "o commit GRAVOU o balde de cada inscricao (o do 401 veio da reserva)" "true|true|false" "$(echo "$r" | tr -d ' ')"
+
+limpar
+
+# =============================================================================
 # O entregavel de manchete da T2 -- a capacidade derivada -- nao tinha assertiva
 # NENHUMA. Tres mutacoes na DDL passavam nos 494 testes, no tsc e no lint:
 # trocar `max_players >= 0` de volta para `> 0`, apagar o NOT VALID, e apagar uma
@@ -900,9 +1002,10 @@ limpar
 
 # =============================================================================
 echo "== as RPCs publicas nao sao chamaveis por anon =="
-# A assinatura tem TRES argumentos desde 20260820030000, e a antiga foi DROPADA
-# la (um parametro a mais nao substitui a funcao -- cria uma sobrecarga, e ai
-# toda chamada de dois argumentos morre com `is not unique`). Nomear a assinatura
+# As DUAS assinaturas ganharam um parametro booleano no fim -- a reserva em
+# 20260820030000, o commit em 20260820040000 -- e nas duas a assinatura antiga
+# foi DROPADA la (um parametro a mais nao substitui a funcao: cria uma
+# sobrecarga, e ai a chamada antiga morre com `is not unique`). Nomear a assinatura
 # velha aqui nao daria "false": daria ERRO de funcao inexistente, o script
 # morreria no `set -e` e estas duas assertivas sumiriam sem nenhum FALHOU.
 r=$($DB -c "
@@ -911,8 +1014,8 @@ r=$($DB -c "
 checar "reserve_registration_slot fechada para anon/authenticated" "false|false" "$(echo "$r" | tr -d ' ')"
 
 r=$($DB -c "
-  SELECT has_function_privilege('anon','public.commit_registration(uuid, uuid, text, jsonb, jsonb)','EXECUTE')::text || '|' ||
-         has_function_privilege('authenticated','public.commit_registration(uuid, uuid, text, jsonb, jsonb)','EXECUTE')::text;")
+  SELECT has_function_privilege('anon','public.commit_registration(uuid, uuid, text, jsonb, jsonb, boolean)','EXECUTE')::text || '|' ||
+         has_function_privilege('authenticated','public.commit_registration(uuid, uuid, text, jsonb, jsonb, boolean)','EXECUTE')::text;")
 checar "commit_registration fechada para anon/authenticated" "false|false" "$(echo "$r" | tr -d ' ')"
 
 limpar
