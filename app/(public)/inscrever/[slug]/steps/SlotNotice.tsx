@@ -134,10 +134,21 @@ function noticeFor(
        * mais barato do que trocar de posicao.
        *
        * "Volte ao passo da posicao", e nao "ao primeiro passo": a posicao e o
-       * passo 4 no `FIELD_STEP` (field-steps.ts) e o 1 e so o CPF. Quem recebe
-       * esta razao acabou de sair do passo da posicao — a reserva so aprende o
-       * balde na renovacao que sai dali —, entao ele esta em `done` e
-       * `canOpenStep` o reabre.
+       * passo 4 no `FIELD_STEP` (field-steps.ts) e o 1 e so o CPF.
+       *
+       * HOJE NENHUM JOGADOR CHEGA A ESTA RECUSA PELO FORMULARIO, e a frase
+       * existe antes do caminho de proposito — a mesma situacao que o docblock
+       * de commit-refusal.ts descreve para a gemea dela. `reserveSlot`
+       * (services/public-registration.ts) e `reserveSlotAction` chamam a RPC com
+       * DOIS argumentos, sem `p_is_goalkeeper`, e la dentro
+       * `v_is_gk := coalesce(p_is_goalkeeper, false)`: o balde e sempre o de
+       * linha, na reserva inicial e em toda renovacao. A razao existe no banco
+       * para valer em chamada direta, que nao passa por esta tela.
+       *
+       * Quando o balde for ligado, quem receber esta razao vira da renovacao que
+       * dispara ao sair do passo da posicao — a primeira chamada que pode saber
+       * que ele e goleiro —, entao o passo 4 ja estara em `done` e `canOpenStep`
+       * o reabre. Quem ligar confere isso: e o que torna a instrucao cumprivel.
        */
       return {
         urgent: true,

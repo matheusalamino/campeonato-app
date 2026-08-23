@@ -122,8 +122,8 @@ function isCommitReason(value: unknown): value is CommitRefusalReason {
  * `node_modules`. Escrita la, a tabela era invisivel nos dois sentidos.
  *
  * Razao que nao conhecemos cai no generico, que e o comportamento de hoje: a RPC
- * devolve uma razao so, das cinco declaradas, e qualquer outra coisa e resposta
- * malformada.
+ * devolve uma razao so, das seis declaradas la em cima, e qualquer outra coisa e
+ * resposta malformada.
  *
  * Devolve uma COPIA, e nao a linha da tabela. Hoje o unico chamador espalha o
  * retorno e a diferenca nao aparece, mas `MESSAGES` e modulo — vive enquanto o
