@@ -18,9 +18,16 @@
 --
 -- Isso NAO e preciosismo de estilo. O vocabulario dessa coluna esta em transicao
 -- -- ha uma branch irma que converte o dado e poe uma CHECK recusando a grafia
--- antiga -- e ela nao toca em funcao nenhuma. Uma RPC que comparasse com o
--- literal de hoje sobreviveria ao deploy sem erro, contaria ZERO goleiros e
--- deixaria a cota aberta para sempre, EM SILENCIO.
+-- antiga --, e a migration que faz a CONVERSAO nao toca em funcao nenhuma. Uma
+-- RPC que comparasse com o literal de hoje sobreviveria ao deploy sem erro,
+-- contaria ZERO goleiros e deixaria a cota aberta para sempre, EM SILENCIO.
+--
+-- A prova de que isso acontece de verdade esta na propria branch irma: a
+-- migration SEGUINTE a da conversao teve de reescrever `public_goalkeeper_iog`
+-- inteira, na mao, so para trocar o literal de posicao de dentro dela. Funcao
+-- que cita a grafia precisa ser achada e consertada uma a uma, e a que ninguem
+-- achar fica contando errado; funcao que nao cita atravessa a virada sem
+-- ninguem precisar tocar nela.
 --
 -- O terreno ja foi pisado neste repo: a 20260615000000 subiu comparando a
 -- coluna com um codigo quando ela guardava a palavra, e a migration seguinte
@@ -311,8 +318,19 @@ BEGIN
   --
   -- Esta aritmetica repete a de `features/championships/capacity.ts`, e a
   -- duplicacao e CONSCIENTE: a trava precisa valer no servidor, e o Postgres nao
-  -- importa TypeScript. O antidoto e o par de testes das duas pontas, com as
-  -- mesmas bordas dos dois lados.
+  -- importa TypeScript. O antidoto e o par de testes das duas pontas -- e as
+  -- duas pontas NAO cobrem a mesma coisa, entao vale saber onde cada uma para.
+  --
+  -- `capacity.test.ts` prende tres bordas aritmeticas: cota absurda presa ao
+  -- total, fila zerada quando nao ha formato, e produto que nao cabe em int4.
+  -- `scripts/test-registration-slots.sh` prende as DUAS PRIMEIRAS contra o
+  -- banco, e nao prende a terceira.
+  --
+  -- A terceira e divida conhecida, e nao descuido: o CHECK do formato so exige
+  -- nao-negativo, entao 100000 times de 100000 jogadores gravam, e aqui a
+  -- multiplicacao estoura com `integer out of range` em vez de responder JSON.
+  -- Quem impede isso hoje e so o Zod do admin -- do lado que este mesmo
+  -- comentario acabou de dizer que o Postgres nao importa.
   v_cap_total := coalesce(v_teams, 0) * coalesce(v_per_team, 0);
   v_cap_gk    := least(v_cap_total, coalesce(v_teams, 0) * coalesce(v_gk_per_team, 0));
   v_cap_out   := v_cap_total - v_cap_gk;
@@ -502,8 +520,13 @@ Retorno tem sete formatos:
     aberta e nao ha de goleiro. E por isso que nao e `full`: a tela precisa poder
     dizer "de GOLEIRO". retry_at nulo significa cota tomada por inscricoes
     confirmadas (nao adianta voltar); preenchido, ha reserva viva que vence.
-  success=false, reason=full: lotacao real -- principal e espera cheios por
-    inscricoes confirmadas. Nao adianta tentar de novo.
+  success=false, reason=full: nao ha vaga para ESTE jogador, nem na principal
+    nem na espera, e quem as ocupa e inscricao confirmada -- nao adianta tentar
+    de novo. Cuidado ao ler isto como "campeonato lotado": quando quem fecha e a
+    cota do BALDE, `full` sai com vaga do outro balde ainda aberta. O balde de
+    goleiro tem razao propria (acima) exatamente por isso; o de linha ainda nao
+    tem, e um jogador de linha ouvindo `full` com vaga de goleiro sobrando e o
+    simetrico conhecido dessa falta.
   success=false, reason=all_reserved, retry_at=<timestamptz|null>: vagas
     seguradas por reservas vivas, que vencem. Vale tentar de novo a partir
     de retry_at.

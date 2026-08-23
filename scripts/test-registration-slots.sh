@@ -35,6 +35,20 @@ checar() {
   fi
 }
 
+# `retry_at` tem TRES estados, e a distancia entre dois deles e a diferenca
+# entre "vale voltar" e "nao adianta". Medir a presenca da CHAVE nao distingue
+# nenhum: `json_build_object` emite `"retry_at" : null` quando o valor e nulo,
+# entao um `grep retry_at` passa identico com o campo sempre vazio -- foi
+# exatamente assim que a primeira versao desta suite deixou passar uma mutacao
+# que apagava o valor.
+retry_estado() {
+  case "$1" in
+    *'"retry_at" : "'*)    echo "preenchido" ;;
+    *'"retry_at" : null'*) echo "nulo" ;;
+    *)                     echo "ausente" ;;
+  esac
+}
+
 limpar() {
   $DB -c "
     DELETE FROM self_evaluations WHERE registration_id IN
@@ -577,8 +591,9 @@ checar "terceiro goleiro cai na espera DE GOLEIRO" "true" "$(echo "$r" | sed 's/
 
 r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000704', true)::text;")
 checar "quarto goleiro ouve goalkeepers_full" "goalkeepers_full" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
-case "$r" in *retry_at*) v="tem" ;; *) v="nao tem" ;; esac
-checar "a recusa do goleiro traz retry_at" "tem" "$v"
+# Aqui a cota esta segurada por RESERVAS vivas, que vencem: retry_at tem de
+# trazer o instante, e nao so existir.
+checar "a recusa do goleiro traz retry_at com VALOR" "preenchido" "$(retry_estado "$r")"
 
 # O CONTROLE, e a assertiva mais importante desta secao: com a cota de goleiro
 # esgotada, a vaga de LINHA continua aberta. Sem esta linha, uma cota que
@@ -606,6 +621,55 @@ r=$($DB -c "
          count(*) FILTER (WHERE NOT is_goalkeeper AND is_waitlist)
     FROM registration_slot_reservations WHERE championship_id = '$CHAMP';")
 checar "os quatro baldes pararam em 2|1|2|1" "2|1|2|1" "$(echo "$r" | tr -d ' ')"
+
+# =============================================================================
+# A cota so morde quando o formato diz alguma coisa.
+#
+# Sem esta guarda a cota derivaria ZERO nos dois baldes de um campeonato cujo
+# formato ninguem preencheu, e recusaria TODO MUNDO -- com `max_players` posto na
+# mao e inscricao aberta. Nao e hipotese: e o estado do staging.
+#
+# As duas assertivas cobrem os DOIS ramos do `IF v_is_gk`. Uma so deixaria o
+# outro ramo livre, e a guarda mora antes da bifurcacao, entao quem a apagasse
+# quebraria os dois -- mas quem mexesse so num deles passaria com uma.
+echo "== formato nao configurado nao fecha a inscricao =="
+preparar
+$DB -c "UPDATE championships SET max_players = 80, max_waitlist_players = 5,
+                                 teams_count = NULL, players_per_team = NULL,
+                                 goalkeepers_per_team = 1,
+                                 waitlist_goalkeepers = 0, waitlist_outfield = 0
+         WHERE id='$CHAMP';" > /dev/null
+
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900001101', true)::text;")
+checar "formato nulo: goleiro entra na principal" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900001102', false)::text;")
+checar "formato nulo: jogador de linha entra na principal" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+# =============================================================================
+# A cota de goleiro presa ao total.
+#
+# `goalkeepers_per_team` maior que `players_per_team` e gravavel -- o CHECK do
+# formato so exige nao-negativo. Sem o `least` contra o total, a cota admitiria
+# MAIS goleiros do que o campeonato inteiro tem vaga: aqui, 3 num formato de 2.
+#
+# `max_players` fica com folga de proposito (10 para um formato de 2). E o que
+# faz a assertiva medir a COTA: com a lotacao apertada, ela barraria o terceiro
+# de qualquer jeito e a mutacao passaria.
+echo "== cota de goleiro maior que o time fica presa ao total =="
+preparar
+$DB -c "UPDATE championships SET max_players = 10, max_waitlist_players = 0,
+                                 teams_count = 1, players_per_team = 2,
+                                 goalkeepers_per_team = 3,
+                                 waitlist_goalkeepers = 0, waitlist_outfield = 0
+         WHERE id='$CHAMP';" > /dev/null
+
+$DB -c "SELECT reserve_registration_slot('$CHAMP', '99900001201', true);" > /dev/null
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900001202', true)::text;")
+checar "o segundo goleiro ainda entra (o total sao 2)" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900001203', true)::text;")
+checar "o terceiro NAO entra num formato de 2, com max_players sobrando" "goalkeepers_full" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
 
 # =============================================================================
 # De onde sai o balde de uma inscricao JA CONFIRMADA.
@@ -638,6 +702,12 @@ $DB -c "INSERT INTO championship_registrations (championship_id, player_id, is_w
 
 r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900000802', true)::text;")
 checar "inscricao marcada como goleiro OCUPA a cota (perfil sem posicao)" "goalkeepers_full" "$(echo "$r" | sed 's/.*\"reason\" : \"\([a-z_]*\)\".*/\1/')"
+
+# O outro estado de retry_at, e o par da assertiva da secao anterior: aqui quem
+# ocupa a cota e INSCRICAO CONFIRMADA, nao ha reserva nenhuma para vencer, e
+# nulo e a resposta honesta -- nao adianta voltar. As duas juntas prendem o
+# valor; cada uma sozinha passaria com o campo constante.
+checar "cota tomada por inscricao confirmada: retry_at NULO" "nulo" "$(retry_estado "$r")"
 
 # O par da assertiva acima. Sem ele, "recusou" poderia significar "a cota ignora
 # tudo e recusa sempre": aqui a MESMA chamada passa a ser aceita so porque a
@@ -693,6 +763,35 @@ r=$($DB -c "SELECT is_goalkeeper::text || '|' || is_waitlist::text || '|' ||
               FROM registration_slot_reservations
              WHERE championship_id='$CHAMP' AND cpf='99900000901';")
 checar "a reserva MUDOU de balde, e continua sendo uma so" "true|false|1" "$(echo "$r" | tr -d ' ')"
+
+# =============================================================================
+# A troca de balde com a lotacao NO LIMITE.
+#
+# O cenario acima tem `max_players` folgado, entao a troca la nunca encosta na
+# lotacao. Aqui a vaga unica do campeonato ja e do proprio jogador: sem excluir
+# a reserva dele das contagens TOTAIS, ele disputa vaga consigo mesmo e ouve
+# `all_reserved` por causa da propria reserva -- com `retry_at` nulo, porque a
+# unica reserva viva e a que foi excluida da busca do instante.
+#
+# O filtro que impede isso mora nas contagens totais, e nao so nas do balde: e
+# o total que aperta primeiro quando `max_players` e 1.
+echo "== trocar de balde nao e disputar vaga consigo mesmo =="
+preparar
+$DB -c "UPDATE championships SET max_players = 1, max_waitlist_players = 0,
+                                 teams_count = 1, players_per_team = 2,
+                                 goalkeepers_per_team = 1,
+                                 waitlist_goalkeepers = 0, waitlist_outfield = 0
+         WHERE id='$CHAMP';" > /dev/null
+
+$DB -c "SELECT reserve_registration_slot('$CHAMP', '99900001301', false);" > /dev/null
+r=$($DB -c "SELECT reserve_registration_slot('$CHAMP', '99900001301', true)::text;")
+checar "com a unica vaga sendo a SUA, a troca de balde e aceita" "false" "$(echo "$r" | sed 's/.*\"is_waitlist\" : \([a-z]*\).*/\1/')"
+
+r=$($DB -c "SELECT is_goalkeeper::text || '|' || is_waitlist::text || '|' ||
+                   (SELECT count(*) FROM registration_slot_reservations WHERE championship_id='$CHAMP')
+              FROM registration_slot_reservations
+             WHERE championship_id='$CHAMP' AND cpf='99900001301';")
+checar "e a vaga MUDOU de balde sem virar duas" "true|false|1" "$(echo "$r" | tr -d ' ')"
 
 # =============================================================================
 # A corrida, agora pela ultima vaga DE GOLEIRO.
