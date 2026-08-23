@@ -51,8 +51,17 @@ describe("championshipFormSchema", () => {
     expect(r.success).toBe(false);
   });
 
-  it("rejects max_players <= 0", () => {
+  it("aceita max_players 0, que passou a significar fechado", () => {
+    // Era `rejects max_players <= 0`, e o `.positive()` que o sustentava tinha
+    // que cair: zero e o valor que `derivedCapacity` devolve para formato nao
+    // configurado, e recusa-lo aqui so deixaria de pe o NULL, que vale
+    // ilimitado.
     const r = championshipFormSchema.safeParse({ ...validDraft, max_players: 0 });
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects a negative max_players", () => {
+    const r = championshipFormSchema.safeParse({ ...validDraft, max_players: -1 });
     expect(r.success).toBe(false);
   });
 
@@ -64,7 +73,7 @@ describe("championshipFormSchema", () => {
     expect(r.success).toBe(false);
   });
 
-  it("requires all dates and max_players when status leaves draft", () => {
+  it("requires all dates and the format when status leaves draft", () => {
     const r = championshipFormSchema.safeParse({
       name: "Copa",
       status: "active",
@@ -81,8 +90,10 @@ describe("championshipFormSchema", () => {
       registration_end_date: "2026-03-01",
       gala_night_date: "2026-03-10",
       tournament_start_date: "2026-04-01",
-      max_players: 20,
-      max_waitlist_players: 5,
+      // O que o publicado exige agora: o formato. O total saiu da lista junto
+      // com o campo que o preenchia.
+      teams_count: 4,
+      players_per_team: 5,
     });
     expect(r.success).toBe(true);
   });
@@ -228,5 +239,28 @@ describe("statusChangeSchema", () => {
       to: "draft",
     });
     expect(r.success).toBe(true);
+  });
+});
+
+describe("championshipFormSchema: a capacidade vem do formato", () => {
+  it("campeonato fora de draft exige o formato, e nao mais o total digitado", () => {
+    const r = championshipFormSchema.safeParse({
+      name: "Copa",
+      status: "subscribing",
+      registration_start_date: "2026-02-01",
+      registration_end_date: "2026-03-01",
+      gala_night_date: "2026-03-10",
+      tournament_start_date: "2026-04-01",
+    });
+    expect(r.success).toBe(false);
+    if (r.success) return;
+
+    const caminhos = r.error.issues.map((i) => i.path.join("."));
+    expect(caminhos).toContain("teams_count");
+    expect(caminhos).toContain("players_per_team");
+    // A outra metade da frase, e a que morde: `max_players` deixou de ser campo
+    // do admin. Se continuasse na lista de obrigatorios, todo campeonato fora
+    // de draft ficaria invalido sem ninguem ter como corrigir.
+    expect(caminhos).not.toContain("max_players");
   });
 });
