@@ -15,7 +15,10 @@ import {
  * fonte, e pelo mesmo motivo da primeira. O docblock de `sem-comentario.ts`
  * conta o que custou: o stripper de comentario estava copiado em QUATRO
  * arquivos, as copias DIVERGIRAM, e uma mutacao de verdade atravessou 495
- * testes verdes porque a copia fraca nao ancorava comentario no rabo da linha.
+ * testes verdes porque a copia fraca so pegava comentario de LINHA INTEIRA —
+ * ela estava ancorada em inicio de linha (`/^[ \t]*\/\/.*$/gm`), e por isso o
+ * comentario no rabo de uma linha de codigo sobrevivia ao strip. Acrescentar
+ * ancora, e nao tira-la, e o jeito de reintroduzir esse defeito.
  *
  * Quando `position-detectors.test.ts` nasceu, ele copiou `fonteDe` e
  * `SEM_PALAVRA` byte a byte de `position-wiring.test.ts` — e ate ESCREVEU no
@@ -26,10 +29,11 @@ import {
  * ── O QUE MORA AQUI, E POR QUE JUNTO ──
  *
  * `fonteDe`/`sqlDe` sao leitura; `SEM_PALAVRA` e vocabulario. Concerns
- * diferentes, mesmo arquivo, de proposito: os dois unicos consumidores sao os
- * dois testes de vocabulario de posicao, e foi exatamente a pergunta "onde isso
- * mora?" que produziu as copias. Separar em dois arquivos devolveria a duvida
- * sem pagar nada.
+ * diferentes, mesmo arquivo, de proposito: TODO consumidor da leitura e um
+ * teste que varre VOCABULARIO — o de posicao na maioria, o do POTE em
+ * `pot-readers.test.ts` —, e foi exatamente a pergunta "onde isso mora?" que
+ * produziu as copias. Separar em dois arquivos devolveria a duvida sem pagar
+ * nada.
  */
 
 const RAIZ = process.cwd();
@@ -84,9 +88,11 @@ export const SEM_PALAVRA = /["'`](Goleiro|Zagueiro|Meia|Atacante)["'`]/;
 /**
  * O irmao para o vocabulario do POTE, e ele e mais largo em duas direcoes.
  *
- * MAIUSCULA NAO IMPORTA (`i`), porque no pote a palavra aparecia minuscula: os
- * detectores de `qualification-*`, `join-pot-bid` e `PotBidsSlide` comparavam
- * `pos.toLowerCase()` com `"goleiro"`. Sem o `i`, `SEM_PALAVRA` passaria por
+ * MAIUSCULA NAO IMPORTA (`i`), porque no pote a palavra aparecia minuscula.
+ * `qualification-window`, `qualification-resolve`,
+ * `qualification-refund-losers` e `join-pot-bid` comparavam
+ * `pos.toLowerCase()` com `"goleiro"` pela IGUALDADE, e `PotBidsSlide` fazia
+ * `.toLowerCase().includes("goleiro")`. Sem o `i`, `SEM_PALAVRA` passaria por
  * cima de todos eles.
  *
  * E TEM MAIS ENTRADAS: `extra` e `adicional`, que sao o pote que nao e posicao

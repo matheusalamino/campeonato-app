@@ -42,10 +42,24 @@ export type PotPosition = (typeof POT_POSITIONS)[number];
  *
  * ── POR QUE UM MAPA PROPRIO, E NAO O `POSITION_LABELS` ──
  *
- * Porque estender `POSITION_LABELS` com `EXT` seria juntar os dois
- * vocabularios, e e exatamente o que a 20260821020000 proibe em letras
- * maiusculas: aquele mapa e tipado por `CanonicalPosition`, e um `EXT` la
- * dentro autorizaria gravar `EXT` em `players.preferred_position`.
+ * Porque `POSITION_LABELS` e `Record<CanonicalPosition, string>`, e um `EXT` la
+ * dentro NAO COMPILA — TS2353, medido. O mapa do jogador ja recusa o
+ * vocabulario do pote sozinho; nao e preciso creditar a ele nenhuma proibicao
+ * de banco.
+ *
+ * E as duas migrations dizem coisas DIFERENTES, que e facil trocar de lugar:
+ * quem recusa `EXT` em `players.preferred_position` e a CHECK da
+ * 20260821010000, que aceita quatro valores e nada mais. O que a 20260821020000
+ * grita em letras maiusculas e o inverso — nao TIRAR o `EXT` da CHECK do pote
+ * em nome da simetria, porque a proxima finalizacao de pote falharia e os nao
+ * vendidos ficariam sem destino.
+ *
+ * A porta que "uniformizar" abriria de verdade nao e o mapa de rotulo: e
+ * `CANONICAL_POSITIONS`, que declara o vocabulario do jogador uma vez so e
+ * alimenta o `z.enum` de `features/registration/schema.ts` (cujo valor vai
+ * direto para o insert de `services/public-registration.ts`), os `<option>` dos
+ * formularios de jogador e o `POT_POSITIONS` logo abaixo. Alargar AQUELA lista
+ * e que ofereceria `EXT` como posicao de jogador.
  *
  * Mapa proprio nao uniformiza nada — RECONHECE que o pote tem vocabulario
  * proprio. Sao dois dominios e dois mapas: quatro entradas la, cinco aqui.

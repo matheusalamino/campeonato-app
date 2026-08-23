@@ -3,10 +3,12 @@
  *
  * ── POR QUE ISTO EXISTE ──
  *
- * Vinte por cento deste repo esta coberto por assertivas que leem ARQUIVO COMO
- * TEXTO, porque a fiacao que elas prendem vive em `app/**` e `services/**`, que
- * o `include` do vitest nao alcanca. Assertiva que le texto tem um modo de falha
- * proprio: casar a PROSA em vez do codigo. Ele ja mordeu nas duas direcoes.
+ * Boa parte deste repo so tem rede por assertivas que leem ARQUIVO COMO TEXTO,
+ * porque a fiacao que elas prendem vive em `app/**`, `components/**` e
+ * `services/**` — tres das cinco pastas de codigo de produto, e nenhuma delas
+ * esta no `include` do `vitest.config.ts`. Assertiva que le texto tem um modo
+ * de falha proprio: casar a PROSA em vez do codigo. Ele ja mordeu nas duas
+ * direcoes.
  *
  * Falso VERMELHO: a primeira versao de `rest-overlay-source.test.ts` reprovou
  * contra o codigo CERTO, porque o docblock do SabbathVideo cita o dominio da

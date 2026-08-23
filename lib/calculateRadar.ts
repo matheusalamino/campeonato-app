@@ -29,9 +29,15 @@ export function calculateRadar(evaluations: Evaluation[], position: string) {
   // `"GOL".toLowerCase()` simplesmente nao contem `"goleiro"`, entao TODO
   // goleiro caia no ramo de linha e via o radar das seis habilidades erradas.
   //
-  // Os outros tres lugares que escolhem a mesma dupla skillsGol/skillsLinha
-  // (EvaluateModal, PlayerForm, SubscribeForm) ja comparavam assim; este
-  // escapou da virada por escrever a comparacao de outro jeito.
+  // A mesma escolha "seis de goleiro ou seis de linha" mora em outros lugares,
+  // e cada um batiza o par de arrays do seu jeito — por isso grepar
+  // `skillsGol` acha so uma parte deles. Sao EvaluateModal e SubscribeForm
+  // (`skillsGol`/`skillsLinha`, o mesmo par daqui), PlayerForm
+  // (`goleiro`/`linha`), o `skillsFor()` de features/registration/skills.ts
+  // (`KEEPER_SKILLS`/`LINE_SKILLS`) e o import de CSV
+  // (app/api/import-players/route.ts, com os dois pares escritos inline no
+  // ternario). Todos ja comparavam com `=== "GOL"`; este escapou da virada por
+  // escrever a comparacao de outro jeito.
   const isGoalkeeper = position === "GOL";
 
   const skills = isGoalkeeper ? skillsGol : skillsLinha;

@@ -49,8 +49,8 @@ import { POSITION_ALIASES } from "@/features/players/position";
  * no repo no dia em que ela nasceu. O leitor esquecido compara depois de
  * `.toLowerCase()` tantas vezes quanto compara cru — `features/testing/fonte.ts`
  * ja tinha chegado a mesma conclusao para o vocabulario do POTE, e o docblock do
- * `SEM_PALAVRA_DE_POTE` de la lista tres detectores minusculos como razao do
- * `i`.
+ * `SEM_PALAVRA_DE_POTE` de la nomeia, um por um, os detectores minusculos que
+ * justificaram o `i`.
  *
  * O preco esta na allowlist: `goleiro` minusculo tambem e a chave do PREMIO
  * "Melhor Goleiro", que convive com `craque`, `revelacao` e `tecnico` e nao tem
@@ -60,8 +60,11 @@ import { POSITION_ALIASES } from "@/features/players/position";
  *
  * ── POR QUE LE O DISCO, E NAO IMPORTA O MODULO ──
  *
- * Porque metade do alvo vive em `app/**` e `services/**`, que o `include` do
- * vitest nao alcanca (o motivo esta escrito em `vitest.config.ts`). Assertiva
+ * Porque TRES das cinco pastas varridas — `app/**`, `components/**` e
+ * `services/**` — estao fora do `include` do vitest, que so alcanca `lib/**`,
+ * `features/**` e `scripts/**`. E ali que mora a maioria do alvo. So a ausencia
+ * de `services/**` tem motivo escrito em `vitest.config.ts`; `app/**` e
+ * `components/**` nunca entraram, e o arquivo nao diz por que. Assertiva
  * que le texto tem um modo de falha proprio — casar a PROSA em vez do codigo —
  * e por isso a leitura passa por `linhasDe`, que tira comentario antes. Sem
  * isso, o proprio docblock que voce esta lendo reprovaria a varredura.
@@ -78,9 +81,10 @@ import { POSITION_ALIASES } from "@/features/players/position";
  * isso. Apague a copia, ou commite-a.
  *
  * Trocar por `git ls-files` NAO e o conserto, e ja foi tentado: o glob
- * (`'app/**\/*.ts'`) exige um `/` depois da pasta, entao perdia os 51 arquivos
- * que moram na raiz de `lib/`, `components/` e `services/` — inclusive o unico
- * defeito vivo do dia.
+ * (`'app/**\/*.ts'`) exige um `/` depois da pasta, entao perdia TODO arquivo
+ * que mora na RAIZ de uma das cinco pastas — `lib/` e `components/` respondem
+ * pela maioria deles, `services/` inteiro mora na raiz, e `app/layout.tsx`
+ * tambem cai ai. Eram 51 no dia da medicao, inclusive o unico defeito vivo.
  *
  * ── POR QUE A ALLOWLIST DECLARA O QUE ESCONDE ──
  *
@@ -93,8 +97,12 @@ import { POSITION_ALIASES } from "@/features/players/position";
  *
  * O unico guarda que restava nos liberados era o `tsc`, e so onde o tipo e
  * estreito: a mesma mutacao em `features/hooks/usePublicRankings.ts` da TS2367,
- * porque la o `position` e `CanonicalPosition`. Mas TRES dos seis liberados
- * tipam `position` como `string`, e nesses nao havia guarda nenhuma.
+ * porque la o `position` e `CanonicalPosition`. Mas `lib/public/types.ts`
+ * (`positionLabel`) e `features/draft/pot-position.ts` (`potLabel`, `potTitle`)
+ * recebem `position: string` — de proposito, porque quem chama le a coluna
+ * crua —, e ali nao havia guarda nenhuma. Nos dois liberados de premiacao
+ * (`settings/page.tsx` e `PremiosTab.tsx`) nem havia o que guardar: a sequencia
+ * `position` nao aparece neles em caixa nenhuma.
  *
  * Por isso cada entrada declara, em `esconde`, as LINHAS que ela legitimamente
  * cala — e a rede assevera esse conjunto. Literal NOVO dentro de arquivo
@@ -136,7 +144,8 @@ const PASTAS = ["app", "components", "features", "lib", "services"];
  * dela. `Fixo`, `Ala`, `Ala Esquerda`, `Ala Direita` e `Pivo`/`Pivô` entram
  * pelo mesmo motivo: sao apelido de ENTRADA, nunca valor de coluna.
  *
- * MEDIDO em 2026-08-22, uma palavra por vez, sobre os 333 arquivos varridos: as
+ * MEDIDO em 2026-08-22, uma palavra por vez, sobre os 281 arquivos ESCANEADOS
+ * (dos 333 achados, 52 sao `.test.` e o laco os pula antes de ler): as
  * quatro canonicas acusam 15 linhas; as doze juntas acusam 17. As duas novas
  * sao as chaves CITADAS de `POSITION_ALIASES` (`"ala esquerda"` e
  * `"ala direita"`), que sao a propria fonte. Nenhuma das oito acusa um sitio
@@ -226,9 +235,12 @@ const LIBERADOS: Record<string, Liberado> = {
     motivo:
       "O ROTULO do POTE: POT_LABELS e o mapa proprio do pote, com cinco " +
       "entradas (os quatro codigos mais o EXT de quem nao foi vendido). Mapa " +
-      "separado de proposito — a 20260821020000 proibe unificar os dois " +
-      "vocabularios, porque um EXT dentro de POSITION_LABELS autorizaria " +
-      "gravar EXT em players.preferred_position.",
+      "separado, e nao POSITION_LABELS estendido, porque aquele e " +
+      "Record<CanonicalPosition, string>: um EXT ali dentro NAO COMPILA " +
+      "(TS2353, medido). Quem recusa EXT em players.preferred_position e a " +
+      "CHECK da 20260821010000. A 20260821020000 grita o INVERSO: nao tirar o " +
+      "EXT da CHECK do pote em nome da simetria, porque isso apaga o pote " +
+      "extra na proxima finalizacao.",
     esconde: [
       'ATA: "Atacante",',
       'GOL: "Goleiro",',
@@ -353,12 +365,22 @@ function mensagemDoLiberado(
     dentro.map((a) => `  ${a.linha}: ${a.codigo}`).join("\n") +
     "\n\nDeclarado em LIBERADOS.esconde:\n" +
     liberado.esconde.map((c) => `  ${c}`).join("\n") +
-    "\n\nArquivo liberado nao e arquivo invisivel. Se a linha nova for ROTULO " +
+    "\n\nArquivo liberado nao e arquivo invisivel, e as duas listas acima " +
+    "divergem nos DOIS sentidos.\n\n" +
+    "SOBROU no arquivo uma linha que ninguem declarou: se ela for ROTULO " +
     "legitimo, acrescente o codigo dela em `esconde`. Se for COMPARACAO, e o " +
     "bug que esta rede existe para pegar: o leitor nao lanca erro, so para de " +
-    "reconhecer a posicao, e nem o `tsc` acusa onde o `position` e `string`. " +
-    "Para COMPARAR, use CANONICAL_POSITIONS de @/features/players/position (ou " +
-    'o codigo direto, como `=== "GOL"`).'
+    "reconhecer a posicao, e nem o `tsc` acusa onde o `position` e `string`.\n\n" +
+    "SUMIU do arquivo uma linha que `esconde` declara: o rotulo foi apagado ou " +
+    "reescrito, e ai o conserto e tirar a linha de `esconde`. Declaracao que " +
+    "sobra compra silencio para codigo que nao existe mais.\n\n" +
+    "Para COMPARAR, use o codigo direto (`=== \"GOL\"`) ou " +
+    "normalizePositionGroup de @/features/players/position-group, que e o " +
+    "helper de goleiro-contra-linha. NAO use CANONICAL_POSITIONS: ela DECLARA " +
+    "o vocabulario e e tipada como os quatro literais, entao " +
+    "`.includes(algumaString)` nem compila (TS2345). Teste de pertinencia pede " +
+    "`new Set<string>(CANONICAL_POSITIONS)`, como em " +
+    "features/players/position-group.ts."
   );
 }
 
@@ -380,11 +402,11 @@ describe("nenhuma palavra de posicao sobrevive fora da fonte e do rotulo", () =>
         "(a leitura e relativa a `process.cwd()`).\n\n" +
         "Isto ja mordeu: o `git ls-files -- 'app/**/*.ts'` da primeira versao " +
         "devolvia 281 dos 332, porque o glob do git exige um `/` depois da " +
-        "pasta — TODO arquivo na raiz de `lib/`, `components/` e `services/` " +
-        "ficava de fora, inclusive `lib/calculateRadar.ts`, o unico defeito " +
-        "vivo, e `components/PenaltyShootoutControl.tsx`, o falso positivo que " +
-        "a rede foi desenhada para nao ter. Cinquenta e um arquivos invisiveis, " +
-        "e a rede verde.",
+        "pasta — TODO arquivo na RAIZ de uma das cinco pastas ficava de fora, " +
+        "inclusive `lib/calculateRadar.ts`, o unico defeito vivo, e " +
+        "`components/PenaltyShootoutControl.tsx`, o falso positivo que a rede " +
+        "foi desenhada para nao ter. Cinquenta e um arquivos invisiveis, e a " +
+        "rede verde.",
     ).toBeGreaterThan(300);
 
     const fora = achados
@@ -399,10 +421,19 @@ describe("nenhuma palavra de posicao sobrevive fora da fonte e do rotulo", () =>
       fora,
       "Literal de posicao POR EXTENSO fora da fonte e dos mapas de rotulo:\n\n" +
         fora.join("\n") +
-        "\n\nA coluna guarda CODIGO desde a 20260821010000. Para COMPARAR, use " +
-        "CANONICAL_POSITIONS de @/features/players/position (ou o codigo direto, " +
-        'como `=== "GOL"`). Para EXIBIR, use positionLabel de @/lib/public/types ' +
-        "— ou potLabel de @/features/draft/pot-position, se for pote.\n\n" +
+        "\n\nA coluna guarda CODIGO desde a 20260821010000.\n\n" +
+        'Para COMPARAR: o codigo direto (`=== "GOL"`); ou ' +
+        "normalizePositionGroup de @/features/players/position-group, se a " +
+        "pergunta for goleiro-contra-linha; ou normalizePreferredPosition de " +
+        "@/features/players/position, se o texto chegar de fora (planilha, " +
+        "formulario). NAO use CANONICAL_POSITIONS para comparar: ela DECLARA o " +
+        "vocabulario — e dela que saem os `<option>` dos formularios e o " +
+        "z.enum do schema — e e tipada como os quatro literais, entao " +
+        "`.includes(algumaString)` nem compila (TS2345). Teste de pertinencia " +
+        "pede `new Set<string>(CANONICAL_POSITIONS)`, e " +
+        "features/players/position-group.ts teve de fazer exatamente isso.\n\n" +
+        "Para EXIBIR, use positionLabel de @/lib/public/types — ou potLabel de " +
+        "@/features/draft/pot-position, se for pote.\n\n" +
         "Se o literal for ROTULO legitimo, acrescente o arquivo em LIBERADOS " +
         "COM O MOTIVO e com as linhas que ele esconde. Se for COMPARACAO, e o " +
         "bug: o leitor nao lanca erro, so para de reconhecer a posicao, e o A6 " +
