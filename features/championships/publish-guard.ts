@@ -29,7 +29,9 @@
  *
  *   max_players = 0, max_waitlist_players = 5
  *       {"success": true, "is_waitlist": true} — o campeonato INTEIRO vira
- *       fila de espera, ate a quinta pessoa; da sexta em diante, `full`.
+ *       fila de espera, ate a quinta pessoa. A sexta ouve `all_reserved`
+ *       enquanto as cinco forem RESERVAS vivas, e `full` so depois que elas
+ *       viram inscricao confirmada. Os dois desfechos medidos.
  *
  *   max_players = NULL
  *       {"success": true, "is_waitlist": false} — ilimitado. E o estado que o
@@ -41,14 +43,31 @@
  */
 
 /**
- * De todos os status, o unico em que o campeonato ACEITA inscricao.
+ * De todos os status, o unico em que uma inscricao NASCE.
  *
- * Nao e escolha desta guarda, e leitura de tres sitios que ja concordam: as duas
- * RPCs recusam com `not_open` quando `v_status <> 'subscribing'`, e
- * `registrationGate` so devolve `view: "wizard"` nesse mesmo status. `rest` e
- * `subscribed` aparecem publicamente — `getOpenRegistrationChampionship` lista
- * `rest`, e a pagina de inscricao tem tela para os dois —, mas nenhum dos dois
- * grava nada: no banco sao `not_open` como qualquer outro.
+ * A fronteira e a da RESERVA, e nao a do commit — e a diferenca e medida, nao
+ * teorica. `reserve_registration_slot` recusa com `not_open` sempre que
+ * `v_status <> 'subscribing'`, sem excecao. `commit_registration` NAO: ela so
+ * consulta o status dentro do `IF NOT v_had_reservation`, porque "a reserva e a
+ * autorizacao, nao o status" (o proprio comentario da funcao) — um campeonato
+ * que fecha por lotacao enquanto o jogador preenche nao pode recusa-lo no fim.
+ *
+ * MEDIDO em 2026-08-23, num BEGIN … ROLLBACK: reserva concedida sob
+ * `subscribing`, status virado para `rest`, commit chamado — a funcao devolveu
+ * {"success": true, "registration_id": …} e a inscricao FICOU GRAVADA. Sem a
+ * reserva viva, o mesmo commit sob `rest` devolveu `not_open`. Ou seja, sob
+ * `rest` quem fecha a porta e o SERVICO (`services/public-registration.ts`
+ * recusa fora de `subscribing` antes de chamar a RPC), e nao o banco.
+ *
+ * Isso nao afrouxa a fronteira desta guarda, aperta o argumento dela: como a
+ * reserva so e concedida sob `subscribing`, e so ela autoriza o commit, esse
+ * status e o unico ponto por onde uma inscricao pode entrar. Guardar a entrada
+ * cobre o que vem depois.
+ *
+ * `registrationGate` concorda do lado da tela: `view: "wizard"` so nesse status.
+ * `rest` e `subscribed` aparecem publicamente — `getOpenRegistrationChampionship`
+ * lista `rest`, e a pagina tem tela para os dois —, mas nenhum dos dois concede
+ * reserva.
  *
  * Recebe `string`, e nao `ChampionshipStatus`, porque a coluna e `text` e o que
  * chega aqui vem de `.select()`, sem passar por Zod. Tipar mais estreito
@@ -109,8 +128,11 @@ const BLOCKS: Record<PublishBlockReason, PublishBlock> = {
  *   E o inverso e o caso REAL. Medido em 2026-08-23: em staging a migration
  *   `20260820010000` ainda nao rodou, entao as cinco colunas do formato NAO
  *   EXISTEM la — e o unico campeonato em `subscribing` tem `max_players = 80` e
- *   funciona. Uma guarda que exigisse `teams_count` fecharia a inscricao aberta
- *   de staging no dia em que subisse.
+ *   funciona. Uma guarda que exigisse `teams_count` nao FECHARIA aquela
+ *   inscricao (esta guarda so roda em `changeChampionshipStatus`, e nao mexe em
+ *   quem ja esta aberto), mas impediria a REENTRADA em `subscribing` — e a
+ *   reentrada e rotina, nao borda: e o caminho de volta de quem pausou com
+ *   `rest` no sabado.
  *
  * As quatro DATAS ficam de fora, embora `refineChampionship` as exija para todo
  * status fora de `draft`. Elas nao quebram nada aqui: as duas RPCs tratam data

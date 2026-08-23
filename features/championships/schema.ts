@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { CHAMPIONSHIP_STATUS } from "@/types/championship";
 import { MAX_PIX_KEY, pixKeyFits } from "@/lib/pix";
+import { derivedCapacity } from "./capacity";
+import { opensRegistration, publishBlock } from "./publish-guard";
 
 export const championshipStatusSchema = z.enum(CHAMPIONSHIP_STATUS);
 
@@ -125,6 +127,49 @@ function refineChampionship(
           code: "custom",
           path: [field],
           message: "Obrigatório para campeonatos publicados",
+        });
+      }
+    }
+  }
+
+  // Preenchido nao basta: o formato tem de render VAGA.
+  //
+  // O laco acima recusa `undefined` e `null`, e ZERO nao e nenhum dos dois —
+  // `.min(0)` aceita, e `derivedCapacity` devolve `total: 0`, que `toRow` grava
+  // em `max_players`. MEDIDO: `{status: "subscribing", teams_count: 0,
+  // players_per_team: 10}` com as quatro datas passava o schema e virava linha
+  // `subscribing` com `max_players = 0`. Era o segundo caminho para o mesmo
+  // defeito que `publishBlock` guarda em `changeChampionshipStatus`, e por ele
+  // a guarda de la podia ser contornada sem sair da tela.
+  //
+  // So para `subscribing`, e nao para todo status fora de `draft`, porque a
+  // fronteira e a mesma que a guarda usa: e o unico status em que uma inscricao
+  // nasce. Estende-la aos outros travaria a edicao de campeonato `completed`
+  // legado e de rascunho meio preenchido, que nao tem inscricao a proteger.
+  //
+  // Pergunta pelo TOTAL derivado, e nao por cada campo, porque quem decide e a
+  // formula inteira: 3000 times de 800000 jogadores da dois campos positivos e
+  // um produto que estoura int4, e `boundedInt` o devolve como 0. Checar campo a
+  // campo deixaria esse passar.
+  if (opensRegistration(data.status)) {
+    const total = derivedCapacity({
+      teamsCount: data.teams_count ?? 0,
+      playersPerTeam: data.players_per_team ?? 0,
+      goalkeepersPerTeam: data.goalkeepers_per_team,
+      waitlistGoalkeepers: data.waitlist_goalkeepers,
+      waitlistOutfield: data.waitlist_outfield,
+    }).total;
+
+    if (publishBlock({ max_players: total })) {
+      // Nos DOIS campos: o produto e de ambos, e destacar so um mandaria o admin
+      // procurar o erro no lugar errado metade das vezes. Quando o campo esta
+      // vazio, a mensagem de obrigatorio acima ja ocupou o caminho — o mapa de
+      // `zodToFieldErrors` guarda a primeira, e "obrigatorio" e a mais util.
+      for (const field of ["teams_count", "players_per_team"] as const) {
+        ctx.addIssue({
+          code: "custom",
+          path: [field],
+          message: "Times × jogadores por time precisa dar pelo menos uma vaga",
         });
       }
     }

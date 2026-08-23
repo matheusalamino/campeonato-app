@@ -280,3 +280,86 @@ describe("championshipFormSchema: a capacidade vem do formato", () => {
     expect(caminhos).not.toContain("max_players");
   });
 });
+
+describe("championshipFormSchema: formato preenchido tem de render vaga", () => {
+  const datas = {
+    registration_start_date: "2026-02-01",
+    registration_end_date: "2026-03-01",
+    gala_night_date: "2026-03-10",
+    tournament_start_date: "2026-04-01",
+  };
+
+  it("recusa `subscribing` com formato ZERADO — o segundo caminho para o mesmo defeito", () => {
+    // MEDIDO antes desta regra existir: este payload PASSAVA, `toRow` gravava
+    // `max_players: 0`, e a RPC devolvia `full` para toda inscricao. A guarda de
+    // `changeChampionshipStatus` podia ser contornada sem sair da tela — bastava
+    // criar ou salvar o campeonato ja em `subscribing`.
+    const r = createChampionshipSchema.safeParse({
+      name: "Copa",
+      status: "subscribing",
+      ...datas,
+      teams_count: 0,
+      players_per_team: 10,
+    });
+    expect(r.success).toBe(false);
+    if (r.success) return;
+
+    const caminhos = r.error.issues.map((i) => i.path.join("."));
+    // Nos DOIS campos: o produto e de ambos.
+    expect(caminhos).toContain("teams_count");
+    expect(caminhos).toContain("players_per_team");
+  });
+
+  it("recusa o produto que ESTOURA int4, com os dois campos positivos", () => {
+    // 3000 x 800000 da 2,4 bilhoes: finito, inteiro e positivo, e maior que
+    // int4 — `boundedInt` o devolve como 0. Checar campo a campo em vez do total
+    // derivado deixaria exatamente este passar.
+    const r = createChampionshipSchema.safeParse({
+      name: "Copa",
+      status: "subscribing",
+      ...datas,
+      teams_count: 3000,
+      players_per_team: 800000,
+    });
+    expect(r.success).toBe(false);
+    if (r.success) return;
+    expect(r.error.issues.map((i) => i.path.join("."))).toContain("teams_count");
+  });
+
+  it("aceita `subscribing` com uma vaga — a guarda mede vaga, nao vaga bastante", () => {
+    const r = createChampionshipSchema.safeParse({
+      name: "Copa",
+      status: "subscribing",
+      ...datas,
+      teams_count: 1,
+      players_per_team: 1,
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("NAO alcanca os outros status: `completed` legado com formato zerado ainda salva", () => {
+    // A fronteira e a mesma da guarda — so `subscribing`. Estende-la travaria a
+    // edicao de campeonato antigo, que nao tem inscricao a proteger e cujo
+    // formato ninguem nunca preencheu.
+    for (const status of ["active", "subscribed", "in_progress", "completed", "rest"]) {
+      const r = createChampionshipSchema.safeParse({
+        name: "Copa",
+        status,
+        ...datas,
+        teams_count: 0,
+        players_per_team: 0,
+      });
+      expect(r.success, `status ${status} deveria salvar`).toBe(true);
+    }
+  });
+
+  it("NAO alcanca rascunho meio preenchido", () => {
+    const r = createChampionshipSchema.safeParse({
+      name: "Copa",
+      status: "draft",
+      teams_count: 0,
+      players_per_team: 0,
+    });
+    expect(r.success).toBe(true);
+  });
+});

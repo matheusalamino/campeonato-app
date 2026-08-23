@@ -18,6 +18,39 @@ import { opensRegistration, publishBlock } from "./publish-guard";
 const ACTIONS = join(process.cwd(), "app/(protected)/championships/actions.ts");
 const actions = semComentario(readFileSync(ACTIONS, "utf8"));
 
+/**
+ * O mesmo texto com todo espaco em branco colapsado num espaco so.
+ *
+ * Assertiva de padrao casa AQUI; assertiva de posicao casa no `actions` cru, que
+ * e onde as chaves ainda estao onde o autor as pos. Sem esta copia, uma quebra
+ * de linha do Prettier fica vermelha — ja aconteceu oito vezes neste repo.
+ */
+const actionsPlano = actions.replace(/\s+/g, " ");
+
+const INICIO = actions.indexOf("export async function changeChampionshipStatus");
+const GUARDA = actions.indexOf("opensRegistration(to)", INICIO);
+const GRAVACAO = actions.indexOf(".update(updatePayload)", INICIO);
+
+/** Quantas chaves seguem ABERTAS em `fonte` no ponto `ate`. */
+function profundidade(fonte: string, ate: number): number {
+  const trecho = fonte.slice(0, ate);
+  return (trecho.match(/\{/g) ?? []).length - (trecho.match(/\}/g) ?? []).length;
+}
+
+/** A MENOR profundidade alcancada entre dois pontos — zero se `de` >= `ate`. */
+function profundidadeMinima(fonte: string, de: number, ate: number): number {
+  let atual = profundidade(fonte, de);
+  let minima = atual;
+  for (const ch of fonte.slice(de, ate)) {
+    if (ch === "{") atual += 1;
+    else if (ch === "}") {
+      atual -= 1;
+      if (atual < minima) minima = atual;
+    }
+  }
+  return minima;
+}
+
 describe("qual status abre inscricao", () => {
   it("e `subscribing`, e so ele", () => {
     expect(opensRegistration("subscribing")).toBe(true);
@@ -32,10 +65,17 @@ describe("qual status abre inscricao", () => {
     }
   });
 
-  it("`rest` e `subscribed` aparecem publicamente, mas nao abrem inscricao", () => {
+  it("`rest` e `subscribed` aparecem publicamente, mas nao concedem reserva", () => {
     // Os dois tem tela propria na pagina de inscricao e `rest` ainda entra no
-    // link do topo da landing (getOpenRegistrationChampionship). Nada disso
-    // grava: as duas RPCs recusam com not_open fora de `subscribing`.
+    // link do topo da landing (getOpenRegistrationChampionship). Nenhum dos dois
+    // concede RESERVA: `reserve_registration_slot` recusa com not_open fora de
+    // `subscribing`, sem excecao.
+    //
+    // O que NAO se pode dizer aqui — e a versao anterior deste comentario dizia
+    // — e que "as duas RPCs recusam". `commit_registration` nao recusa: ela so
+    // olha o status quando NAO ha reserva viva. Medido em 2026-08-23, reserva
+    // concedida sob `subscribing` e status virado para `rest`, o commit GRAVOU.
+    // A fronteira que vale e a da reserva, e e nela que `opensRegistration` esta.
     expect(opensRegistration("rest")).toBe(false);
     expect(opensRegistration("subscribed")).toBe(false);
   });
@@ -85,8 +125,10 @@ describe("o que impede a linha de abrir inscricao", () => {
   it("as duas linhas REAIS medidas em 2026-08-23 passam", () => {
     // Staging: a migration 20260820010000 nao rodou la, entao nenhuma das cinco
     // colunas de formato existe — e o unico campeonato em `subscribing` tem
-    // `max_players = 80` e funciona. Uma guarda que exigisse `teams_count`
-    // fecharia aquela inscricao no dia em que subisse.
+    // `max_players = 80` e funciona. Uma guarda que exigisse `teams_count` nao
+    // fecharia aquela inscricao (esta guarda so roda em
+    // `changeChampionshipStatus`), mas impediria a REENTRADA em `subscribing`,
+    // que e o caminho de volta de quem pausou com `rest` no sabado.
     const staging = {
       max_players: 80,
       max_waitlist_players: 5,
@@ -136,11 +178,45 @@ describe("a fiacao da guarda no action de status", () => {
   });
 
   it("consulta a guarda ANTES de gravar o status", () => {
-    const guarda = actions.indexOf("opensRegistration(to)");
-    const gravacao = actions.indexOf(".update(updatePayload)");
-    expect(guarda).toBeGreaterThan(-1);
-    expect(gravacao).toBeGreaterThan(-1);
-    expect(guarda).toBeLessThan(gravacao);
+    expect(GUARDA).toBeGreaterThan(-1);
+    expect(GRAVACAO).toBeGreaterThan(-1);
+    expect(GUARDA).toBeLessThan(GRAVACAO);
+  });
+
+  it("a guarda e ALCANCAVEL: mora no mesmo bloco que a gravacao que ela protege", () => {
+    // A assertiva que faltava, e a mais importante deste arquivo. As tres de
+    // texto acima casam as mesmas strings, na mesma ordem, mesmo com a guarda
+    // ANINHADA dentro de outro `if` — e aninhada ela roda para um subconjunto
+    // das linhas em vez de para todas. Duas mutacoes reais passaram com 540
+    // verdes, `tsc` limpo e lint 119:
+    //
+    //   por o bloco inteiro dentro do `if (current && !current.slug)`
+    //       A guarda passa a valer so para linha SEM slug. O seed local
+    //       (copa-local-de-desenvolvimento-2026) e o campeonato aberto de
+    //       staging (champions-league-sorocaba-2026) TEM slug: ela fica morta
+    //       exatamente nas duas linhas que existem no mundo.
+    //
+    //   por `if (from === "draft")` em volta
+    //       So publicar a partir de rascunho passa a ser checado. Voltar de
+    //       `rest` para `subscribing` — a reentrada de todo sabado — deixa de
+    //       ser.
+    //
+    // O que prende as duas e a PROFUNDIDADE de chaves, e nao a indentacao:
+    // reindentar o arquivo inteiro nao pode ficar vermelho. Aninhar em qualquer
+    // `if` novo soma uma chave aberta, e a igualdade abaixo quebra.
+    expect(profundidade(actions, GUARDA)).toBe(profundidade(actions, GRAVACAO));
+
+    // E a igualdade sozinha nao basta: dois blocos IRMAOS tem a mesma
+    // profundidade. Se a guarda estivesse num bloco que FECHA antes da
+    // gravacao, a profundidade mergulharia entre os dois pontos.
+    expect(profundidadeMinima(actions, GUARDA, GRAVACAO)).toBe(profundidade(actions, GUARDA));
+
+    // Nao ha uma terceira assertiva sobre `return` plantado entre a leitura e a
+    // guarda, e a ausencia e deliberada. Num mesmo bloco os comandos rodam em
+    // ordem, entao a unica forma de pular a guarda e sair da funcao — e sair da
+    // funcao pula a GRAVACAO junto. Proibir `return` ali so criaria vermelho
+    // para um `if (!current) return …` legitimo, que e o nono falso vermelho
+    // esperando para acontecer.
   });
 
   it("recusa devolvendo a mensagem do bloqueio, e nao uma frase escrita no action", () => {
@@ -158,14 +234,34 @@ describe("a fiacao da guarda no action de status", () => {
     //       Guarda a ORIGEM em vez do alvo: sair de `subscribing` passa a ser
     //       checado, e ENTRAR nele deixa de ser. O defeito volta inteiro, com
     //       de quebra um campeonato lotado que nao consegue mais ser fechado.
-    const [, nome] = achado(
-      actions,
-      /const (\w+)\s*=\s*publishBlock\(\s*current\s*\)/,
+    //
+    // Casa contra `actionsPlano`, e nao contra o arquivo cru. As duas versoes
+    // anteriores destas assertivas prendiam FORMATACAO: quebrar a condicao do
+    // `if` em tres linhas ficava vermelho, e `if (block) { return …; }` — mesmo
+    // comportamento, e o estilo que o proprio arquivo usa duas linhas acima —
+    // tambem. Foram o setimo e o oitavo falso vermelho deste repo, e o custo
+    // deles nao e o vermelho: e o proximo mandando cacar um bug que nao existe.
+    const [, nome] = achado(actionsPlano, /const (\w+) = current \? publishBlock\(current\) : null;/);
+
+    // `\{? ?` tolera as duas formas do corpo do `if`, com e sem chave.
+    expect(actionsPlano).toMatch(
+      new RegExp(`if \\(${nome}\\) \\{? ?return \\{ ok: false, error: ${nome}\\.message \\};`),
     );
-    expect(actions).toMatch(
-      new RegExp(`if \\(${nome}\\) return \\{ ok: false, error: ${nome}\\.message \\};`),
+    expect(actionsPlano).toMatch(/if \( ?opensRegistration\(to\) ?\)/);
+  });
+
+  it("leitura que FALHA nao deixa a transicao passar", () => {
+    // Antes o `error` do `.select()` era descartado: `current` vinha `null`, a
+    // guarda era pulada e o UPDATE — query independente — casava e gravava.
+    // Fail-open na unica transicao onde falhar aberto custa caro.
+    const [, erro] = achado(
+      actionsPlano,
+      /const \{ data: current, error: (\w+) \} = await supabase/,
     );
-    expect(actions).toMatch(/if \(current && opensRegistration\(to\)\)/);
+    const checagem = actionsPlano.indexOf(`if (${erro})`);
+    const chamada = actionsPlano.indexOf("publishBlock(current)");
+    expect(checagem).toBeGreaterThan(-1);
+    expect(checagem).toBeLessThan(chamada);
   });
 });
 
