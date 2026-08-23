@@ -375,6 +375,59 @@ describe("a fiacao do balde da reserva", () => {
     }
   });
 
+  it("o balde de cada chamada vem da FONTE certa, e nunca do estado do form", () => {
+    // O teste acima aceita qualquer variavel no terceiro argumento, e essa
+    // folga tem um buraco MEDIDO: trocar a fonte da variavel por
+    // `form.preferred_position` deixa o `tsc` limpo e a suite inteira verde.
+    //
+    // As duas trocas, e o que cada uma custa:
+    //
+    //   na criacao      ->  `form` so recebe o `setForm` no PROXIMO render, e as
+    //                       duas criacoes acontecem antes dele: a do CPF depois
+    //                       do preenchimento automatico (o goleiro reconhecido
+    //                       pelo banco iria para o balde de linha) e a da troca
+    //                       com o valor ANTERIOR do select (o goleiro reservaria
+    //                       como linha, e a linha como goleiro).
+    //   na renovacao    ->  o efeito so enxerga o render que o criou, entao o
+    //                       balde congela: a batida renova no balde velho, a RPC
+    //                       RECONTA, e quem ja tinha vaga leva recusa. O unico
+    //                       sinal disso hoje e um warning de deps do eslint — e
+    //                       calar o warning pondo `form.preferred_position` nas
+    //                       deps devolve os 119 do lint com o defeito de pe.
+    //
+    // Por isso a fonte, e nao o argumento: cada chamada e resolvida ate a
+    // declaracao mais proxima ACIMA dela. Os nomes sao lidos do arquivo — nem o
+    // da variavel, nem o da ref, estao escritos aqui.
+    const chamadas = [...wizard.matchAll(/reserveSlotAction\((?:[^()]|\([^()]*\))*\)/g)];
+    expect(chamadas).toHaveLength(4);
+
+    const fontes = chamadas.map((chamada) => {
+      const argumentos = chamada[0]
+        .slice("reserveSlotAction(".length, -1)
+        .split(",")
+        .map((a) => a.trim())
+        .filter(Boolean);
+      // Uma variavel simples, e nao uma expressao: e o que torna a resolucao
+      // abaixo possivel, e o teste acima ja recusa o literal.
+      expect(argumentos[2]).toMatch(/^\w+$/);
+      const declaracoes = [
+        ...wizard.matchAll(new RegExp(`const ${argumentos[2]}\\s*=\\s*([^;]+);`, "g")),
+      ].filter((d) => d.index < chamada.index);
+      // Sentinela: sem declaracao acima, `fonte` viria vazia e todo o resto
+      // deste `it` passaria medindo o nada.
+      expect(declaracoes.length).toBeGreaterThan(0);
+      return declaracoes[declaracoes.length - 1][1].trim();
+    });
+
+    // NENHUMA das quatro le o estado do formulario.
+    for (const fonte of fontes) expect(fonte).not.toMatch(/\bform\./);
+
+    // E DUAS delas — as renovacoes — leem uma ref no ponto de uso. Preso pela
+    // contagem: uma criacao que passasse a ler a ref renovaria o balde velho
+    // em vez do que o jogador acabou de escolher, e daria tres.
+    expect(fontes.filter((fonte) => /\.current\b/.test(fonte))).toHaveLength(2);
+  });
+
   it("o balde nasce do canonico, e nao da palavra crua do formulario", () => {
     // O select do passo 1 grava a palavra que o jogador escolheu, mas o
     // preenchimento automatico do CPF grava o que estiver no BANCO, e o CSV do
