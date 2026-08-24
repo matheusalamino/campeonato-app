@@ -166,12 +166,20 @@ describe("registrationCommittedEmail", () => {
     ];
 
     for (const caso of casos) {
-      for (const corpo of corpos(registrationCommittedEmail(caso))) {
+      const m = registrationCommittedEmail(caso);
+      for (const corpo of corpos(m)) {
         expect(corpo).not.toContain("{{");
         expect(corpo).not.toContain("}}");
         expect(corpo).not.toContain("undefined");
         expect(corpo).not.toContain("[nome]");
       }
+      // O espaco duplo entra AQUI, e nao so no teste do nome faltando, porque
+      // ali so o `playerName` e nulo -- um buraco alimentado pelo
+      // `championshipName` escapava. MEDIDO: com a checagem so la, um
+      // `${data.championshipName ?? ""}` no meio de uma frase passava os 807
+      // testes. Esta lista cobre os dois nulos, juntos e separados.
+      expect(m.subject, `assunto com espaco duplo em ${JSON.stringify(caso)}`).not.toMatch(/ {2}/);
+      expect(m.text, `texto com espaco duplo em ${JSON.stringify(caso)}`).not.toMatch(/ {2}/);
     }
   });
 
