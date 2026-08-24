@@ -42,9 +42,19 @@ import { renderEmail, type EmailRenderer } from "@/features/email/render";
  * `vitest.config.ts`.
  *
  * E a mesma armadilha da allowlist do `toRow` no admin, e a rede contra ela nao
- * mora aqui: e o cenario "o dreno le as seis colunas pelo caminho do PostgREST"
- * em `scripts/test-email-outbox.sh`, que faz esta MESMA leitura contra o banco
- * de verdade e confere que as seis voltam preenchidas.
+ * mora aqui. Sao DUAS, e uma sozinha nao bastava:
+ *
+ *  1. `scripts/test-email-outbox.sh`, cenario "as seis colunas do resumo voltam
+ *     preenchidas pelo PostgREST": faz esta MESMA leitura contra o banco de
+ *     verdade -- PostgREST, chave do service_role, o mesmo embed aninhado -- e
+ *     confere que as seis voltam. MEDIDO: tirando `is_waitlist` de la, o
+ *     cenario fica vermelho (`sim|nao|sim|sim|sim|sim`).
+ *  2. `features/email/service-wiring.test.ts`: le ESTE arquivo e AQUELE script
+ *     como texto e confere que os dois pedem a mesma lista. Sem ela, o `select`
+ *     do script era uma COPIA que ninguem conferia -- coluna acrescentada so
+ *     aqui ficaria sem prova nenhuma, com o script verde provando as seis
+ *     velhas. MEDIDO: tirando `is_waitlist` da linha de baixo, `tsc --noEmit`
+ *     fica em ZERO e a suite inteira acende UMA assertiva, a dela.
  */
 type LinhaResumo = {
   id: string;
@@ -131,8 +141,8 @@ export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore
           // que este `??` cobre e a coluna nao ter vindo no `select` -- caso em
           // que tratar como "nao e espera" e o menos errado dos dois, porque o
           // comprovante de vaga garantida e o que a maioria esmagadora das
-          // linhas de fato e. O que NAO deixa isso virar silencio e a assertiva
-          // do PostgREST no scripts/test-email-outbox.sh.
+          // linhas de fato e. O que NAO deixa isso virar silencio sao as duas
+          // redes nomeadas no docblock de `LinhaResumo`, aqui em cima.
           isWaitlist: linha.is_waitlist ?? false,
           preferredPosition: linha.players?.preferred_position ?? null,
         });

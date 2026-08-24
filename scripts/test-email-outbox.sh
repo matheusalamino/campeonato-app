@@ -693,6 +693,81 @@ checar "o contact_email do jsonb chegou na coluna" "digitado" \
 checar "e a inscricao vinda da RPC tambem enfileirou as duas" "2" \
   "$($DB -c "SELECT count(*) FROM email_outbox WHERE dedupe_key='$reg_rpc';")"
 
+echo "== o dreno le as SEIS colunas do resumo pelo caminho do PostgREST =="
+# A rede contra a armadilha do `select` de services/email-outbox.ts.
+#
+# Ela existe porque NENHUM teste do vitest pega uma coluna faltando la, e isso
+# foi MEDIDO, nao suposto: a suite do dreno usa store falso; a string de
+# `select` do cliente do Supabase nao passa por typecheck nenhum; e
+# `services/**` nem sequer e coletado pelo `vitest.config.ts` -- um
+# `services/*.test.ts` afirmando `expect(1).toBe(2)` deixa a suite verde.
+#
+# Tirar `is_waitlist` daquela string deixa `npx tsc --noEmit` em zero, deixa a
+# suite inteira verde, e faz TODO comprovante de lista de espera sair dizendo
+# "sua inscricao esta confirmada". E a mesma armadilha da allowlist do `toRow`
+# no admin, e o antidoto e o mesmo: ler pelo caminho DE VERDADE -- PostgREST,
+# chave do service_role, o mesmo embed aninhado, a mesma lista de colunas.
+#
+# A MUTACAO que a prende: tire uma coluna do `select` daqui, e o cenario tem de
+# ficar VERMELHO. Se ficar verde sem a coluna, a prova nao e prova.
+#
+# As duas gravacoes abaixo existem porque as fixturas nascem com
+# `preferred_position` nulo e `is_waitlist` falso -- e valor AUSENTE nao
+# distingue "a coluna nao veio" de "a coluna veio vazia". Com `true` e `'ATA'`
+# na mesa, a ausencia da coluna vira ausencia do trecho procurado.
+$DB -c "
+  UPDATE players SET preferred_position = 'ATA' WHERE cpf = '$CPF_T2';
+  UPDATE championship_registrations SET is_waitlist = true WHERE id = '$reg_rpc';
+" > /dev/null
+# UPDATE, e nao INSERT, tambem de proposito: o gatilho e AFTER INSERT (medido em
+# `\d championship_registrations`), entao isto nao acrescenta linha a fila e as
+# contagens dos cenarios de baixo continuam valendo.
+
+SELECT_DRENO="id,is_waitlist,contact_email,championships(name),players(email,name,preferred_position)"
+resumo=$(curl -s "$API_URL/rest/v1/championship_registrations?id=eq.$reg_rpc&select=$SELECT_DRENO" \
+  -H "apikey: $SRK" -H "Authorization: Bearer $SRK")
+
+# MEDIDO, e as duas surpresas custam uma leitura ingenua: o PostgREST devolve o
+# nivel de cima SEM espaco depois dos dois-pontos (`"is_waitlist":false`) e os
+# objetos ANINHADOS COM espaco (`{"name": "Copa"}`); e a ordem das chaves dentro
+# do aninhado NAO segue a do `select` (pedindo `email,name,preferred_position`
+# volta `name,email,preferred_position`). Entao a resposta e normalizada aqui, e
+# cada coluna e procurada sozinha, sem depender de vizinhanca nem de ordem.
+#
+# Here-doc, e nao `| sed`: pipe de saida ja truncou medicao neste ambiente.
+compacto=$(sed 's/": /":/g' <<JSON
+$resumo
+JSON
+)
+
+# Sem `grep`: `grep -c` ja devolveu 0 para arquivo com quatro ocorrencias neste
+# repo, e `grep | wc -l` mente. O casamento de padrao do proprio sh nao passa
+# por nenhum dos dois.
+tem() {
+  # $1 = trecho procurado, $2 = resposta ja normalizada.
+  case "$2" in
+    *"$1"*) echo "sim" ;;
+    *)      echo "nao" ;;
+  esac
+}
+
+checar "as seis colunas do resumo voltam preenchidas pelo PostgREST" \
+  "sim|sim|sim|sim|sim|sim" \
+  "$(tem "\"id\":\"$reg_rpc\"" "$compacto")|$(tem '"is_waitlist":true' "$compacto")|$(tem "\"contact_email\":\"$EMAIL_T\"" "$compacto")|$(tem '"name":"Teste fila C1"' "$compacto")|$(tem "\"email\":\"$EMAIL_CADASTRO\"" "$compacto")|$(tem '"preferred_position":"ATA"' "$compacto")"
+
+# O controle da assertiva de cima: sem ele, "sim" seis vezes tambem sairia de
+# uma resposta que o `tem` estivesse lendo errado. Este par prova que o `tem`
+# DISTINGUE -- procurando um valor que o banco nao tem, ele responde "nao".
+checar "e a leitura distingue: o que nao esta la volta como ausente" "nao|nao" \
+  "$(tem '"is_waitlist":false' "$compacto")|$(tem '"preferred_position":"GOL"' "$compacto")"
+
+# A posicao chega ao dreno como CODIGO, e nao como palavra. Quem traduz e
+# `positionLabel`, no template do aviso da organizacao -- ha assertiva la. Se
+# esta linha um dia virar "Atacante", o vocabulario da coluna voltou atras e o
+# A8 desandou.
+checar "a posicao vem CRUA, como codigo" "ATA" \
+  "$($DB -c "SELECT preferred_position FROM players WHERE cpf='$CPF_T2';")"
+
 echo "== a mesma inscricao entrando de novo nao duplica a fila =="
 # O caso real e o restore: a inscricao volta com o MESMO id, o gatilho dispara
 # de novo, e as linhas de fila dela nunca sairam -- nao ha FK entre as duas
