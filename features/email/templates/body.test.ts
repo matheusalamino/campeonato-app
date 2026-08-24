@@ -50,10 +50,19 @@ describe("assuntoCom", () => {
 });
 
 describe("corpoDe", () => {
+  // As assertivas de HTML aqui sao FROUXAS em espaco e em aspas de atributo, e
+  // isso e deliberado: reindentar a marcacao e trocar `"` por `'` num atributo
+  // nao muda o que o leitor ve. MEDIDO -- com `toContain` da cadeia exata, a
+  // mutacao no-op de reindentacao (a que existe para provar que estas
+  // assertivas mordem COMPORTAMENTO, e nao formatacao) reprovava este arquivo.
+  // Falso vermelho e o que desliga uma rede.
+  //
+  // O que elas NAO afrouxam e a ORDEM e a ESTRUTURA: um paragrafo por entrada,
+  // na ordem da lista, e a ancora com a URL por extenso dentro.
   it("monta os dois corpos a partir da mesma lista", () => {
     const { html, text } = corpoDe([{ texto: "um" }, { texto: "dois" }]);
 
-    expect(html).toContain("<p>um</p><p>dois</p>");
+    expect(html).toMatch(/<p>\s*um\s*<\/p>\s*<p>\s*dois\s*<\/p>/);
     expect(text).toBe("um\n\ndois");
   });
 
@@ -62,7 +71,9 @@ describe("corpoDe", () => {
     // la nao ha ancora, so o que estiver escrito.
     const { html, text } = corpoDe([{ texto: "veja:", link: "https://x.test/a" }]);
 
-    expect(html).toContain('<a href="https://x.test/a">https://x.test/a</a>');
+    expect(html).toMatch(
+      /<a href=["']https:\/\/x\.test\/a["']>\s*https:\/\/x\.test\/a\s*<\/a>/,
+    );
     expect(text).toBe("veja:\nhttps://x.test/a");
   });
 
