@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireRow } from "@/lib/supabase/require-row";
 import type { GroupOption } from "@/types/championship";
 import RegistrationWizard from "./RegistrationWizard";
 import RestOverlay from "./RestOverlay";
@@ -61,7 +62,7 @@ export default async function InscreverPage({ params }: { params: Promise<{ slug
   // A janela de sabado nao depende do campeonato, entao as duas consultas vao
   // juntas. Esta pagina e `force-dynamic`: o RTT economizado e em todo
   // carregamento, e nao uma vez so.
-  const [{ data: champ }, sabbathWindow] = await Promise.all([
+  const [champResult, sabbathWindow] = await Promise.all([
     supabase
       .from("championships")
       .select("id, name, slug, status, max_players, max_waitlist_players, base_price, extra_ticket_price, registration_group_options, registration_image_url, pix_key, pix_merchant_name, pix_merchant_city, max_extra_tickets, registration_start_date, registration_end_date")
@@ -70,6 +71,14 @@ export default async function InscreverPage({ params }: { params: Promise<{ slug
       .maybeSingle(),
     getSabbathWindow(now),
   ]);
+
+  // `requireRow` e nao `champResult.data`: a consulta que falha tambem devolve
+  // `data: null`, e le-la direto faria a falha se passar por slug inexistente.
+  //
+  // O resultado sai INTEIRO do Promise.all (`champResult`, e nao
+  // `{ data: champ }`) justamente para o `error` chegar aqui: desestruturar o
+  // `data` na linha do await descartaria o erro antes de qualquer um poder olhar.
+  const champ = requireRow(champResult, "campeonato");
 
   if (!champ) notFound();
 
