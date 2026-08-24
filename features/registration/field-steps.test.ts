@@ -1,5 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { stepOfField, errorsForStep, firstStepWithError, stepNumber } from "./field-steps";
+import { FIELD_STEP, stepOfField, errorsForStep, firstStepWithError, stepNumber } from "./field-steps";
+
+describe("FIELD_STEP", () => {
+  it("pede a posicao NO MESMO passo do CPF", () => {
+    // A reserva da vaga dispara ao sair do passo do CPF, e ela manda o BALDE
+    // junto — goleiro ou linha. Se a posicao for perguntada num passo posterior,
+    // toda reserva nasce no balde de linha e o goleiro alem da cota so descobre
+    // a recusa no envio, com o PIX ja pago. E o dano que o A4 gastou duas PRs
+    // prevenindo.
+    //
+    // Compara com o passo do CPF em vez de fixar `1`: o dia em que um passo
+    // novo entrar na frente, o que precisa continuar valendo e que os dois
+    // estao JUNTOS — nao que o numero seja um.
+    expect(FIELD_STEP.preferred_position).toBe(FIELD_STEP.cpf);
+  });
+});
 
 describe("stepOfField", () => {
   it("mapeia cada campo ao passo em que ele aparece", () => {

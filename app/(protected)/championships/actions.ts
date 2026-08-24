@@ -9,6 +9,7 @@ import {
   statusChangeSchema,
 } from "@/features/championships/schema";
 import { toRow } from "@/features/championships/row";
+import { opensRegistration, publishBlock } from "@/features/championships/publish-guard";
 import { reconcileChampionshipCapacity } from "@/services/championship-capacity";
 import { slugify } from "@/lib/slug";
 
@@ -97,11 +98,46 @@ export async function changeChampionshipStatus(input: unknown): Promise<ActionRe
     // or resolve at /inscrever/[slug]. Only sets it when missing — never rewrites
     // an existing slug, so shared links stay stable.
     const updatePayload: { status: string; slug?: string } = { status: to };
-    const { data: current } = await supabase
+    const { data: current, error: readError } = await supabase
       .from("championships")
-      .select("name, season, slug")
+      .select("name, season, slug, max_players")
       .eq("id", id)
       .maybeSingle();
+
+    // A guarda de publicacao: validar A LINHA, e nao so a transicao.
+    //
+    // `statusChangeSchema` confere id/de/para e mais nada, e este action grava
+    // `{status}` sem passar por `championshipFormSchema` nem por `toRow` — ou
+    // seja, o menu de status passa ao lado da exigencia de formato que o A6 pos
+    // no formulario. Sem isto, uma linha sem capacidade chega a `subscribing` e
+    // a RPC recusa TODA inscricao dizendo que as vagas esgotaram.
+    //
+    // Precisa ficar no CORPO da funcao, e nao dentro de outro `if`: o UPDATE
+    // abaixo e alcancado por toda transicao, entao a guarda tem de ser tambem.
+    // Aninha-la — no bloco do slug logo abaixo, por exemplo — a mataria para
+    // toda linha que ja tem slug, que sao as unicas que existem hoje.
+    //
+    // Os dois desfechos da leitura, que NAO sao o mesmo:
+    //
+    //   `readError` e falha de leitura. Sem a linha nao da para afirmar que ha
+    //   vaga, e numa transicao que ABRE inscricao a direcao segura e recusar.
+    //   Antes o erro era descartado: `current` vinha `null`, a guarda era pulada
+    //   e o UPDATE — query independente — casava e gravava assim mesmo.
+    //
+    //   `current` nulo sem erro e linha ausente (inexistente ou apagada), e ai
+    //   nao ha problema de capacidade a relatar: o UPDATE nao casa nada e quem
+    //   responde e a mensagem de status desatualizado, que e a certa.
+    if (opensRegistration(to)) {
+      if (readError) {
+        return {
+          ok: false,
+          error: "Não foi possível ler o campeonato para abrir as inscrições. Tente novamente.",
+        };
+      }
+      const block = current ? publishBlock(current) : null;
+      if (block) return { ok: false, error: block.message };
+    }
+
     if (current && !current.slug) {
       updatePayload.slug = slugify(
         current.season ? `${current.name}-${current.season}` : current.name,

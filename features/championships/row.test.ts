@@ -5,6 +5,9 @@ import { toRow } from "./row";
 // Amostra completa: um valor por campo do schema do formulario, usada para
 // verificar que toRow() liga cada chave ao valor correto (nao so a presenca
 // da chave).
+//
+// `max_players` e `max_waitlist_players` nao estao aqui porque nao sao mais
+// entrada: toRow() os deriva do formato. Eles aparecem so no row esperado.
 const sampleValues = {
   name: "Copa Interna",
   season: "2026",
@@ -13,9 +16,12 @@ const sampleValues = {
   registration_end_date: new Date("2026-03-01"),
   gala_night_date: new Date("2026-03-10"),
   tournament_start_date: new Date("2026-04-01"),
-  max_players: 20,
-  max_waitlist_players: 5,
   max_extra_tickets: 4,
+  teams_count: 4,
+  players_per_team: 5,
+  goalkeepers_per_team: 1,
+  waitlist_goalkeepers: 2,
+  waitlist_outfield: 3,
   status: "active",
   registration_image_url: "https://example.com/img.png",
   base_price: 50,
@@ -37,6 +43,10 @@ const expectedRow = {
   registration_end_date: sampleValues.registration_end_date.toISOString(),
   gala_night_date: sampleValues.gala_night_date.toISOString(),
   tournament_start_date: sampleValues.tournament_start_date.toISOString(),
+  // As duas colunas que o fixture nao tem porque nao se digita: 4 times de 5
+  // dao 20 vagas, e a fila de 2 + 3 da 5.
+  max_players: 20,
+  max_waitlist_players: 5,
 };
 
 describe("toRow", () => {
@@ -66,5 +76,60 @@ describe("toRow", () => {
   it("liga cada chave ao valor correto, nao so verifica presenca", () => {
     const row = toRow(sampleValues);
     expect(row).toEqual(expectedRow);
+  });
+});
+
+// O formato de 2026, ja depois do Zod: 8 times de 10, 1 goleiro por time, e uma
+// fila de 1 goleiro + 4 de linha.
+//
+// `max_players` e `max_waitlist_players` entram aqui com valor absurdo DE
+// PROPOSITO. Os dois campos continuam na tela do admin e continuam sendo
+// enviados; o que mudou e que `toRow` os descarta. Os testes abaixo provam
+// isso: o que chega na coluna sai da formula, e nao do que alguem digitou.
+const formatoDeOitoTimes = {
+  name: "Copa de 2026",
+  status: "subscribing",
+  max_extra_tickets: 4,
+  max_players: 999,
+  max_waitlist_players: 999,
+  teams_count: 8,
+  players_per_team: 10,
+  goalkeepers_per_team: 1,
+  waitlist_goalkeepers: 1,
+  waitlist_outfield: 4,
+};
+
+describe("toRow: o formato do campeonato", () => {
+  it("as cinco colunas do formato atravessam o toRow", () => {
+    // Coluna nova so grava se entrar na allowlist do objeto devolvido, e o tsc
+    // nao pega a que falta: o tipo de entrada de toRow e escrito a mao, e nao
+    // derivado do schema.
+    expect(toRow(formatoDeOitoTimes)).toMatchObject({
+      teams_count: 8,
+      players_per_team: 10,
+      goalkeepers_per_team: 1,
+      waitlist_goalkeepers: 1,
+      waitlist_outfield: 4,
+    });
+  });
+
+  it("o total e a espera sao DERIVADOS na gravacao, nao digitados", () => {
+    const row = toRow(formatoDeOitoTimes);
+    expect(row.max_players).toBe(80);
+    expect(row.max_waitlist_players).toBe(5);
+  });
+
+  it("formato nao configurado grava zero, e nao o NULL que vale ilimitado", () => {
+    // Este e o caso mais comum de todos: campeonato que ainda nao tem formato.
+    // Dobrar o zero em `null` (um `|| null` no lugar do valor cru) devolveria
+    // justamente o ilimitado que a formula veio matar — as duas RPCs tratam
+    // `max_players IS NULL` como "entrega vaga sem olhar limite".
+    const row = toRow({
+      ...formatoDeOitoTimes,
+      teams_count: undefined,
+      players_per_team: undefined,
+    });
+    expect(row.max_players).toBe(0);
+    expect(row.max_waitlist_players).toBe(0);
   });
 });

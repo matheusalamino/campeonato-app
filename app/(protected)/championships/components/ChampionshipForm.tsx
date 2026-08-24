@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { championshipFormSchema } from "@/features/championships/schema";
+import { baseChampionshipObject, championshipFormSchema } from "@/features/championships/schema";
+import { derivedCapacity } from "@/features/championships/capacity";
 import { createChampionship, updateChampionship } from "../actions";
 import {
   CHAMPIONSHIP_STATUS,
@@ -20,6 +21,44 @@ function FieldError({ errors, name }: { errors: FieldErrors; name: string }) {
   if (!errors[name]) return null;
   return <p className="mt-1 text-xs text-red-400">{errors[name]}</p>;
 }
+
+/**
+ * Os cinco campos do formato, recortados do MESMO schema que o servidor usa.
+ *
+ * Serve para o resumo mostrar o numero que sera GRAVADO, e nao o que esta
+ * digitado. A diferenca e real e cabe num campo so: limpar "Goleiros por time"
+ * manda `undefined`, o `.default(1)` do Zod repoe 1, e `toRow` grava 1 — mas
+ * `Number("")` e 0. Sem passar pelo recorte, a tela diria "0 de goleiro" num
+ * campeonato que salva 8.
+ *
+ * E recorte, e nao copia dos defaults: `goalkeepers_per_team` ja tem duas
+ * fontes (o `.default(1)` do Zod e o `DEFAULT 1` da DDL), e uma terceira escrita
+ * a mao aqui seria a que ninguem lembraria de atualizar.
+ */
+const CAPACITY_FIELDS = baseChampionshipObject.pick({
+  teams_count: true,
+  players_per_team: true,
+  goalkeepers_per_team: true,
+  waitlist_goalkeepers: true,
+  waitlist_outfield: true,
+});
+
+/**
+ * O formato que o resumo assume quando o recorte NAO passa.
+ *
+ * So ha um jeito de chegar aqui: numero negativo, que o `.min(0)` recusa
+ * (`type="number"` com `min={0}` nao impede digitar "-5", so marca o campo como
+ * invalido). O desfecho e o mesmo que os numeros crus dariam, porque o
+ * `boundedInt` de `derivedCapacity` tambem leva negativo a zero — e o admin ve
+ * a recusa do campo ao salvar, com a mensagem do proprio Zod.
+ */
+const ZERO_FORMAT = {
+  teams_count: 0,
+  players_per_team: 0,
+  goalkeepers_per_team: 0,
+  waitlist_goalkeepers: 0,
+  waitlist_outfield: 0,
+};
 
 export function ChampionshipForm({
   mode,
@@ -40,9 +79,21 @@ export function ChampionshipForm({
     registration_end_date: isoToBrasiliaInput(initial?.registration_end_date),
     gala_night_date: isoToBrasiliaInput(initial?.gala_night_date),
     tournament_start_date: isoToBrasiliaInput(initial?.tournament_start_date),
-    max_players: initial?.max_players != null ? String(initial.max_players) : "",
-    max_waitlist_players:
-      initial?.max_waitlist_players != null ? String(initial.max_waitlist_players) : "0",
+    // O formato, e nao o total: `max_players` e `max_waitlist_players` saem do
+    // estado porque `toRow` os DERIVA daqui. Um input para eles criaria duas
+    // fontes para a mesma coluna, e a que perde e a que o admin digitou.
+    //
+    // Os defaults sao os do seed, e nao os do Zod (que traz a espera em 0/0):
+    // campeonato novo ja nasce com um formato plausivel em vez de zero vaga.
+    teams_count: initial?.teams_count != null ? String(initial.teams_count) : "8",
+    players_per_team:
+      initial?.players_per_team != null ? String(initial.players_per_team) : "10",
+    goalkeepers_per_team:
+      initial?.goalkeepers_per_team != null ? String(initial.goalkeepers_per_team) : "1",
+    waitlist_goalkeepers:
+      initial?.waitlist_goalkeepers != null ? String(initial.waitlist_goalkeepers) : "1",
+    waitlist_outfield:
+      initial?.waitlist_outfield != null ? String(initial.waitlist_outfield) : "4",
     max_extra_tickets:
       initial?.max_extra_tickets != null ? String(initial.max_extra_tickets) : "4",
     status: (initial?.status as ChampionshipStatus) ?? "draft",
@@ -69,8 +120,11 @@ export function ChampionshipForm({
       registration_end_date: brasiliaInputToIso(form.registration_end_date),
       gala_night_date: brasiliaInputToIso(form.gala_night_date),
       tournament_start_date: brasiliaInputToIso(form.tournament_start_date),
-      max_players: emptyToUndef(form.max_players),
-      max_waitlist_players: emptyToUndef(form.max_waitlist_players),
+      teams_count: emptyToUndef(form.teams_count),
+      players_per_team: emptyToUndef(form.players_per_team),
+      goalkeepers_per_team: emptyToUndef(form.goalkeepers_per_team),
+      waitlist_goalkeepers: emptyToUndef(form.waitlist_goalkeepers),
+      waitlist_outfield: emptyToUndef(form.waitlist_outfield),
       max_extra_tickets: emptyToUndef(form.max_extra_tickets),
       status: form.status,
       registration_image_url: emptyToUndef(form.registration_image_url),
@@ -126,6 +180,23 @@ export function ChampionshipForm({
   function removeGroup(i: number) {
     set("groups", form.groups.filter((_, idx) => idx !== i) as typeof form.groups);
   }
+
+  // A capacidade do resumo sai da MESMA funcao que `toRow` chama para gravar as
+  // colunas, alimentada pelo MESMO payload que vai para o servidor. Refazer a
+  // conta aqui (`times * jogadores`) daria outro numero assim que o formato
+  // saisse da faixa: `boundedInt` tem piso e teto, e `goalkeepers` passa por um
+  // `Math.min` com o total.
+  const parsedFormat = CAPACITY_FIELDS.safeParse(buildPayload());
+  const format = parsedFormat.success ? parsedFormat.data : ZERO_FORMAT;
+  const capacity = derivedCapacity({
+    // `?? 0` pelo mesmo motivo de `toRow`: as duas colunas sao nulaveis, e
+    // formato nao configurado vale zero vaga.
+    teamsCount: format.teams_count ?? 0,
+    playersPerTeam: format.players_per_team ?? 0,
+    goalkeepersPerTeam: format.goalkeepers_per_team,
+    waitlistGoalkeepers: format.waitlist_goalkeepers,
+    waitlistOutfield: format.waitlist_outfield,
+  });
 
   const inputClass =
     "w-full rounded-md bg-zinc-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-600";
@@ -218,30 +289,86 @@ export function ChampionshipForm({
       {/* Capacity */}
       <section className="space-y-4 rounded-2xl bg-zinc-900 p-6">
         <h2 className="text-lg font-semibold">Capacidade</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
-            <label className={labelClass}>Máx. de jogadores</label>
-            <input
-              type="number"
-              min={1}
-              className={inputClass}
-              value={form.max_players}
-              onChange={(e) => set("max_players", e.target.value)}
-            />
-            <FieldError errors={errors} name="max_players" />
-          </div>
-          <div>
-            <label className={labelClass}>Máx. lista de espera</label>
+            <label className={labelClass}>Times</label>
             <input
               type="number"
               min={0}
               className={inputClass}
-              value={form.max_waitlist_players}
-              onChange={(e) => set("max_waitlist_players", e.target.value)}
+              value={form.teams_count}
+              onChange={(e) => set("teams_count", e.target.value)}
             />
-            <FieldError errors={errors} name="max_waitlist_players" />
+            <FieldError errors={errors} name="teams_count" />
+          </div>
+          <div>
+            <label className={labelClass}>Jogadores por time</label>
+            <input
+              type="number"
+              min={0}
+              className={inputClass}
+              value={form.players_per_team}
+              onChange={(e) => set("players_per_team", e.target.value)}
+            />
+            <p className="mt-1 text-xs text-zinc-500">O goleiro conta.</p>
+            <FieldError errors={errors} name="players_per_team" />
+          </div>
+          <div>
+            <label className={labelClass}>Goleiros por time</label>
+            <input
+              type="number"
+              min={0}
+              className={inputClass}
+              value={form.goalkeepers_per_team}
+              onChange={(e) => set("goalkeepers_per_team", e.target.value)}
+            />
+            <FieldError errors={errors} name="goalkeepers_per_team" />
           </div>
         </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className={labelClass}>Espera — goleiros</label>
+            <input
+              type="number"
+              min={0}
+              className={inputClass}
+              value={form.waitlist_goalkeepers}
+              onChange={(e) => set("waitlist_goalkeepers", e.target.value)}
+            />
+            <FieldError errors={errors} name="waitlist_goalkeepers" />
+          </div>
+          <div>
+            <label className={labelClass}>Espera — linha</label>
+            <input
+              type="number"
+              min={0}
+              className={inputClass}
+              value={form.waitlist_outfield}
+              onChange={(e) => set("waitlist_outfield", e.target.value)}
+            />
+            <FieldError errors={errors} name="waitlist_outfield" />
+          </div>
+        </div>
+
+        {/* O resumo. Só leitura: o total e a lista de espera são derivados, e um
+            campo para eles criaria duas fontes para a mesma coluna. */}
+        <div className="rounded-xl bg-zinc-800/60 px-4 py-3 text-sm">
+          {capacity.total === 0 ? (
+            <p className="text-zinc-400">
+              Sem vagas: do jeito que está, o campeonato fica fechado para inscrição — e a
+              lista de espera fica vazia junto.
+            </p>
+          ) : (
+            <>
+              <p className="text-zinc-100">
+                {capacity.total} {capacity.total === 1 ? "vaga" : "vagas"} —{" "}
+                {capacity.goalkeepers} de goleiro e {capacity.outfield} de linha
+              </p>
+              <p className="text-zinc-400">{capacity.waitlistTotal} na lista de espera</p>
+            </>
+          )}
+        </div>
+
         <div>
           <label className={labelClass}>Máximo de ingressos extras por inscrição</label>
           <input

@@ -1,9 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { Player } from "@/types/player";
+import {
+  CANONICAL_POSITIONS,
+  normalizePreferredPosition,
+} from "@/features/players/position";
 
 export default function EditPlayerForm({ player }: { player: Player }) {
   const router = useRouter();
@@ -11,26 +16,76 @@ export default function EditPlayerForm({ player }: { player: Player }) {
 
   const [name, setName] = useState(player.name);
   const [officialName, setOfficialName] = useState(player.official_name || "");
-  const [position, setPosition] = useState(player.preferred_position);
   const [cpf, setCpf] = useState(player.cpf || "");
+  const [saving, setSaving] = useState(false);
+
+  // A posicao GRAVADA pode estar fora dos quatro valores que a CHECK
+  // `players_preferred_position_known` aceita. Producao e staging tem 100% dos
+  // jogadores nos quatro canonicos (medido em 2026-08-21), entao hoje isto e
+  // defesa e nao conversao -- vale para nulo, para dump antigo e para o que o
+  // CSV de import deixar entrar.
+  //
+  // Sem normalizar a semente, este form re-submetia o valor invalido inalterado
+  // e o banco recusava -- e como o `handleUpdate` nao olhava o erro, a tela
+  // mostrava SUCESSO. Salvamento silencioso que nao salvou.
+  //
+  // Normalizar sozinho tambem nao servia: converteria a posicao do jogador sem
+  // o admin perceber. Por isso vem em par com o aviso abaixo, que nomeia o valor
+  // antigo e o novo ANTES de salvar, e com o select, que deixa trocar em um
+  // clique. A conversao passa a ser consentida, e nao contrabandeada.
+  const stored = player.preferred_position;
+  const normalized = normalizePreferredPosition(stored);
+  const [position, setPosition] = useState<string>(normalized.position ?? "");
+  const storedDiffers = (normalized.position ?? "") !== (stored ?? "");
 
   async function handleUpdate() {
-    await supabase
+    setSaving(true);
+    const { error } = await supabase
       .from("players")
       .update({
         name,
         official_name: officialName,
-        preferred_position: position,
+        // "" e a opcao "Nao informada". A CHECK aceita null, e null e o que
+        // modela "posicao nao declarada" -- gravar string vazia violaria.
+        preferred_position: position === "" ? null : position,
         cpf,
       })
       .eq("id", player.id);
+    setSaving(false);
 
+    // Um update que falha NAO pode terminar em router.refresh() como se tivesse
+    // dado certo. Vale para qualquer erro, e nao so para o da constraint.
+    if (error) {
+      toast.error(`Nao foi possivel salvar: ${error.message}`);
+      return;
+    }
+
+    toast.success("Alteracoes salvas.");
     router.refresh();
   }
 
   return (
     <div className="bg-zinc-900 p-6 rounded-2xl">
       <h3 className="text-xl mb-4">Dados Gerais</h3>
+
+      {storedDiffers && (
+        <p
+          role="status"
+          className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200"
+        >
+          {normalized.position ? (
+            <>
+              A posicao estava gravada como <b>{stored}</b> e foi convertida para{" "}
+              <b>{normalized.position}</b>. Confira o campo antes de salvar.
+            </>
+          ) : (
+            <>
+              A posicao gravada (<b>{stored}</b>) nao e reconhecida. Escolha uma
+              das quatro antes de salvar.
+            </>
+          )}
+        </p>
+      )}
 
       <div className="grid grid-cols-12 gap-4">
         {/* Nome */}
@@ -51,26 +106,36 @@ export default function EditPlayerForm({ player }: { player: Player }) {
 
         {/* CPF */}
         <input
-          className="bg-zinc-800 p-2 rounded col-span-3"
+          className="bg-zinc-800 p-2 rounded col-span-2"
           placeholder="CPF"
           value={cpf}
           onChange={(e) => setCpf(e.target.value)}
         />
 
-        {/* Posição (menor) */}
-        <input
-          className="bg-zinc-800 p-2 rounded col-span-1"
-          placeholder="Posição"
+        {/* Posicao — select, e nao texto livre: a coluna aceita exatamente
+            estes quatro valores ou null, entao caixa de texto aqui so servia
+            para o admin inventar um valor que o banco recusa. */}
+        <select
+          className="bg-zinc-800 p-2 rounded col-span-2"
+          aria-label="Posicao preferida"
           value={position}
           onChange={(e) => setPosition(e.target.value)}
-        />
+        >
+          <option value="">Nao informada</option>
+          {CANONICAL_POSITIONS.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
       </div>
 
       <button
         onClick={handleUpdate}
-        className="mt-4 bg-blue-600 px-6 py-2 rounded-xl hover:bg-blue-500"
+        disabled={saving}
+        className="mt-4 bg-blue-600 px-6 py-2 rounded-xl hover:bg-blue-500 disabled:opacity-50"
       >
-        Salvar Alterações
+        {saving ? "Salvando..." : "Salvar Alteracoes"}
       </button>
     </div>
   );

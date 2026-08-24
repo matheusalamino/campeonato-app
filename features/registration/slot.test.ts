@@ -8,7 +8,7 @@ import {
   type SlotReservation,
 } from "./slot";
 import type { SunsetAlert } from "./sabbath";
-import { PAYMENT_STEP, UNIFORM_STEP } from "./field-steps";
+import { FIELD_STEP, PAYMENT_STEP, UNIFORM_STEP } from "./field-steps";
 
 const RESERVADA: SlotReservation = {
   ok: true,
@@ -18,6 +18,24 @@ const RESERVADA: SlotReservation = {
 const ESGOTOU: SlotReservation = { ok: false, reason: "full" };
 const FALHOU: SlotReservation = { ok: false, reason: "error" };
 const SABADO: SlotReservation = { ok: false, reason: "sabbath" };
+/**
+ * A cota de goleiro cheia com vaga de linha ainda aberta.
+ *
+ * `retryAt` nulo e o caso em que a cota esta tomada por inscricoes CONFIRMADAS:
+ * nao ha nada vencendo para esperar. Preenchido, ha reserva viva de outro
+ * goleiro que vence — a distincao que o NOME da razao nao carrega.
+ */
+/**
+ * O passo em que a posicao e escolhida, lido do mapa de verdade em vez de
+ * escrito a mao: e ele que decide para onde a faixa manda o goleiro voltar.
+ */
+const PASSO_DA_POSICAO = FIELD_STEP.preferred_position;
+
+const COTA_DE_GOLEIRO: SlotReservation = {
+  ok: false,
+  reason: "goalkeepers_full",
+  retryAt: null,
+};
 
 /** Quem chegou ao passo da revisao concluiu todos os anteriores. */
 const TUDO_FEITO = { 1: true, 2: true, 4: true, 5: true, 6: true };
@@ -65,6 +83,32 @@ describe("canOpenStep", () => {
     // Sem esta linha, um `reservation.reason !== "sabbath"` no lugar do `true`
     // passa nos tres portoes.
     expect(canOpenStep(1, SABADO, {})).toBe(true);
+  });
+
+  it("com a cota de goleiro cheia, fecha o pagamento e os passos do meio", () => {
+    // Recusa e recusa: quem nao tem vaga nao abre passo novo, e o passo do
+    // pagamento e o que custa dinheiro. Nada aqui e especial por ser cota.
+    expect(canOpenStep(3, COTA_DE_GOLEIRO, {})).toBe(false);
+    expect(canOpenStep(PAYMENT_STEP, COTA_DE_GOLEIRO, {})).toBe(false);
+    expect(canOpenStep(PAYMENT_STEP, COTA_DE_GOLEIRO, { [PAYMENT_STEP]: true })).toBe(false);
+  });
+
+  it("com a cota de goleiro cheia, o passo da POSICAO continua reabrivel", () => {
+    // A diferenca em CONSEQUENCIA das outras recusas: a saida desta esta dentro
+    // do formulario, e a faixa manda ir ate ela — "escolha uma posicao de
+    // linha". Trancado, a tela daria uma instrucao que a navegacao nao deixa
+    // cumprir.
+    //
+    // `done` VAZIO, e nao `{ [PASSO_DA_POSICAO]: true }`, porque e assim que
+    // esta recusa chega: ela nasce na PRIMEIRA reserva, disparada ainda dentro
+    // do passo da posicao, antes de qualquer passo entrar em `done`. A regra dos
+    // passos concluidos nao ajuda aqui — quem abre a porta e a do passo 1.
+    //
+    // E por isso o mapa de campos esta nesta assercao: a promessa da faixa so se
+    // cumpre enquanto a posicao dividir o passo com o CPF. Devolve
+    // `preferred_position` para o passo 4 em field-steps.ts e esta linha fica
+    // vermelha, que e exatamente o aviso que faltava.
+    expect(canOpenStep(PASSO_DA_POSICAO, COTA_DE_GOLEIRO, {})).toBe(true);
   });
 
   it("mantem o passo do CPF aberto, senao a falha de rede prende para sempre", () => {
@@ -135,6 +179,16 @@ describe("isSlotVerdict", () => {
     expect(isSlotVerdict({ ok: false, reason: "not_open" })).toBe(true);
     expect(isSlotVerdict({ ok: false, reason: "not_found" })).toBe(true);
     expect(isSlotVerdict({ ok: false, reason: "already_registered" })).toBe(true);
+  });
+
+  it("a cota de goleiro cheia e veredito, e nao soluco de rede", () => {
+    // Se ela nao derrubasse a reserva viva, o goleiro seguiria lendo "sua vaga
+    // esta garantida" depois de o servidor ja ter dito que nao ha vaga de
+    // goleiro — e pagaria o PIX em cima dessa promessa.
+    expect(isSlotVerdict(COTA_DE_GOLEIRO)).toBe(true);
+    expect(
+      isSlotVerdict({ ok: false, reason: "goalkeepers_full", retryAt: "2026-08-19T12:00:00.000Z" }),
+    ).toBe(true);
   });
 });
 
@@ -282,6 +336,36 @@ describe("reservationFromRpc", () => {
       ok: false,
       reason: "all_reserved",
       retryAt: null,
+    });
+  });
+
+  it("`goalkeepers_full` atravessa com o nome dela, e nao vira `error`", () => {
+    // Fora da uniao a razao cai em `error`, e a faixa diz "tente novamente em
+    // instantes". Insistir nao cria vaga de goleiro: a frase e falsa e prende o
+    // jogador num botao que nunca vai funcionar para ele.
+    expect(reservationFromRpc({ success: false, reason: "goalkeepers_full" })).toEqual({
+      ok: false,
+      reason: "goalkeepers_full",
+      retryAt: null,
+    });
+  });
+
+  it("`goalkeepers_full` carrega o `retry_at`, que o nome nao carrega", () => {
+    // A RPC manda os dois juntos de proposito (COMMENT de
+    // 20260820030000_reserve_respects_keeper_quota.sql): nulo e cota tomada por
+    // inscricao confirmada — nao adianta voltar —, preenchido e reserva viva
+    // que vence. Dobrar a razao numa forma sem dado nenhum joga fora a unica
+    // metade que diz se vale esperar.
+    expect(
+      reservationFromRpc({
+        success: false,
+        reason: "goalkeepers_full",
+        retry_at: "2026-08-19T12:00:00.000Z",
+      }),
+    ).toEqual({
+      ok: false,
+      reason: "goalkeepers_full",
+      retryAt: "2026-08-19T12:00:00.000Z",
     });
   });
 

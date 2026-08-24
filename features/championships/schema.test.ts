@@ -51,8 +51,17 @@ describe("championshipFormSchema", () => {
     expect(r.success).toBe(false);
   });
 
-  it("rejects max_players <= 0", () => {
+  it("aceita max_players 0, que passou a significar fechado", () => {
+    // Era `rejects max_players <= 0`, e o `.positive()` que o sustentava tinha
+    // que cair: zero e o valor que `derivedCapacity` devolve para formato nao
+    // configurado, e recusa-lo aqui so deixaria de pe o NULL, que vale
+    // ilimitado.
     const r = championshipFormSchema.safeParse({ ...validDraft, max_players: 0 });
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects a negative max_players", () => {
+    const r = championshipFormSchema.safeParse({ ...validDraft, max_players: -1 });
     expect(r.success).toBe(false);
   });
 
@@ -64,13 +73,28 @@ describe("championshipFormSchema", () => {
     expect(r.success).toBe(false);
   });
 
-  it("requires all dates and max_players when status leaves draft", () => {
+  it("requires all dates and the format when status leaves draft", () => {
     const r = championshipFormSchema.safeParse({
       name: "Copa",
       status: "active",
       max_waitlist_players: 0,
     });
     expect(r.success).toBe(false);
+    if (r.success) return;
+
+    // O titulo promete seis campos, entao a assertiva mede os seis. So o
+    // `success` nao mede nada disso: qualquer UM dos seis sozinho ja o derruba,
+    // e a lista de obrigatorios podia ser cortada pela metade sem este teste
+    // piscar.
+    const caminhos = r.error.issues.map((i) => i.path.join("."));
+    expect(caminhos.sort()).toEqual([
+      "gala_night_date",
+      "players_per_team",
+      "registration_end_date",
+      "registration_start_date",
+      "teams_count",
+      "tournament_start_date",
+    ]);
   });
 
   it("accepts a complete non-draft championship", () => {
@@ -81,8 +105,10 @@ describe("championshipFormSchema", () => {
       registration_end_date: "2026-03-01",
       gala_night_date: "2026-03-10",
       tournament_start_date: "2026-04-01",
-      max_players: 20,
-      max_waitlist_players: 5,
+      // O que o publicado exige agora: o formato. O total saiu da lista junto
+      // com o campo que o preenchia.
+      teams_count: 4,
+      players_per_team: 5,
     });
     expect(r.success).toBe(true);
   });
@@ -226,6 +252,113 @@ describe("statusChangeSchema", () => {
       id: "550e8400-e29b-41d4-a716-446655440000",
       from: "completed",
       to: "draft",
+    });
+    expect(r.success).toBe(true);
+  });
+});
+
+describe("championshipFormSchema: a capacidade vem do formato", () => {
+  it("campeonato fora de draft exige o formato, e nao mais o total digitado", () => {
+    const r = championshipFormSchema.safeParse({
+      name: "Copa",
+      status: "subscribing",
+      registration_start_date: "2026-02-01",
+      registration_end_date: "2026-03-01",
+      gala_night_date: "2026-03-10",
+      tournament_start_date: "2026-04-01",
+    });
+    expect(r.success).toBe(false);
+    if (r.success) return;
+
+    const caminhos = r.error.issues.map((i) => i.path.join("."));
+    expect(caminhos).toContain("teams_count");
+    expect(caminhos).toContain("players_per_team");
+    // A outra metade da frase, e a que morde: `max_players` virou SAIDA, e nao
+    // entrada — `toRow` descarta o que vier nele. O input continua na tela, mas
+    // exigi-lo aqui recusaria quem o deixasse em branco por um numero que nao e
+    // mais lido.
+    expect(caminhos).not.toContain("max_players");
+  });
+});
+
+describe("championshipFormSchema: formato preenchido tem de render vaga", () => {
+  const datas = {
+    registration_start_date: "2026-02-01",
+    registration_end_date: "2026-03-01",
+    gala_night_date: "2026-03-10",
+    tournament_start_date: "2026-04-01",
+  };
+
+  it("recusa `subscribing` com formato ZERADO — o segundo caminho para o mesmo defeito", () => {
+    // MEDIDO antes desta regra existir: este payload PASSAVA, `toRow` gravava
+    // `max_players: 0`, e a RPC devolvia `full` para toda inscricao. A guarda de
+    // `changeChampionshipStatus` podia ser contornada sem sair da tela — bastava
+    // criar ou salvar o campeonato ja em `subscribing`.
+    const r = createChampionshipSchema.safeParse({
+      name: "Copa",
+      status: "subscribing",
+      ...datas,
+      teams_count: 0,
+      players_per_team: 10,
+    });
+    expect(r.success).toBe(false);
+    if (r.success) return;
+
+    const caminhos = r.error.issues.map((i) => i.path.join("."));
+    // Nos DOIS campos: o produto e de ambos.
+    expect(caminhos).toContain("teams_count");
+    expect(caminhos).toContain("players_per_team");
+  });
+
+  it("recusa o produto que ESTOURA int4, com os dois campos positivos", () => {
+    // 3000 x 800000 da 2,4 bilhoes: finito, inteiro e positivo, e maior que
+    // int4 — `boundedInt` o devolve como 0. Checar campo a campo em vez do total
+    // derivado deixaria exatamente este passar.
+    const r = createChampionshipSchema.safeParse({
+      name: "Copa",
+      status: "subscribing",
+      ...datas,
+      teams_count: 3000,
+      players_per_team: 800000,
+    });
+    expect(r.success).toBe(false);
+    if (r.success) return;
+    expect(r.error.issues.map((i) => i.path.join("."))).toContain("teams_count");
+  });
+
+  it("aceita `subscribing` com uma vaga — a guarda mede vaga, nao vaga bastante", () => {
+    const r = createChampionshipSchema.safeParse({
+      name: "Copa",
+      status: "subscribing",
+      ...datas,
+      teams_count: 1,
+      players_per_team: 1,
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("NAO alcanca os outros status: `completed` legado com formato zerado ainda salva", () => {
+    // A fronteira e a mesma da guarda — so `subscribing`. Estende-la travaria a
+    // edicao de campeonato antigo, que nao tem inscricao a proteger e cujo
+    // formato ninguem nunca preencheu.
+    for (const status of ["active", "subscribed", "in_progress", "completed", "rest"]) {
+      const r = createChampionshipSchema.safeParse({
+        name: "Copa",
+        status,
+        ...datas,
+        teams_count: 0,
+        players_per_team: 0,
+      });
+      expect(r.success, `status ${status} deveria salvar`).toBe(true);
+    }
+  });
+
+  it("NAO alcanca rascunho meio preenchido", () => {
+    const r = createChampionshipSchema.safeParse({
+      name: "Copa",
+      status: "draft",
+      teams_count: 0,
+      players_per_team: 0,
     });
     expect(r.success).toBe(true);
   });

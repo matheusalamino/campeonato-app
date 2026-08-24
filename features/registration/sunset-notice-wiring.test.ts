@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { semComentario } from "@/features/testing/sem-comentario";
 
 /**
  * A FIACAO das faixas da pausa no wizard, lida como texto.
@@ -8,7 +9,7 @@ import { join } from "node:path";
  * Nasceu so para o aviso do por do sol — dai o nome — e ganhou o vizinho no
  * ultimo round: `<SlotNotice>` tinha a mesma forma apagavel e era o unico dos
  * tres sem esta rede. Estao no mesmo arquivo porque sao o mesmo arquivo LIDO, o
- * mesmo `semComentarios`, os mesmos helpers.
+ * mesmo `semComentario`, os mesmos helpers.
  *
  * Fiacao, e so isso. As regras foram para funcoes puras e sao testadas de
  * verdade: `sunsetAlert`, `sunsetHasPassed`, `clockSkewMs` e `sunsetTimeLabel`
@@ -64,20 +65,7 @@ import { join } from "node:path";
  */
 const WIZARD = join(process.cwd(), "app/(public)/inscrever/[slug]/RegistrationWizard.tsx");
 
-/**
- * O arquivo sem comentarios, como em rest-overlay-source.test.ts.
- *
- * Nao e capricho: os comentarios deste arquivo CITAM as expressoes que os testes
- * procuram. Sem isto, o preco de comentar bem seria um teste que passa medindo o
- * comentario em vez do codigo.
- *
- * O `(?<!:)` guarda o `https://` de virar comentario de linha.
- */
-function semComentarios(fonte: string): string {
-  return fonte.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(?<!:)\/\/[^\n]*/g, "");
-}
-
-const wizard = semComentarios(readFileSync(WIZARD, "utf8"));
+const wizard = semComentario(readFileSync(WIZARD, "utf8"));
 
 /** O valor de `prop={...}` na abertura de tag, como em sabbath-page-wiring. */
 function prop(tag: string, nome: string): string | null {
@@ -336,5 +324,121 @@ describe("a fiacao da faixa da vaga", () => {
     // E ela recebe o ESTADO, e nao `null` — que compila, apaga a faixa do mesmo
     // jeito e ainda deixa a tag no lugar para enganar quem for conferir de olho.
     expect(prop(tags[0], "slot")).toBe(reserva);
+  });
+});
+/**
+ * O BALDE da vaga, preso como texto — goleiro ou linha, junto de toda reserva.
+ *
+ * `reserve_registration_slot` recebe `p_is_goalkeeper boolean DEFAULT NULL` e
+ * dentro dela `v_is_gk := coalesce(p_is_goalkeeper, false)`. A chamada que
+ * esquece o argumento nao quebra: ela reserva no balde de LINHA, em silencio. O
+ * goleiro alem da cota preenche o formulario inteiro, paga o PIX, e leva a
+ * recusa no commit — o dano que o A4 gastou duas PRs prevenindo.
+ *
+ * Sao QUATRO chamadas, e cada uma tem um jeito proprio de sumir com o balde:
+ *
+ *   o passo do CPF          ->  a primeira reserva nasce no balde errado, e a
+ *                               faixa promete "vaga garantida" a quem nao tem.
+ *   a troca de posicao      ->  o jogador vira goleiro e ninguem pergunta ao
+ *                               servidor se ainda ha vaga de goleiro.
+ *   a renovacao do passo    ->  o balde errado faz a RPC RECONTAR: a renovacao
+ *   a batida de fundo           vira recusa para quem ja tinha vaga, ou move a
+ *                               reserva do goleiro para o balde de linha.
+ *
+ * As duas ultimas sao as que ninguem ve numa revisao de olho, porque o
+ * argumento sumido nao muda o resultado da chamada — muda o balde em que ela
+ * cai.
+ *
+ * Nao pin o NOME da variavel do balde, so a forma: tres argumentos, e o
+ * terceiro nao pode ser literal. `reserveSlotAction(id, cpf, false)` compila,
+ * passa em tudo, e e o mesmo desastre com uma linha a mais.
+ */
+describe("a fiacao do balde da reserva", () => {
+  it("toda reserva manda o balde junto, e nunca um literal no lugar dele", () => {
+    // Um nivel de parenteses balanceado: tolera `f(x)` como argumento sem abrir
+    // a chamada. As virgulas de dentro dele nao existem hoje, e o `filter`
+    // abaixo ja e o que absorve quebra de linha e virgula final.
+    const chamadas = [...wizard.matchAll(/reserveSlotAction\((?:[^()]|\([^()]*\))*\)/g)]
+      .map((m) => m[0].slice("reserveSlotAction(".length, -1));
+
+    // Quatro, e exatamente quatro. Zero seria o regex casando nada e o teste
+    // inteiro passando vazio; uma a menos e uma reserva que sumiu do wizard.
+    expect(chamadas).toHaveLength(4);
+
+    for (const chamada of chamadas) {
+      const argumentos = chamada.split(",").map((a) => a.trim()).filter(Boolean);
+      expect(argumentos).toHaveLength(3);
+      // O balde vem de uma variavel — a do formulario, ou a da reserva viva.
+      // Carimbado `true`/`false` na chamada, ele para de acompanhar a escolha
+      // do jogador e volta a ser o balde fixo que este argumento veio matar.
+      expect(argumentos[2]).not.toMatch(/^(true|false)$/);
+    }
+  });
+
+  it("o balde de cada chamada vem da FONTE certa, e nunca do estado do form", () => {
+    // O teste acima aceita qualquer variavel no terceiro argumento, e essa
+    // folga tem um buraco MEDIDO: trocar a fonte da variavel por
+    // `form.preferred_position` deixa o `tsc` limpo e a suite inteira verde.
+    //
+    // As duas trocas, e o que cada uma custa:
+    //
+    //   na criacao      ->  `form` so recebe o `setForm` no PROXIMO render, e as
+    //                       duas criacoes acontecem antes dele: a do CPF depois
+    //                       do preenchimento automatico (o goleiro reconhecido
+    //                       pelo banco iria para o balde de linha) e a da troca
+    //                       com o valor ANTERIOR do select (o goleiro reservaria
+    //                       como linha, e a linha como goleiro).
+    //   na renovacao    ->  o efeito so enxerga o render que o criou, entao o
+    //                       balde congela: a batida renova no balde velho, a RPC
+    //                       RECONTA, e quem ja tinha vaga leva recusa. O unico
+    //                       sinal disso hoje e um warning de deps do eslint — e
+    //                       calar o warning pondo `form.preferred_position` nas
+    //                       deps devolve os 119 do lint com o defeito de pe.
+    //
+    // Por isso a fonte, e nao o argumento: cada chamada e resolvida ate a
+    // declaracao mais proxima ACIMA dela. Os nomes sao lidos do arquivo — nem o
+    // da variavel, nem o da ref, estao escritos aqui.
+    const chamadas = [...wizard.matchAll(/reserveSlotAction\((?:[^()]|\([^()]*\))*\)/g)];
+    expect(chamadas).toHaveLength(4);
+
+    const fontes = chamadas.map((chamada) => {
+      const argumentos = chamada[0]
+        .slice("reserveSlotAction(".length, -1)
+        .split(",")
+        .map((a) => a.trim())
+        .filter(Boolean);
+      // Uma variavel simples, e nao uma expressao: e o que torna a resolucao
+      // abaixo possivel, e o teste acima ja recusa o literal.
+      expect(argumentos[2]).toMatch(/^\w+$/);
+      const declaracoes = [
+        ...wizard.matchAll(new RegExp(`const ${argumentos[2]}\\s*=\\s*([^;]+);`, "g")),
+      ].filter((d) => d.index < chamada.index);
+      // Sentinela: sem declaracao acima, `fonte` viria vazia e todo o resto
+      // deste `it` passaria medindo o nada.
+      expect(declaracoes.length).toBeGreaterThan(0);
+      return declaracoes[declaracoes.length - 1][1].trim();
+    });
+
+    // NENHUMA das quatro le o estado do formulario.
+    for (const fonte of fontes) expect(fonte).not.toMatch(/\bform\./);
+
+    // E DUAS delas — as renovacoes — leem uma ref no ponto de uso. Preso pela
+    // contagem: uma criacao que passasse a ler a ref renovaria o balde velho
+    // em vez do que o jogador acabou de escolher, e daria tres.
+    expect(fontes.filter((fonte) => /\.current\b/.test(fonte))).toHaveLength(2);
+  });
+
+  it("o balde nasce do canonico, e nao da palavra crua do formulario", () => {
+    // O select do passo 1 grava a palavra que o jogador escolheu, mas o
+    // preenchimento automatico do CPF grava o que estiver no BANCO, e o CSV do
+    // admin aceita celula arbitraria de planilha. `' goleiro '` com espaco
+    // sobrando nao e igual a nenhuma palavra, e mandaria um goleiro para o
+    // balde de linha sem erro nenhum.
+    //
+    // Le a comparacao inteira em vez do nome da funcao que a envolve: renomear
+    // o helper pelo atalho da IDE continua sendo no-op.
+    const comparacoes = [...wizard.matchAll(/([\w.()]+)\s*===\s*"Goleiro"/g)];
+    expect(comparacoes).toHaveLength(1);
+    expect(comparacoes[0][1]).toContain("normalizePreferredPosition(");
   });
 });

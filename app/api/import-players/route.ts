@@ -1,3 +1,4 @@
+import { normalizePreferredPosition } from "@/features/players/position";
 import { recalculateOverallWithClient } from "@/lib/overall";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
@@ -68,8 +69,10 @@ function parseSkillRating(value?: string | null): number | null {
  * (Goleiro vs linha).
  */
 function selfEvalRowsFromCsv(row: CSVRow): { skill: string; rating: number }[] {
-  const position = safeString(row["Posição"]);
-  const isGk = position === "Goleiro";
+  // O canonico, e nao a celula crua: `GOL` e `' goleiro '` sao goleiro na
+  // planilha e NAO eram goleiro para este `===`, entao o import lia as 6
+  // colunas de LINHA para um goleiro e gravava a autoavaliacao errada.
+  const isGk = normalizePreferredPosition(row["Posição"]).position === "Goleiro";
 
   const spec = isGk
     ? (
@@ -149,6 +152,24 @@ export async function POST(req: Request) {
 
         if (!shirtName) throw new Error("Nome não informado");
 
+        // A CHECK `players_preferred_position_known` (20260820010000) so aceita
+        // os quatro canonicos ou null. Sem esta traducao a linha estourava com
+        // erro cru do Postgres na cara do admin.
+        //
+        // Desconhecido ABORTA A LINHA em vez de gravar null: a cota de goleiro
+        // do A6 conta `Goleiro` contra o resto, entao um `Goleir0` que virasse
+        // null passaria a contar como jogador de linha, e a trava de capacidade
+        // erraria calada. O `throw` aqui e o idioma da casa -- cai no catch da
+        // linha, entra em `errors[]` com numero de linha, e o import CONTINUA.
+        const positionResult = normalizePreferredPosition(row["Posição"]);
+        if (positionResult.kind === "unrecognized") {
+          throw new Error(
+            `Posição não reconhecida: "${positionResult.raw}". ` +
+              `Use Goleiro, Zagueiro, Meia ou Atacante (ou deixe a célula vazia).`,
+          );
+        }
+        const preferredPosition = positionResult.position;
+
         // ── PLAYER ──
         const { data: existing, error: fetchError } = await supabase
           .from("players")
@@ -167,7 +188,7 @@ export async function POST(req: Request) {
             .insert({
               name: shirtName, // shirt name → name
               official_name: officialName, // full name  → official_name
-              preferred_position: safeString(row["Posição"]),
+              preferred_position: preferredPosition,
               cpf,
               email: safeString(row.Email),
               whatsapp: safeString(row.WhatsApp),
@@ -188,7 +209,7 @@ export async function POST(req: Request) {
             .update({
               name: shirtName, // shirt name → name
               official_name: officialName, // full name  → official_name
-              preferred_position: safeString(row["Posição"]),
+              preferred_position: preferredPosition,
               email: safeString(row.Email),
               whatsapp: safeString(row.WhatsApp),
               instagram: safeString(row["Instagram (opcional)"]),

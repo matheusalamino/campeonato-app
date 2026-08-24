@@ -7,6 +7,7 @@ import { isValidCpf, formatCpf } from "@/lib/cpf";
 import { formatPhoneBR, formatHeightM, heightToMask, formatBRL } from "@/lib/masks";
 import { BR_STATES } from "@/lib/br-states";
 import { groupRequiresInviteCode } from "@/features/registration/groups";
+import { normalizePreferredPosition } from "@/features/players/position";
 import { skillsFor, SKILL_LABELS } from "@/features/registration/skills";
 import { computeTicketsTotal } from "@/features/registration/pricing";
 import { buildPixPayload, makePixTxid } from "@/lib/pix";
@@ -64,6 +65,26 @@ const EMPTY = {
  */
 const BLOCKED_BY_SLOT = "Não é possível seguir agora. Veja o aviso no topo da página.";
 
+/**
+ * O BALDE da vaga: goleiro ou linha.
+ *
+ * Esta e a fronteira, e a conversao acontece UMA VEZ aqui. As duas RPCs recebem
+ * `p_is_goalkeeper boolean` de proposito — nenhuma delas conhece o vocabulario
+ * de posicao, e por isso nenhuma delas quebra no dia em que ele mudar.
+ *
+ * Passa por `normalizePreferredPosition` em vez de comparar a string do
+ * formulario direto, e a diferenca nao e cosmetica. O valor pode chegar do
+ * banco pelo preenchimento automatico do CPF, e `' goleiro '` com espaco
+ * sobrando nao e `"Goleiro"` para comparacao nenhuma — mandaria um goleiro para
+ * o balde de linha, calado. E o resultado normalizado e `CanonicalPosition |
+ * null`, entao a comparacao aqui e a UNICA que o `tsc` cobra: se o vocabulario
+ * canonico deixar de ter esta palavra, isto vira erro de tipo em vez de virar
+ * `false` em silencio.
+ */
+function isGoalkeeperPosition(position: string): boolean {
+  return normalizePreferredPosition(position).position === "Goleiro";
+}
+
 const inputBase =
   "w-full rounded-xl px-3 py-3 text-base bg-white/5 border text-[var(--gala-ink)] outline-none";
 const inputOk = "border-white/10 focus:border-[var(--gala-gold-2)]";
@@ -98,6 +119,16 @@ export default function RegistrationWizard({
    * segunda reserva para um CPF pela metade, gastando vaga de gente de verdade.
    */
   const reservedCpf = useRef("");
+  /**
+   * O BALDE da reserva viva, ao lado do CPF dela e pela mesma razao.
+   *
+   * Renovacao tem de renovar o MESMO balde: mandar outro faz a RPC recontar e,
+   * se o novo estiver cheio, devolver recusa para quem ja tinha vaga. E o balde
+   * muda mais rapido que qualquer efeito — a troca no select, e o preenchimento
+   * automatico do CPF, que chegam sem passar por render nenhum antes de a
+   * proxima chamada sair. Por isso ref, lida na hora, nunca capturada.
+   */
+  const reservedGoalkeeper = useRef(false);
   /** Ultimo sinal de vida do jogador: toque, tecla, ou volta para a aba. */
   const lastActivity = useRef(Date.now());
   /** Quando a ultima renovacao foi disparada, para o piso entre duas. */
@@ -216,7 +247,10 @@ export default function RegistrationWizard({
       // reserva para um CPF pela metade — queimando vaga de gente de verdade.
       const cpf = reservedCpf.current;
       if (!cpf) return;
-      void latestOnly(() => reserveSlotAction(championship.id, cpf)).then(
+      // O balde da reserva viva, pela mesma razao do CPF logo acima: renovar no
+      // outro faz a RPC recontar, e uma recusa aqui derrubaria quem ja tem vaga.
+      const goleiro = reservedGoalkeeper.current;
+      void latestOnly(() => reserveSlotAction(championship.id, cpf, goleiro)).then(
         (renovada) => {
           // `null` quando outra reserva foi disparada enquanto esta voltava:
           // este resultado ja nasceu velho e nao pode mandar na navegacao.
@@ -277,15 +311,27 @@ export default function RegistrationWizard({
         toast.error("Muitas tentativas. Aguarde um momento e tente novamente.");
         return;
       }
+      // A posicao que a reserva logo abaixo vai usar, numa variavel em vez de
+      // so no `setForm`: o estado so chega no proximo render, e o `await` da
+      // reserva acontece antes dele. Lendo `form.preferred_position` ali, o
+      // goleiro que ACABOU de ser reconhecido pelo CPF seria reservado no balde
+      // de linha, e a faixa lhe prometeria uma vaga que a cota nao tem.
+      let position = form.preferred_position;
       if (res.exists) {
         const p = res.player;
+        // Normaliza o que veio do banco: valor fora das quatro opcoes do
+        // select do passo 1 nao casa com nenhuma, e o jogador que volta a se
+        // inscrever via o campo em branco e levava erro do Zod num campo que
+        // nunca tocou. Producao e staging estao 100% canonicos hoje (medido em
+        // 2026-08-21), entao quem cai aqui e nulo ou dado vindo do CSV.
+        position = normalizePreferredPosition(p.preferred_position).position ?? "Meia";
         setForm((prev) => ({
           ...prev,
           name: p.name ?? "", shirt_name: p.shirt_name ?? "", shirt_size: p.shirt_size ?? "",
           email: p.email ?? "",
           whatsapp: p.whatsapp ? formatPhoneBR(p.whatsapp) : "", birth_date: (p.birth_date ?? "").slice(0, 10),
           birth_state: p.birth_state ?? "", instagram: p.instagram ?? "",
-          preferred_position: p.preferred_position ?? "Meia",
+          preferred_position: position,
           height: p.height != null ? heightToMask(p.height) : "",
           weight: p.weight != null ? String(p.weight) : "",
           group_affiliation: p.group_affiliation ?? "",
@@ -293,7 +339,8 @@ export default function RegistrationWizard({
         }));
         toast.success("Encontramos você! Confira seus dados.");
       }
-      const reservation = await latestOnly(() => reserveSlotAction(championship.id, form.cpf));
+      const goleiro = isGoalkeeperPosition(position);
+      const reservation = await latestOnly(() => reserveSlotAction(championship.id, form.cpf, goleiro));
       // Outra tentativa mais nova assumiu enquanto esta voltava: resultado velho
       // nao vira estado nem decide navegacao.
       if (!reservation) return;
@@ -305,12 +352,60 @@ export default function RegistrationWizard({
         return;
       }
       reservedCpf.current = form.cpf;
+      reservedGoalkeeper.current = goleiro;
       // A reserva recem-nascida vai junto porque `slot` so a recebe no proximo
       // render — e este e o caminho de retry de quem levou um `error`.
       advance(1, reservation);
     } catch {
       toast.error("Não foi possível verificar o CPF. Tente novamente.");
     } finally { setLooking(false); }
+  }
+
+  /**
+   * Trocar de posicao refaz a reserva, porque troca o BALDE.
+   *
+   * Quem sabe se o balde novo tem vaga e o servidor, e a unica coisa que ele
+   * recebe e este booleano. Sem este disparo o jogador trocaria para goleiro no
+   * passo 1 e seguiria com a faixa dizendo "vaga garantida" — a da linha, que
+   * ele acabou de deixar — ate a recusa no envio, com o PIX ja pago.
+   *
+   * Vale nos dois sentidos, e o segundo e o que torna a instrucao da faixa
+   * cumprivel: o goleiro recusado por cota le "escolha uma posicao de linha",
+   * escolhe aqui mesmo, e a faixa volta a verde sem recarregar nada.
+   *
+   * `isValidCpf` e o MESMO guarda de `onCpfContinue` — reservar por CPF pela
+   * metade queimaria vaga de gente de verdade, e uma segunda condicao aqui
+   * seria a que ia divergir. Nao olha `reservedCpf`, de proposito: ele so e
+   * preenchido quando ha reserva OK, e o caso que mais importa e justamente o
+   * do goleiro que levou recusa e nao tem reserva nenhuma.
+   */
+  function onPositionChange(position: string) {
+    set("preferred_position", position);
+    if (!isValidCpf(form.cpf)) return;
+    const goleiro = isGoalkeeperPosition(position);
+    void latestOnly(() => reserveSlotAction(championship.id, form.cpf, goleiro)).then(
+      (nova) => {
+        // `null` quando outra reserva mais nova assumiu enquanto esta voltava.
+        if (!nova) return;
+        // Mesma regra das renovacoes: chamada que falhou volta RESOLVIDA como
+        // `error`, e trocar uma reserva viva por um veredito que ninguem deu
+        // pintaria a faixa de vermelho e trancaria o pagamento.
+        if (!isSlotVerdict(nova)) return;
+        setSlot(nova);
+        // O balde novo so vira o balde da reserva viva quando ele foi ACEITO.
+        // Recusado, a RPC preserva a reserva antiga de proposito (ver o
+        // comentario do `ON CONFLICT` na migration), e o heartbeat precisa
+        // continuar renovando aquela.
+        if (!nova.ok) return;
+        reservedCpf.current = form.cpf;
+        reservedGoalkeeper.current = goleiro;
+      },
+      (erro) => {
+        // Nao derruba o que esta na tela: a proxima troca, ou a proxima batida,
+        // tenta de novo. Mas isto decide vaga, e falha calada nao deixa rastro.
+        console.warn("Falha ao reservar a vaga na troca de posicao", erro);
+      },
+    );
   }
 
   const needsInvite = groupRequiresInviteCode(championship.registration_group_options, form.group_affiliation);
@@ -352,8 +447,9 @@ export default function RegistrationWizard({
     const renew = () => {
       const cpf = reservedCpf.current;
       if (!cpf) return;
+      const goleiro = reservedGoalkeeper.current;
       lastRenew.current = Date.now();
-      void latestOnly(() => reserveSlotAction(championship.id, cpf)).then(
+      void latestOnly(() => reserveSlotAction(championship.id, cpf, goleiro)).then(
         (renovada) => {
           if (!renovada) return;
           // Chamada que falhou volta RESOLVIDA como `error` — o ramo de baixo so
@@ -610,6 +706,12 @@ export default function RegistrationWizard({
           <input {...fieldProps("cpf")} inputMode="numeric" placeholder="000.000.000-00" aria-label="CPF"
                  value={form.cpf} onChange={(e) => set("cpf", formatCpf(e.target.value))} />
           {err("cpf")}
+          {/* A posicao mora AQUI, e nao no perfil de jogo, porque a reserva sai
+              deste passo e precisa saber o balde. Ver `FIELD_STEP`. */}
+          <select {...fieldProps("preferred_position")} aria-label="Posição preferida" value={form.preferred_position} onChange={(e) => onPositionChange(e.target.value)}>
+            <option>Zagueiro</option><option>Meia</option><option>Atacante</option><option>Goleiro</option>
+          </select>
+          {err("preferred_position")}
           <button onClick={onCpfContinue} disabled={looking}
                   className="w-full rounded-xl py-3 font-bold text-[#050507]"
                   style={{ background: "linear-gradient(135deg,#f0c94a,#d4a017)" }}>
@@ -680,9 +782,6 @@ export default function RegistrationWizard({
         )}
 
         <StepShell index={stepNumber(4, minor)} title="Perfil de jogo" open={step === 4} done={!!done[4]} onToggle={() => open(4)}>
-          <select {...fieldProps("preferred_position")} aria-label="Posição preferida" value={form.preferred_position} onChange={(e) => set("preferred_position", e.target.value)}>
-            <option>Zagueiro</option><option>Meia</option><option>Atacante</option><option>Goleiro</option>
-          </select>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <input {...fieldProps("height")} inputMode="numeric" placeholder="Altura — 1,80 m" aria-label="Altura em metros" value={form.height} onChange={(e) => set("height", formatHeightM(e.target.value))} />

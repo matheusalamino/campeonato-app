@@ -114,6 +114,57 @@ function noticeFor(
     case "full":
       return { urgent: true, body: <>As vagas para este campeonato se esgotaram.</> };
 
+    case "goalkeepers_full":
+      /*
+       * VERMELHO, ao contrario da pausa de sabado — e a mesma pergunta que
+       * classifica, respondida ao contrario. A pausa nao e perda nem incerteza:
+       * congela o campeonato para todo mundo e tem hora para voltar. Aqui houve
+       * perda de verdade: as vagas de goleiro acabaram e, para ELE, o
+       * campeonato fechou. O que sobra e jogar em outra posicao.
+       *
+       * A frase nao pode ser a do `full` ("as vagas se esgotaram"): num
+       * campeonato de 80 com 8 goleiros a cota fecha com 72 vagas de linha
+       * abertas, e a RPC so manda esta razao quando o CAMPEONATO ainda tem
+       * lugar — e por isso que ela existe separada.
+       *
+       * As duas metades vem do `retry_at`, e nao de enfeite. Nulo, a cota esta
+       * tomada por inscricoes CONFIRMADAS: nao ha nada vencendo, e prometer que
+       * "algumas podem voltar" mandaria esperar por uma vaga que nao vem.
+       * Preenchido, ha reserva viva de outro goleiro que vence — e esperar sai
+       * mais barato do que trocar de posicao.
+       *
+       * "Volte ao passo da posicao": ele e o passo 1, o MESMO do CPF — a posicao
+       * subiu para la justamente porque a reserva sai dali e precisa saber o
+       * balde (ver `FIELD_STEP`, em field-steps.ts).
+       *
+       * A INSTRUCAO E CUMPRIVEL, e isso foi medido, nao suposto. A recusa deixa
+       * a navegacao trancada por `canOpenStep`, e a saida so existe porque o
+       * passo 1 e a excecao dela: `target <= 1` devolve `true` em toda recusa,
+       * com `done` vazio. Enquanto a posicao morava no passo 4 essa frase
+       * mandava o jogador a um passo que `canOpenStep(4, recusa, {})` recusava
+       * abrir — a promessa quebrada que o A6 mediu antes de mover o campo.
+       *
+       * E ela se cumpre SEM RECARREGAR: o `onChange` do select refaz a reserva
+       * no balde novo, e a resposta repinta esta faixa.
+       */
+      return {
+        urgent: true,
+        body: (
+          <>
+            {slot.retryAt ? (
+              <>
+                As vagas de goleiro estão todas ocupadas neste momento, e algumas podem voltar a
+                partir das <b>{formatLocalTime(slot.retryAt)}</b>.
+              </>
+            ) : (
+              <>As vagas de goleiro deste campeonato já foram todas preenchidas.</>
+            )}{" "}
+            As de linha ainda não — se você também joga na linha, volte ao passo da posição e
+            escolha uma posição de linha.
+          </>
+        ),
+      };
+
     case "error":
       // Nao afirma nada sobre lotacao porque nao sabemos: a chamada e que
       // falhou. Convida a repetir, que e o que costuma resolver.

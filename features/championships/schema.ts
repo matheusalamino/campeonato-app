@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { CHAMPIONSHIP_STATUS } from "@/types/championship";
 import { MAX_PIX_KEY, pixKeyFits } from "@/lib/pix";
+import { derivedCapacity } from "./capacity";
+import { opensRegistration, publishBlock } from "./publish-guard";
 
 export const championshipStatusSchema = z.enum(CHAMPIONSHIP_STATUS);
 
@@ -25,9 +27,27 @@ export const baseChampionshipObject = z.object({
   registration_end_date: optionalDate,
   gala_night_date: optionalDate,
   tournament_start_date: optionalDate,
-  max_players: z.coerce.number().int().positive().optional(),
+  // `max_players` e `max_waitlist_players` continuam no schema porque continuam
+  // existindo como COLUNA — sao o que as duas RPCs leem. O que muda e a autoria:
+  // `toRow` os deriva do formato abaixo, e o valor que chegar aqui e ignorado.
+  //
+  // O `.positive()` de `max_players` tinha que cair junto: ele recusava 0, que
+  // agora e o valor de "fechado". O CHECK do banco foi relaxado no mesmo sentido
+  // (`max_players IS NULL OR max_players >= 0`, em 20260820010000).
+  max_players: z.coerce.number().int().min(0).optional(),
   max_waitlist_players: z.coerce.number().int().min(0).default(0),
   max_extra_tickets: z.coerce.number().int().min(0).default(4),
+  // O formato: as cinco colunas de 20260820010000, na mesma ordem e com os
+  // mesmos defaults que a DDL declara.
+  //
+  // As duas primeiras sao opcionais porque a coluna e nulavel de proposito —
+  // formato nao configurado e um estado legitimo, que `derivedCapacity` traduz
+  // em zero vagas. As tres com `.default()` espelham `NOT NULL DEFAULT`.
+  teams_count: z.coerce.number().int().min(0).optional(),
+  players_per_team: z.coerce.number().int().min(0).optional(),
+  goalkeepers_per_team: z.coerce.number().int().min(0).default(1),
+  waitlist_goalkeepers: z.coerce.number().int().min(0).default(0),
+  waitlist_outfield: z.coerce.number().int().min(0).default(0),
   status: championshipStatusSchema.default("draft"),
   registration_image_url: z.string().trim().url().optional().or(z.literal("")).transform((v) => v || undefined),
   base_price: z.coerce.number().min(0).optional(),
@@ -93,7 +113,13 @@ function refineChampionship(
       ["registration_end_date", re],
       ["gala_night_date", gn],
       ["tournament_start_date", ts],
-      ["max_players", data.max_players],
+      // O formato, e nao mais o total: `max_players` sai dos obrigatorios porque
+      // `toRow` o IGNORA — quem escreve a coluna e `derivedCapacity`. O input
+      // continua na tela e `buildPayload` continua mandando o valor; mante-lo
+      // aqui recusaria quem o deixasse em branco por causa de um numero que nao
+      // chega mais na coluna.
+      ["teams_count", data.teams_count],
+      ["players_per_team", data.players_per_team],
     ];
     for (const [field, value] of required) {
       if (value === undefined || value === null) {
@@ -101,6 +127,49 @@ function refineChampionship(
           code: "custom",
           path: [field],
           message: "Obrigatório para campeonatos publicados",
+        });
+      }
+    }
+  }
+
+  // Preenchido nao basta: o formato tem de render VAGA.
+  //
+  // O laco acima recusa `undefined` e `null`, e ZERO nao e nenhum dos dois —
+  // `.min(0)` aceita, e `derivedCapacity` devolve `total: 0`, que `toRow` grava
+  // em `max_players`. MEDIDO: `{status: "subscribing", teams_count: 0,
+  // players_per_team: 10}` com as quatro datas passava o schema e virava linha
+  // `subscribing` com `max_players = 0`. Era o segundo caminho para o mesmo
+  // defeito que `publishBlock` guarda em `changeChampionshipStatus`, e por ele
+  // a guarda de la podia ser contornada sem sair da tela.
+  //
+  // So para `subscribing`, e nao para todo status fora de `draft`, porque a
+  // fronteira e a mesma que a guarda usa: e o unico status em que uma inscricao
+  // nasce. Estende-la aos outros travaria a edicao de campeonato `completed`
+  // legado e de rascunho meio preenchido, que nao tem inscricao a proteger.
+  //
+  // Pergunta pelo TOTAL derivado, e nao por cada campo, porque quem decide e a
+  // formula inteira: 3000 times de 800000 jogadores da dois campos positivos e
+  // um produto que estoura int4, e `boundedInt` o devolve como 0. Checar campo a
+  // campo deixaria esse passar.
+  if (opensRegistration(data.status)) {
+    const total = derivedCapacity({
+      teamsCount: data.teams_count ?? 0,
+      playersPerTeam: data.players_per_team ?? 0,
+      goalkeepersPerTeam: data.goalkeepers_per_team,
+      waitlistGoalkeepers: data.waitlist_goalkeepers,
+      waitlistOutfield: data.waitlist_outfield,
+    }).total;
+
+    if (publishBlock({ max_players: total })) {
+      // Nos DOIS campos: o produto e de ambos, e destacar so um mandaria o admin
+      // procurar o erro no lugar errado metade das vezes. Quando o campo esta
+      // vazio, a mensagem de obrigatorio acima ja ocupou o caminho — o mapa de
+      // `zodToFieldErrors` guarda a primeira, e "obrigatorio" e a mais util.
+      for (const field of ["teams_count", "players_per_team"] as const) {
+        ctx.addIssue({
+          code: "custom",
+          path: [field],
+          message: "Times × jogadores por time precisa dar pelo menos uma vaga",
         });
       }
     }

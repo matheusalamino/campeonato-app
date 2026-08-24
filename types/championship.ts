@@ -53,6 +53,20 @@ export interface Championship {
   max_players?: number | null;
   max_waitlist_players?: number | null;
   max_extra_tickets?: number | null;
+  /**
+   * O formato do campeonato, de 20260820010000. As duas grandezas acima saem
+   * DELE: `toRow` chama `derivedCapacity` e ninguem digita o total.
+   *
+   * `teams_count` e `players_per_team` sao nulaveis de proposito — formato nao
+   * configurado e um estado legitimo, que a formula traduz em zero vaga, ou
+   * seja, fechado. E por isso que a ponte para `CapacityConfig` precisa de
+   * coalesce explicito: la os cinco sao `number`.
+   */
+  teams_count?: number | null;
+  players_per_team?: number | null;
+  goalkeepers_per_team?: number | null;
+  waitlist_goalkeepers?: number | null;
+  waitlist_outfield?: number | null;
   slug?: string | null;
   registration_image_url?: string | null;
   base_price?: number | null;
