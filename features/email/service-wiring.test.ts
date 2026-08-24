@@ -145,13 +145,39 @@ describe("o select do resumo, nos dois lugares onde ele existe", () => {
   });
 
   it("nenhum literal de coluna sobrou no servico", () => {
-    // A NEGATIVA, que e a que se paga. Reinlinar qualquer uma das traducoes
-    // acende aqui, e nenhum decoy a satisfaz: so a satisfaz quem de fato nao
-    // escreveu coluna neste arquivo.
+    // ── O QUE ESTA LISTA E, E O QUE ELA NAO E (decisao da T5b) ──
     //
-    // A lista e das colunas que as GRAVACOES poem e dos campos do resumo. A
-    // string do `select` fica de fora de proposito -- ela e leitura, e tem as
-    // duas redes das assertivas de cima.
+    // Ela e guarda de ARQUITETURA: prova que a traducao coluna->campo continua
+    // morando em `features/**`, onde ha teste de comportamento, e nao voltou
+    // para o servico. Reinlinar `sentColumns` acende aqui mesmo que o objeto
+    // reinlinado esteja CERTO -- e e esse o defeito que ela existe para pegar,
+    // porque uma traducao correta hoje num arquivo sem rede e uma traducao
+    // errada amanha sem ninguem ver.
+    //
+    // Ela NAO e guarda de CORRETUDE, e por uma rodada inteira foi lida como se
+    // fosse. MEDIDO: uma SEGUNDA gravacao a mao dentro de `defer` --
+    // `atualizar(supabase, id, { attempts: 0, sent_at: null })` -- passava os
+    // quatro portoes e violava justamente o invariante que `deferColumns`
+    // existe para proteger (adiar nao gasta degrau da escada). Passava porque
+    // `attempts:` e `sent_at:` nao estao na lista. Denylist so pega o que esta
+    // na lista, e o que nao esta e infinito.
+    //
+    // ── E POR ISSO OS DOIS NAO ENTRARAM NA LISTA ──
+    //
+    // Acrescentar `attempts:` e `sent_at:` aqui consertaria o caso e deixaria a
+    // FAMILIA aberta, com esta assertiva parecendo mais forte do que e -- o
+    // convite para a proxima rodada patchear a lista de novo. Quem fecha a
+    // familia e `services/email-outbox.contract.ts`, que afirma o estado da
+    // LINHA depois de cada chamada: um invariante sobre a linha nao tem lista
+    // de onde escapar. Aquele contrato fica vermelho com o decoy; esta lista
+    // nao ficaria, e nao e trabalho dela ficar.
+    //
+    // As duas convivem porque cobrem coisas diferentes e custam coisas
+    // diferentes: esta roda na suite principal, em qualquer maquina, de graca;
+    // o contrato precisa do stack local de pe e roda a mao.
+    //
+    // A string do `select` fica de fora da lista de proposito -- ela e leitura,
+    // e tem as duas redes das assertivas de cima.
     const proibidos = [
       'status: "sent"',
       'status: "pending"',
