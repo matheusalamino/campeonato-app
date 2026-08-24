@@ -430,8 +430,14 @@ $DB -c "
 " > /dev/null 2>&1 || true
 checar "a dedupe_key das duas linhas e o id da inscricao" "2" \
   "$($DB -c "SELECT count(*) FROM email_outbox WHERE dedupe_key='$REG_FILA';")"
-# Contar duas linhas nao diz QUAIS: um gatilho que enfileirasse a confirmacao
-# duas vezes daria 2 tambem, e a organizacao nunca saberia da inscricao.
+# Contar duas linhas nao diz QUAIS, e o que esta assertiva pega e kind trocado
+# ou com typo: escrever 'registration_commited' no lugar de
+# 'registration_committed' deixa a contagem em 2 -- medido -- e so acende aqui.
+# A fila ficaria com um kind que dreno nenhum reconhece.
+#
+# O que ela NAO precisa pegar e a confirmacao enfileirada duas vezes: com
+# UNIQUE (kind, dedupe_key) mais ON CONFLICT DO NOTHING as duas colapsam em UMA
+# linha -- medido --, e quem acende e a contagem de cima, com esperado [2].
 checar "e as duas sao a confirmacao e o aviso da organizacao" \
   "organizer_new_registration|registration_committed" \
   "$($DB -c "SELECT string_agg(kind, '|' ORDER BY kind) FROM email_outbox WHERE dedupe_key='$REG_FILA';")"

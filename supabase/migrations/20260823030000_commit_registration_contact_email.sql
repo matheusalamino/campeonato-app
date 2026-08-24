@@ -499,7 +499,20 @@ inscricao, e o corpo e montado na hora do envio.';
 COMMENT ON TRIGGER trg_enqueue_registration_emails
   ON public.championship_registrations IS
 'AFTER INSERT, para a fila enxergar a linha ja gravada e com id. Rodar na mesma
-transacao e a propriedade central: inscricao desfeita nao deixa e-mail para
-tras.';
+transacao da inscricao E a propriedade central -- inscricao desfeita nao deixa
+e-mail para tras --, mas quem a garante e o PostgreSQL, e nao uma guarda escrita
+neste projeto: gatilho comum roda na transacao de quem o disparou e cai junto no
+ROLLBACK dela.
+
+Isso muda o que a suite consegue provar. Em scripts/test-email-outbox.sh, a
+assertiva que confere a fila vazia DEPOIS do ROLLBACK nao fica vermelha por
+defeito nenhum alcancavel: derrubando este gatilho INTEIRO ela sai verde igual,
+com zero linha enfileirada. Quem carrega peso e a companheira, que mede DENTRO
+da transacao -- e e esse o lado que a suite prova: que a fila recebe as duas
+linhas la dentro.
+
+Nao ha mutacao em codigo que reprove o outro lado. A versao honesta seria
+escrever fora da transacao, via dblink, e ela e mecanicamente impossivel aqui:
+na data desta migration o papel `postgres` do Supabase nao e superusuario.';
 
 COMMIT;
