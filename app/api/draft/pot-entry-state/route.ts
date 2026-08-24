@@ -41,9 +41,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Parâmetros inválidos." }, { status: 400 });
   }
 
-  const posLower = potPosition.toLowerCase();
-  const isGoalkeeper = posLower === "gol" || posLower.includes("goleiro");
-  const isExtra = posLower === "extra" || posLower.includes("adicional");
+  // CODIGO nos dois, desde a 20260821020000. O `isGoalkeeper` daqui ja hedgeava
+  // com `"gol"` e teria sobrevivido a virada; o `isExtra` NAO — nem `"extra"`
+  // nem `"adicional"` casam `EXT` por lado nenhum, e o pote extra voltaria a
+  // pedir habilitacao que ele nao usa.
+  //
+  // `potPosition` vem da query string, entao o produtor aqui e o cliente. Nao
+  // ha porta aberta: a mesma string vai crua para o
+  // `.eq("pot_position", potPosition)` logo abaixo, que so acha linha com o
+  // codigo exato. Caixa errada ja devolvia zero compra antes desta linha.
+  const isGoalkeeper = potPosition === "GOL";
+  const isExtra = potPosition === "EXT";
 
   try {
     const { count: purchasesCount, error: purchasesErr } = await supabase

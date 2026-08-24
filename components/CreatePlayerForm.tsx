@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-
-const POSITIONS = ["Goleiro", "Zagueiro", "Meia", "Atacante"];
+import { CANONICAL_POSITIONS } from "@/features/players/position";
+import { POSITION_LABELS } from "@/lib/public/types";
 
 export function CreatePlayerForm({ onSuccess }: { onSuccess?: () => void }) {
   const router = useRouter();
@@ -18,6 +18,10 @@ export function CreatePlayerForm({ onSuccess }: { onSuccess?: () => void }) {
       return;
     }
 
+    // `position` e o CODIGO vindo do select abaixo. Enquanto era palavra, este
+    // insert batia na CHECK `players_preferred_position_known` e o admin levava
+    // o erro cru do Postgres no `alert` — o cadastro de jogador simplesmente
+    // nao funcionava.
     const { error } = await supabase.from("players").insert({
       name,
       preferred_position: position,
@@ -56,9 +60,9 @@ export function CreatePlayerForm({ onSuccess }: { onSuccess?: () => void }) {
           onChange={(e) => setPosition(e.target.value)}
         >
           <option value="">Posição</option>
-          {POSITIONS.map((pos) => (
-            <option key={pos} value={pos}>
-              {pos}
+          {CANONICAL_POSITIONS.map((codigo) => (
+            <option key={codigo} value={codigo}>
+              {POSITION_LABELS[codigo]}
             </option>
           ))}
         </select>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminOrAuctionFiscal } from "@/lib/draft-auth";
+import { normalizePositionGroup } from "@/features/players/position-group";
 
 type Body = {
   championshipId?: string;
@@ -8,13 +9,6 @@ type Body = {
   managerBCmId?: string;
   playerBRegistrationId?: string;
 };
-
-function normalizePositionGroup(position: string | null | undefined) {
-  const p = (position ?? "").trim().toLowerCase();
-  if (!p) return "unknown" as const;
-  if (p === "gol" || p.includes("goleiro")) return "goalkeeper" as const;
-  return "line" as const;
-}
 
 export async function POST(req: Request) {
   const auth = await requireAdminOrAuctionFiscal();

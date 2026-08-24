@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { PlayerSearchCard } from "@/components/team-manager/PlayerSearchCard";
 import { cn } from "@/lib/utils";
+import { potLabel } from "@/features/draft/pot-position";
 
 type PotPlayer = {
   id: string;
@@ -36,12 +37,37 @@ type PotPreviewTabProps = {
   catalogByRegistration: Map<string, CatalogPlayer>;
 };
 
+/**
+ * A cor do cabecalho de cada pote, escolhida pelo CODIGO.
+ *
+ * ── POR QUE ISTO DEIXOU DE SER `includes` ──
+ *
+ * A comparacao aqui era por SUBSTRING desde muito antes do A8; o que a Task 4
+ * fez foi consertar o `MEIA` para `MEI` e ESCREVER por que a substring ficava.
+ * E era rede de proposito: `"GOLEIRO"` contem `"GOL"` e `"MEIA"` contem `"MEI"`, entao o
+ * cabecalho pintava certo nos dois vocabularios e atravessava sem perder cor o
+ * pote gerado ANTES da virada da coluna do jogador. O comentario que estava
+ * neste lugar pedia, com todas as letras, que ninguem trocasse por `===` antes
+ * da Task 5.
+ *
+ * A Task 5 chegou: a 20260821020000 converteu `draft_pots.position` e as outras
+ * seis colunas de pote, e pos CHECK nas sete. Nao ha mais pote legado a
+ * tolerar, e substring sobre um dominio de cinco valores fixos deixa de ser
+ * rede — vira hedge, que e o que este bloco veio remover, e ensina o proximo
+ * leitor a esperar palavra de volta.
+ *
+ * O `EXT` nao tem ramo, e isso e o comportamento de sempre: `"Extra"` tambem
+ * nao continha nenhum dos quatro e ja caia no cinza do fallback.
+ */
 function positionHeaderClass(position: string) {
-  const p = position.toUpperCase();
-  if (p.includes("GOL")) return "border-amber-500/40 bg-amber-500/10 text-amber-200";
-  if (p.includes("ZAG")) return "border-blue-500/40 bg-blue-500/10 text-blue-200";
-  if (p.includes("MEIA")) return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
-  if (p.includes("ATA")) return "border-red-500/40 bg-red-500/10 text-red-200";
+  if (position === "GOL")
+    return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  if (position === "ZAG")
+    return "border-blue-500/40 bg-blue-500/10 text-blue-200";
+  if (position === "MEI")
+    return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (position === "ATA")
+    return "border-red-500/40 bg-red-500/10 text-red-200";
   return "border-zinc-600 bg-zinc-800/80 text-zinc-200";
 }
 
@@ -164,7 +190,7 @@ export function PotPreviewTab({
                 Pote {pot.pot_number}
               </h2>
               <span className="text-xs font-medium opacity-90">
-                {pot.position}
+                {potLabel(pot.position)}
               </span>
             </div>
             <div className="flex items-center gap-2 text-[11px] tabular-nums opacity-90">
@@ -181,14 +207,18 @@ export function PotPreviewTab({
             {pot.players.map((pl) => {
               const rid = pl.registrationId;
               const meta = rid ? catalogByRegistration.get(rid) : undefined;
-              const positionLabel = meta?.position ?? pot.position;
+              // CODIGO, e nao rotulo: e ele que escolhe a cor da etiqueta
+              // dentro do card. Ja se chamou `positionLabel`, o que era duas
+              // mentiras — nao e rotulo, e sombraria o `positionLabel` de
+              // `lib/public/types.ts` no dia em que este arquivo o importasse.
+              const codigoDaEtiqueta = meta?.position ?? pot.position;
 
               if (rid) {
                 return (
                   <PlayerSearchCard
                     key={`${pot.pot_number}-${pot.position}-${rid}`}
                     name={pl.name}
-                    position={positionLabel}
+                    position={codigoDaEtiqueta}
                     overall={pl.overall ?? null}
                     photoUrl={pl.photo}
                     isPurchased={meta?.isPurchased ?? false}

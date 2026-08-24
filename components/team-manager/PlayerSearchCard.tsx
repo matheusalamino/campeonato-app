@@ -2,6 +2,7 @@
 
 import { Star } from "lucide-react";
 import Image from "next/image";
+import { positionLabel } from "@/lib/public/types";
 import { cn } from "@/lib/utils";
 
 type PlayerSearchCardProps = {
@@ -15,14 +16,28 @@ type PlayerSearchCardProps = {
   onToggleFavorite: () => void;
 };
 
+/**
+ * A cor da etiqueta por CODIGO de posicao.
+ *
+ * As quatro PALAVRAS que estavam aqui sairam na virada da 20260821010000 —
+ * `players.preferred_position` guarda codigo, entao nenhuma voltaria a casar.
+ *
+ * A metade que parecia ser "de codigo" tinha a chave do meia escrita `MEIA`,
+ * que nao e codigo de nada. Era REDUNDANCIA, e nao um defeito que rodou: ate a
+ * virada a coluna guardava a PALAVRA, entao o meia era pintado de emerald pela
+ * chave `Meia` logo acima e nunca caiu no cinza do fallback. `MEIA` esta neste
+ * arquivo desde 0393c95 (15/04/2026) sem nunca ter sido consultada.
+ *
+ * O custo dela nao foi tela errada — foi que ninguem tinha como saber se era
+ * chave morta ou chave que importava, e por isso ela atravessou uma virada de
+ * vocabulario inteira sem ninguem questionar. E o argumento contra deixar
+ * entrada "por seguranca" num mapa: ela nao avisa quando para de fazer sentido,
+ * e quem chega depois nao tem como distinguir reserva de lixo.
+ */
 const positionColors: Record<string, string> = {
-  Goleiro: "bg-yellow-500/20 text-yellow-300",
-  Zagueiro: "bg-blue-500/20 text-blue-300",
-  Meia: "bg-emerald-500/20 text-emerald-300",
-  Atacante: "bg-red-500/20 text-red-300",
   GOL: "bg-yellow-500/20 text-yellow-300",
   ZAG: "bg-blue-500/20 text-blue-300",
-  MEIA: "bg-emerald-500/20 text-emerald-300",
+  MEI: "bg-emerald-500/20 text-emerald-300",
   ATA: "bg-red-500/20 text-red-300",
 };
 
@@ -89,7 +104,17 @@ export function PlayerSearchCard({
               positionColors[position] ?? "bg-zinc-700 text-zinc-300",
             )}
           >
-            {position}
+            {/*
+              O prop segue chegando em CODIGO, e tem de seguir: e ele que
+              escolhe a cor logo acima. Quem vira palavra e so o TEXTO.
+
+              `PotPreviewTab` chama este card com a posicao do POTE quando o
+              jogador nao esta no catalogo, e la existe `EXT`, que nao e posicao
+              de ninguem. `positionLabel` devolve o bruto nesse caso, entao a
+              etiqueta diz `EXT` — mesmo destino que a cor ja tinha, porque
+              `positionColors` tambem nao tem essa entrada.
+            */}
+            {positionLabel(position)}
           </span>
           {isPurchased && (
             <>

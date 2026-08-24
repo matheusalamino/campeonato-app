@@ -7,7 +7,9 @@ import { isValidCpf, formatCpf } from "@/lib/cpf";
 import { formatPhoneBR, formatHeightM, heightToMask, formatBRL } from "@/lib/masks";
 import { BR_STATES } from "@/lib/br-states";
 import { groupRequiresInviteCode } from "@/features/registration/groups";
-import { normalizePreferredPosition } from "@/features/players/position";
+import { CANONICAL_POSITIONS, normalizePreferredPosition } from "@/features/players/position";
+import { normalizePositionGroup } from "@/features/players/position-group";
+import { POSITION_LABELS } from "@/lib/public/types";
 import { skillsFor, SKILL_LABELS } from "@/features/registration/skills";
 import { computeTicketsTotal } from "@/features/registration/pricing";
 import { buildPixPayload, makePixTxid } from "@/lib/pix";
@@ -51,7 +53,11 @@ export type WizardChampionship = {
 
 const EMPTY = {
   cpf: "", name: "", shirt_name: "", shirt_size: "", email: "", whatsapp: "", birth_date: "",
-  birth_state: "", instagram: "", preferred_position: "Meia",
+  // Sem posicao escolhida, e nao "Meia" por padrao: uma posicao ja preenchida e
+  // um palpite que o jogador tende a nao corrigir, e a cota de goleiro do A6
+  // conta `GOL` contra todo o resto — o palpite errado poe um goleiro no balde
+  // de linha sem ninguem decidir isso.
+  birth_state: "", instagram: "", preferred_position: "",
   height: "", weight: "", group_affiliation: "", invite_code: "",
   extra_tickets_count: 0,
   skills: {} as Record<string, number>,
@@ -72,17 +78,22 @@ const BLOCKED_BY_SLOT = "Não é possível seguir agora. Veja o aviso no topo da
  * `p_is_goalkeeper boolean` de proposito — nenhuma delas conhece o vocabulario
  * de posicao, e por isso nenhuma delas quebra no dia em que ele mudar.
  *
- * Passa por `normalizePreferredPosition` em vez de comparar a string do
- * formulario direto, e a diferenca nao e cosmetica. O valor pode chegar do
- * banco pelo preenchimento automatico do CPF, e `' goleiro '` com espaco
- * sobrando nao e `"Goleiro"` para comparacao nenhuma — mandaria um goleiro para
- * o balde de linha, calado. E o resultado normalizado e `CanonicalPosition |
- * null`, entao a comparacao aqui e a UNICA que o `tsc` cobra: se o vocabulario
- * canonico deixar de ter esta palavra, isto vira erro de tipo em vez de virar
- * `false` em silencio.
+ * Passa por `normalizePositionGroup` em vez de comparar a string do formulario
+ * direto, e a diferenca nao e cosmetica. O valor pode chegar do banco pelo
+ * preenchimento automatico do CPF, e `' gol '` com espaco sobrando nao e
+ * `"GOL"` para comparacao nenhuma — mandaria um goleiro para o balde de linha,
+ * calado. A funcao apara e sobe a caixa antes de decidir.
+ *
+ * A versao anterior comparava contra a PALAVRA, e o docblock dela previa o que
+ * de fato aconteceu: quando o vocabulario virou codigo, isto deixou de ser
+ * `false` em silencio e virou erro de tipo (TS2367). A previsao valeu, e a
+ * propriedade continua de pe — `normalizePositionGroup` devolve um union de
+ * tres membros, entao comparar com `"goalkeeper"` segue sendo cobrado pelo
+ * `tsc`. O que mudou e onde o vocabulario mora: agora so em
+ * `features/players/position-group.ts`, e nao aqui.
  */
 function isGoalkeeperPosition(position: string): boolean {
-  return normalizePreferredPosition(position).position === "Goleiro";
+  return normalizePositionGroup(position) === "goalkeeper";
 }
 
 const inputBase =
@@ -324,7 +335,13 @@ export default function RegistrationWizard({
         // inscrever via o campo em branco e levava erro do Zod num campo que
         // nunca tocou. Producao e staging estao 100% canonicos hoje (medido em
         // 2026-08-21), entao quem cai aqui e nulo ou dado vindo do CSV.
-        position = normalizePreferredPosition(p.preferred_position).position ?? "Meia";
+        //
+        // O nao reconhecido para em "" e OBRIGA a escolha, em vez de virar uma
+        // posicao de consolo. Os dois lados desta linha se encontram aqui: a
+        // variavel existe porque a reserva le a posicao antes do render, e o
+        // vazio existe porque a cota conta GOL contra todo o resto -- um goleiro
+        // com dado sujo mandado calado para o balde de linha nao deixa rastro.
+        position = normalizePreferredPosition(p.preferred_position).position ?? "";
         setForm((prev) => ({
           ...prev,
           name: p.name ?? "", shirt_name: p.shirt_name ?? "", shirt_size: p.shirt_size ?? "",
@@ -579,7 +596,27 @@ export default function RegistrationWizard({
     return () => clearInterval(id);
   }, [nextSunset, router]);
 
-  const activeSkills = skillsFor(form.preferred_position);
+  // O select da posicao nasce vazio, e o bloco de habilidades logo abaixo tem de
+  // nascer vazio junto.
+  //
+  // `skillsFor("")` devolve LINE_SKILLS, e esta CERTO assim: ela tem quatro
+  // chamadores (este, o Zod de `schema.ts`, o radar e o servico do insert), e
+  // devolver `[]` para desconhecido mudaria a semantica do `superRefine` e do
+  // filtro do insert de graca. A politica deste repo e decidir na BORDA
+  // (features/players/position.ts:46-47) — a borda e aqui.
+  //
+  // Sem isto o passo 4 desenha as seis estrelas de LINHA antes de a pessoa
+  // escolher posicao. Nao grava errado (o Zod exige o conjunto certo depois),
+  // mas o goleiro que avaliar as estrelas primeiro ve o trabalho sumir da tela
+  // ao escolher a posicao, sem explicacao nenhuma.
+  const posicaoEscolhida = form.preferred_position !== "";
+  const activeSkills = posicaoEscolhida ? skillsFor(form.preferred_position) : [];
+  // O estado do form e `string` porque o select tem a opcao vazia, e
+  // `POSITION_LABELS` so aceita codigo canonico. Quem estreita e a
+  // normalizacao, e nao um cast: ela devolve `CanonicalPosition | null`, e o
+  // null e exatamente o "ainda nao escolheu" que a revisao mostra como
+  // travessao.
+  const posicaoCanonica = normalizePreferredPosition(form.preferred_position).position;
   const total = computeTicketsTotal({
     basePrice: championship.base_price,
     extraTicketPrice: championship.extra_ticket_price,
@@ -707,9 +744,16 @@ export default function RegistrationWizard({
                  value={form.cpf} onChange={(e) => set("cpf", formatCpf(e.target.value))} />
           {err("cpf")}
           {/* A posicao mora AQUI, e nao no perfil de jogo, porque a reserva sai
-              deste passo e precisa saber o balde. Ver `FIELD_STEP`. */}
+              deste passo e precisa saber o balde. Ver `FIELD_STEP`.
+
+              Valor e CODIGO, rotulo e palavra: e o codigo que a coluna
+              `players.preferred_position` guarda, e o valor daqui chega ao
+              insert sem passar por conversao nenhuma. */}
           <select {...fieldProps("preferred_position")} aria-label="Posição preferida" value={form.preferred_position} onChange={(e) => onPositionChange(e.target.value)}>
-            <option>Zagueiro</option><option>Meia</option><option>Atacante</option><option>Goleiro</option>
+            <option value="">Selecione…</option>
+            {CANONICAL_POSITIONS.map((codigo) => (
+              <option key={codigo} value={codigo}>{POSITION_LABELS[codigo]}</option>
+            ))}
           </select>
           {err("preferred_position")}
           <button onClick={onCpfContinue} disabled={looking}
@@ -792,12 +836,25 @@ export default function RegistrationWizard({
               {err("weight")}
             </div>
           </div>
+          {/* Sem posicao escolhida nao ha o que avaliar, e a tela diz isso em vez
+              de desenhar as estrelas de linha por padrao. */}
+          {!posicaoEscolhida && (
+            <p className="text-xs text-[var(--gala-ink-dim)]">
+              Escolha a posição acima para avaliar as habilidades certas.
+            </p>
+          )}
           {/* Preso abaixo do header (que e sticky top-0 z-50) enquanto as
               estrelas rolam por baixo. Estatico, o radar sairia da tela na
               terceira habilidade e o "ao vivo" se perderia onde mais importa.
               O fundo repete a mesma tinta dourada do StepShell sobre o fundo da
-              pagina, para a banda opaca nao destoar do passo. */}
-          {hasAnyRating(form.skills, form.preferred_position) && (
+              pagina, para a banda opaca nao destoar do passo.
+
+              A guarda de `posicaoEscolhida` tambem aqui, e nao so no
+              `activeSkills`: `hasAnyRating` passa pelo mesmo `skillsFor`, entao
+              quem avaliou e depois voltou o select para vazio veria o radar
+              sozinho, com as habilidades de linha e sem nenhuma estrela por
+              perto. MEDIDO: `hasAnyRating({visao: 4}, "")` devolve `true`. */}
+          {posicaoEscolhida && hasAnyRating(form.skills, form.preferred_position) && (
             <div className="sticky top-14 z-10 -mx-4 px-4 py-2"
                  style={{ background: "linear-gradient(rgba(230,180,34,.06), rgba(230,180,34,.06)), var(--gala-bg-0)" }}>
               <PlayerRadar
@@ -907,7 +964,9 @@ export default function RegistrationWizard({
 
         <StepShell index={stepNumber(7, minor)} title="Revisão & envio" open={step === 7} done={false} onToggle={() => open(7)}>
           <div className="text-sm text-[var(--gala-ink-dim)] space-y-1">
-            <div><b className="text-[var(--gala-ink)]">{form.name || "—"}</b> · {form.preferred_position}</div>
+            {/* Rotulo, e nao o codigo: a revisao e a ultima tela antes de o
+                jogador confirmar, e "GOL" nao e o que ele escolheu ler. */}
+            <div><b className="text-[var(--gala-ink)]">{form.name || "—"}</b> · {posicaoCanonica ? POSITION_LABELS[posicaoCanonica] : "—"}</div>
             <div>{form.group_affiliation || "—"}</div>
             <div>Total: {formatBRL(total)}{waitlisted ? " · Lista de espera" : ""}</div>
           </div>

@@ -112,15 +112,26 @@ export default function SquadPage() {
 
   const positionCounts = players.reduce(
     (acc, p) => {
-      const pos =
-        p.position === "Goleiro"
-          ? "GOL"
-          : p.position === "Zagueiro"
-            ? "ZAG"
-            : p.position === "Meia"
-              ? "MEI"
-              : "ATA";
-      acc[pos] = (acc[pos] ?? 0) + 1;
+      // Sem conversao: `players.preferred_position` ja guarda o CODIGO desde a
+      // 20260821010000, e a cadeia palavra->sigla que estava aqui parou de casar
+      // qualquer ramo. Nao virou identidade — caia no `else` e contava TODO o
+      // elenco como `ATA`. Reescrever a cadeia em codigo seria identidade
+      // escrita a mao; o certo e nao ter cadeia.
+      //
+      // SEM CATCH-ALL, e a escolha e deliberada. O `else` que sumiu tambem era o
+      // destino de quem nao e nenhum dos quatro: `NULL` (que a CHECK aceita, e
+      // `features/players/position.ts` registra como load-bearing -- o script de
+      // vagas insere jogador so com cpf e nome), `LAT` e `VOL`. Esses agora NAO
+      // aparecem em nenhum dos quatro cartoes, enquanto o `{players.length}/10`
+      // do cabecalho segue contando todo mundo: a soma dos cartoes pode dar
+      // menos que o total, e isso e o certo.
+      //
+      // Somar jogador sem posicao a um balde qualquer e o defeito que acabou de
+      // sair daqui, so que menor -- resumo de contagem nao pode inventar posicao
+      // para quem nao tem. O `<FootballField>` logo abaixo decide diferente (joga
+      // desconhecido em `MEI`) e tambem esta certo: la a pergunta e ONDE
+      // DESENHAR num campo de quatro faixas, e alguma faixa tem de sair.
+      acc[p.position] = (acc[p.position] ?? 0) + 1;
       return acc;
     },
     {} as Record<string, number>,

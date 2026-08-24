@@ -26,18 +26,6 @@ type RevealPlayer = {
   };
 };
 
-const POS_ABBR: Record<string, string> = {
-  Atacante: "ATA",
-  Zagueiro: "ZAG",
-  Meia: "MEI",
-  Goleiro: "GOL",
-  Lateral: "LAT",
-  Volante: "VOL",
-};
-function posAbbr(pos: string): string {
-  return POS_ABBR[pos] ?? pos.slice(0, 3).toUpperCase();
-}
-
 export function PlayerRadar({
   attributes,
 }: {
@@ -128,7 +116,26 @@ export default function PlayerCard(props: PlayerCardProps) {
           ],
         };
 
-  const pos = posAbbr(player.position);
+  // A etiqueta da carta E o codigo. O `player.position` chega de
+  // `draft_pots.position`, que a geracao de potes copia de
+  // `players.preferred_position` — codigo desde a 20260821010000.
+  //
+  // A RESSALVA QUE ESTAVA AQUI MORREU, e o registro fica porque ela era certa:
+  // ate a Task 5 do A8 nenhuma migration convertia `draft_pots.position`, e a
+  // linha de pote gerada antes da virada ainda guardava a PALAVRA — a etiqueta
+  // imprimia `Goleiro` cru no lugar de `GOL`. A 20260821020000 converteu as
+  // sete colunas de pote e pos CHECK nas sete, entao nao ha mais pote legado a
+  // atravessar: o que chega aqui e codigo, ou o insert nem grava.
+  //
+  // Aqui havia uma tabela `POS_ABBR` so de PALAVRA, encoberta por um
+  // `?? pos.slice(0, 3).toUpperCase()`, que e identidade para os quatro
+  // canonicos: DEPOIS da virada toda consulta errava e o fallback devolvia o
+  // proprio codigo. Antes dela o mapa era consultado e acertava — foi util, e o
+  // que o aposentou foi a coluna virar codigo, nao ele nascer errado.
+  //
+  // Mapa que, depois da virada, so acerta quando NAO e consultado nao e rede —
+  // e ruido que o proximo leitor toma por suporte a dois vocabularios.
+  const pos = player.position;
   const overall = player.overall ?? "—";
   const mid = Math.ceil(player.attributes.length / 2);
   const leftAttrs = player.attributes.slice(0, mid);

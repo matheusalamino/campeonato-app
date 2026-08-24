@@ -1,11 +1,20 @@
 // Tipos compartilhados das páginas públicas (telão e estatísticas)
 
+import {
+  normalizePreferredPosition,
+  type CanonicalPosition,
+} from "@/features/players/position";
+
 export type PublicPlayer = {
   registrationId: string;
   championshipId: string;
   playerName: string;
   officialName: string | null;
-  position: string | null;
+  // Codigo, nao palavra. E quem garante NAO e a coluna: a migration que poe a
+  // CHECK ainda nao subiu para staging nem producao, e la o banco ainda devolve
+  // `Goleiro`. Quem garante e `mapPlayer` (lib/public/map-player.ts), unico
+  // produtor deste campo, que normaliza antes de entregar.
+  position: CanonicalPosition | null;
   photoUrl: string | null;
   finalOverall: number | null;
   championshipTeamId: string | null;
@@ -33,30 +42,87 @@ export type RankingEntry = {
   teamName: string | null;
   teamLogoUrl: string | null;
   photoUrl: string | null;
-  position: string | null;
+  // Mesma garantia do `PublicPlayer.position`, e pela mesma via: toda entrada
+  // de ranking sai de um `PublicPlayer` ja normalizado, ou nasce `null` (os
+  // cartolas, que nao tem posicao).
+  position: CanonicalPosition | null;
   value: number;       // gols, assistências, pontos, IOG...
   detail?: string;     // ex.: "OVR 78"
   isOverride?: boolean;
 };
 
-export const POSITION_LABELS: Record<string, string> = {
+/**
+ * Codigo -> palavra por extenso. O UNICO conversor de exibicao do app: e daqui
+ * que as telas publicas, os formularios do admin e o wizard de inscricao tiram
+ * a palavra que o usuario le.
+ *
+ * Tipado por `CanonicalPosition`, e nao por `string`, e a diferenca e o que o
+ * `tsc` pega: com `Record<string, string>` um codigo novo sem rotulo COMPILAVA
+ * e sumia na tela. Agora nao compila.
+ *
+ * `LAT` e `VOL` sairam porque eram rotulo sem dado possivel. A CHECK
+ * `players_preferred_position_known` so aceita GOL/ZAG/MEI/ATA ou NULL: o texto
+ * esta em `supabase/migrations/20260821010000_position_vocabulary_codes.sql`, e
+ * `features/players/position.test.ts` prende `CANONICAL_POSITIONS` aquele
+ * arquivo. Entao a coluna nao guarda nenhum dos dois; e as duas telas de filtro
+ * montam as opcoes com `Object.entries(POSITION_LABELS)`, ou seja, os dois
+ * rendiam botao que nunca casaria com jogador nenhum.
+ *
+ * Isto NAO revoga os apelidos `lateral`/`volante` de `POSITION_ALIASES`: la e
+ * borda de ENTRADA, e o CSV continua recebendo essas palavras de planilha
+ * alheia. O que acabou e a pretensao de exibi-las.
+ */
+export const POSITION_LABELS: Record<CanonicalPosition, string> = {
   GOL: "Goleiro",
   ZAG: "Zagueiro",
-  LAT: "Lateral",
-  VOL: "Volante",
   MEI: "Meia",
   ATA: "Atacante",
 };
 
-// Maps full-word labels (as stored in DB) back to position codes
-const LABEL_TO_CODE: Record<string, string> = {
-  Goleiro: "GOL", Zagueiro: "ZAG", Lateral: "LAT",
-  Volante: "VOL", Meia: "MEI", Atacante: "ATA",
-  // tolerate codes already being codes
-  GOL: "GOL", ZAG: "ZAG", LAT: "LAT", VOL: "VOL", MEI: "MEI", ATA: "ATA",
-};
-
-export function normalizePosition(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  return LABEL_TO_CODE[raw] ?? LABEL_TO_CODE[raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()] ?? raw;
+/**
+ * A palavra de uma posicao vinda do BANCO, que o `tsc` ve como `string`.
+ *
+ * ── POR QUE UMA FUNCAO, E NAO `POSITION_LABELS[x] ?? x` ──
+ *
+ * Onde o valor ja e `CanonicalPosition` — `PublicPlayer.position`, que
+ * `mapPlayer` normaliza — indexar o mapa direto e o certo, e as telas publicas
+ * fazem exatamente isso. Esta funcao e para o OUTRO lado: `Player`,
+ * `PlayerSearchCard` e o `auction-fiscal` tipam a posicao como `string`, e ali
+ * `POSITION_LABELS[x]` nem compila, porque o mapa e tipado por
+ * `CanonicalPosition` de proposito.
+ *
+ * O jeito errado de calar o `tsc` seria alargar o mapa para
+ * `Record<string, string>`, e o docblock acima diz o que isso custa: codigo sem
+ * rotulo voltaria a compilar e sumir na tela. Entao o estreitamento acontece
+ * AQUI, uma vez, em vez de virar oito copias espalhadas pelas telas.
+ *
+ * ── POR QUE `normalizePreferredPosition`, E NAO `Object.hasOwn` ──
+ *
+ * O irmao do pote (`potLabel`, em `features/draft/pot-position.ts`) resolve o
+ * mesmo problema de tipo com `Object.hasOwn`, e para o pote isso basta: ali o
+ * unico vocabulario que existe e o codigo.
+ *
+ * Para o jogador ha vocabulario LEGADO vivo: a 20260821010000 ainda nao chegou
+ * a staging nem a producao, e la a coluna devolve `Goleiro`.
+ *
+ * MEDIDO, e o ganho e menor do que parece: para a palavra canonica EXATA os
+ * dois caminhos empatam — `Object.hasOwn` nao acha `Goleiro`, devolve o bruto,
+ * e o bruto ja e a palavra certa. O que so a normalizacao pega e a VARIANTE:
+ * `atacante` em caixa baixa, `' goleiro '` com espaco sobrando, `Pivo`.
+ *
+ * E `features/players/position.ts` registra que variante assim NAO existe em
+ * dado real — os tres ambientes estao 100% nas quatro palavras exatas. Entao
+ * isto nao e conserto de um defeito que roda hoje; e a mesma defesa de
+ * fronteira que `mapPlayer` faz, pelo mesmo argumento: o `tsc` ve `string`, e
+ * promessa ao compilador nao e garantia de runtime. De quebra fecha o furo do
+ * prototipo de Object que `POSITION_ALIASES` teve.
+ *
+ * Devolve o BRUTO para o que ninguem reconhece — inclusive para a string vazia,
+ * e isso e load-bearing: `auction-fiscal` escreve
+ * `positionLabel(p.position) || "Sem posicao"`, e um rotulo no lugar do vazio
+ * desarmaria aquele guarda.
+ */
+export function positionLabel(position: string): string {
+  const canonical = normalizePreferredPosition(position).position;
+  return canonical ? POSITION_LABELS[canonical] : position;
 }

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { potTitle } from "@/features/draft/pot-position";
 
 async function requireAdmin(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
@@ -57,7 +58,11 @@ export async function POST(req: Request) {
       );
     }
 
-    if (pos.toLowerCase() === "goleiro") {
+    // `GOL`, e nao `goleiro`: a coluna guarda CODIGO desde a 20260821020000.
+    // Aqui o desfecho e o mais silencioso dos quatro — sem a guarda, o estorno
+    // segue adiante e nao acha lance nenhum, devolvendo `refunded: 0` como se
+    // tivesse trabalhado.
+    if (pos === "GOL") {
       return NextResponse.json({
         success: true,
         refunded: 0,
@@ -132,7 +137,7 @@ export async function POST(req: Request) {
 
       const amount = bid.bid_amount;
       const newBalance = (cm?.current_balance ?? 0) + amount;
-      const potLabel = `Pote ${potNumber} (${pos})`;
+      const potLabel = potTitle(potNumber, pos);
 
       const { error: txErr } = await supabase
         .from("draft_balance_transactions")

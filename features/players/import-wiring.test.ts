@@ -153,7 +153,8 @@ describe("fiacao: import-players normaliza a posicao", () => {
     // Exige a FORMA, em vez de proibir uma grafia: a negativa antiga bloqueava
     // `safeString(` e deixava passar `row["Posição"] === "Goleiro"` cru.
     expect(rhs).toMatch(/^normalizePreferredPosition\(/);
-    expect(rhs).toMatch(/\.position\s*===\s*["']Goleiro["']/);
+    // `GOL`, e nao `Goleiro`: o canonico virou codigo na 20260821010000.
+    expect(rhs).toMatch(/\.position\s*===\s*["']GOL["']/);
   });
 });
 

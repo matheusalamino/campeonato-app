@@ -7,6 +7,7 @@ import PlayerRadar from "@/components/PlayerRadar";
 import { calculateRadar } from "@/lib/calculateRadar";
 import { recalculateOverall } from "@/lib/overall";
 import { useLoading } from "@/components/ui/loading-provider";
+import { positionLabel } from "@/lib/public/types";
 import { skill_labels } from "@/lib/skills";
 
 type Evaluation = {
@@ -111,7 +112,9 @@ export default function PlayerRadarModal({
 
             <div>
               <h2 className="text-lg md:text-2xl font-bold">{playerName}</h2>
-              <p className="text-zinc-400 text-sm md:text-base">{position}</p>
+              <p className="text-zinc-400 text-sm md:text-base">
+                {positionLabel(position)}
+              </p>
             </div>
           </div>
 

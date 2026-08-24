@@ -38,7 +38,10 @@ CROSS JOIN (
 CROSS JOIN LATERAL (
   SELECT unnest(
     CASE
-      WHEN p.preferred_position = 'Goleiro' THEN ARRAY[
+      -- 'GOL', e nao 'Goleiro': a coluna guarda CODIGO desde a
+      -- 20260821010000. Errar aqui nao estoura o script — semeia o goleiro com
+      -- as seis habilidades de LINHA, e o final_overall sai do conjunto errado.
+      WHEN p.preferred_position = 'GOL' THEN ARRAY[
         'comunicacao',
         'jogoAereo',
         'posicionamento',

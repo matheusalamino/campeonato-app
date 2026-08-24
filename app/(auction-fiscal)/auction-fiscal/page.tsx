@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
+import { normalizePositionGroup } from "@/features/players/position-group";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +13,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { potTitle } from "@/features/draft/pot-position";
+import { positionLabel } from "@/lib/public/types";
 
 const supabase = createClient();
 let alertHornAudio: HTMLAudioElement | null = null;
@@ -56,13 +59,6 @@ type TransferManagerOption = {
 };
 
 const LS_KEY = "auctionFiscalChampionshipId";
-
-function normalizePositionGroup(position: string | null | undefined) {
-  const p = (position ?? "").trim().toLowerCase();
-  if (!p) return "unknown" as const;
-  if (p === "gol" || p.includes("goleiro")) return "goalkeeper" as const;
-  return "line" as const;
-}
 
 function playAlertHorn() {
   try {
@@ -170,7 +166,7 @@ export default function AuctionFiscalPage() {
     ) {
       return null;
     }
-    return `Pote ${payload.potNumber} (${payload.potPosition})`;
+    return potTitle(payload.potNumber, payload.potPosition);
   }, [payload]);
 
   const qualifiedParticipantsCount = useMemo(() => {
@@ -733,7 +729,7 @@ export default function AuctionFiscalPage() {
                     <option value="">Selecione o Jogador X</option>
                     {(managerA?.players ?? []).map((p) => (
                       <option key={`pa-${p.registrationId}`} value={p.registrationId}>
-                        {p.name} ({p.position || "Sem posição"})
+                        {p.name} ({positionLabel(p.position) || "Sem posição"})
                       </option>
                     ))}
                   </select>
@@ -771,7 +767,7 @@ export default function AuctionFiscalPage() {
                     <option value="">Selecione o Jogador Y</option>
                     {(managerB?.players ?? []).map((p) => (
                       <option key={`pb-${p.registrationId}`} value={p.registrationId}>
-                        {p.name} ({p.position || "Sem posição"})
+                        {p.name} ({positionLabel(p.position) || "Sem posição"})
                       </option>
                     ))}
                   </select>
@@ -830,7 +826,9 @@ export default function AuctionFiscalPage() {
             <p>
               <span className="text-zinc-500">Jogador X:</span>{" "}
               <span className="font-medium text-zinc-100">
-                {playerA ? `${playerA.name} (${playerA.position})` : "—"}
+                {playerA
+                  ? `${playerA.name} (${positionLabel(playerA.position)})`
+                  : "—"}
               </span>
             </p>
             <p>
@@ -842,7 +840,9 @@ export default function AuctionFiscalPage() {
             <p>
               <span className="text-zinc-500">Jogador Y:</span>{" "}
               <span className="font-medium text-zinc-100">
-                {playerB ? `${playerB.name} (${playerB.position})` : "—"}
+                {playerB
+                  ? `${playerB.name} (${positionLabel(playerB.position)})`
+                  : "—"}
               </span>
             </p>
             <p className="pt-1 text-xs text-zinc-500">

@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { potLabel } from "@/features/draft/pot-position";
 
 type QualifiedManager = {
   championship_manager_id: string;
@@ -581,7 +582,7 @@ export default function PotAuctionSlide({
             </DialogDescription>
           </DialogHeader>
           <p className="text-sm text-zinc-300">
-            Confirma a finalização do <span className="font-medium text-amber-200">Pote {pot.pot_letter} ({pot.position})</span>?
+            Confirma a finalização do <span className="font-medium text-amber-200">Pote {pot.pot_letter} ({potLabel(pot.position)})</span>?
           </p>
           <DialogFooter className="gap-2">
             <button

@@ -11,10 +11,27 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { potLabel } from "@/features/draft/pot-position";
 
+/**
+ * O icone do pote, escolhido pelo CODIGO.
+ *
+ * Tres ramos e um fallback, e o fallback nao e descuido: `ATA` nunca teve `if`
+ * proprio — a estrela sempre foi dele — e o pote `EXT` cai ali junto, como caia
+ * quando se chamava `Extra`.
+ *
+ * As palavras que estavam aqui (`goleiro`, `zagueiro`, `meia`, `meio`) sairam
+ * na 20260821020000, que converteu `draft_pots.position` para codigo. Com elas,
+ * os QUATRO potes cairiam no fallback e a tela inteira viraria estrela.
+ *
+ * Sairam junto `defensor` e `lateral`, e esses nunca foram DADO. Nao "a coluna
+ * nao aceitava": ate a 20260820010000 `players.preferred_position` nao tinha
+ * CHECK nenhuma e teria aceitado os dois. O que se mediu foi o conteudo — em
+ * 2026-08-21, nos tres ambientes, 100% dos jogadores nos quatro canonicos, zero
+ * `Lateral`. Era vocabulario que so morava neste `if`.
+ */
 function PositionIcon({ position }: { position: string }) {
-  const pos = position.toLowerCase();
-  if (pos.includes("goleiro")) {
+  if (position === "GOL") {
     return (
       <svg
         width="36"
@@ -31,11 +48,7 @@ function PositionIcon({ position }: { position: string }) {
       </svg>
     );
   }
-  if (
-    pos.includes("zagueiro") ||
-    pos.includes("defensor") ||
-    pos.includes("lateral")
-  ) {
+  if (position === "ZAG") {
     return (
       <svg
         width="36"
@@ -51,7 +64,7 @@ function PositionIcon({ position }: { position: string }) {
       </svg>
     );
   }
-  if (pos.includes("meia") || pos.includes("meio")) {
+  if (position === "MEI") {
     return (
       <svg
         width="36"
@@ -97,9 +110,12 @@ function PotCard({
   delay: number;
   completed: boolean;
 }) {
-  const pos = pot.position.toLowerCase();
-  const isGoalkeeper = pos === "gol" || pos.includes("goleiro");
-  const isExtra = pos === "extra" || pos.includes("adicional");
+  // CODIGO nos dois, desde a 20260821020000. O `isGoalkeeper` ja hedgeava com
+  // `"gol"` e teria sobrevivido a virada; o `isExtra` NAO — nem `"extra"` nem
+  // `"adicional"` casam `EXT`, e o cartao do pote extra perderia o aviso "Sem
+  // habilitacao" que diz ao cartola que ali nao se da lance cego.
+  const isGoalkeeper = pot.position === "GOL";
+  const isExtra = pot.position === "EXT";
   const locked = completed || pot.is_finalized;
 
   return (
@@ -162,7 +178,7 @@ function PotCard({
         <p className="pm-pot-label" style={{ whiteSpace: "nowrap" }}>
           Pote {pot.pot_letter}
         </p>
-        <p className="pm-position">{pot.position}</p>
+        <p className="pm-position">{potLabel(pot.position)}</p>
         {(isGoalkeeper || isExtra) && (
           <p className="pm-gk-note">Sem habilitação</p>
         )}
@@ -378,7 +394,7 @@ export default function PotMenuSlide({
           </DialogHeader>
           {resetTarget && (
             <p className="text-sm text-zinc-300">
-              Confirmar reset do <span className="font-medium">Pote {resetTarget.pot_letter} ({resetTarget.position})</span>?
+              Confirmar reset do <span className="font-medium">Pote {resetTarget.pot_letter} ({potLabel(resetTarget.position)})</span>?
             </p>
           )}
           <DialogFooter className="gap-2">

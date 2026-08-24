@@ -58,7 +58,10 @@ export async function POST(req: Request) {
       );
     }
 
-    if (pos.toLowerCase() === "goleiro") {
+    // `GOL`, e nao `goleiro`: a coluna guarda CODIGO desde a 20260821020000. A
+    // guarda vale por si — quem passasse por ela com outra caixa nao acharia
+    // lance nenhum no `.eq("pot_position", pos)` abaixo.
+    if (pos === "GOL") {
       return NextResponse.json(
         { error: "Pote de goleiro não usa habilitação por lance" },
         { status: 400 },

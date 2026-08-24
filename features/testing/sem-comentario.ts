@@ -3,10 +3,12 @@
  *
  * ── POR QUE ISTO EXISTE ──
  *
- * Vinte por cento deste repo esta coberto por assertivas que leem ARQUIVO COMO
- * TEXTO, porque a fiacao que elas prendem vive em `app/**` e `services/**`, que
- * o `include` do vitest nao alcanca. Assertiva que le texto tem um modo de falha
- * proprio: casar a PROSA em vez do codigo. Ele ja mordeu nas duas direcoes.
+ * Boa parte deste repo so tem rede por assertivas que leem ARQUIVO COMO TEXTO,
+ * porque a fiacao que elas prendem vive em `app/**`, `components/**` e
+ * `services/**` — tres das cinco pastas de codigo de produto, e nenhuma delas
+ * esta no `include` do `vitest.config.ts`. Assertiva que le texto tem um modo
+ * de falha proprio: casar a PROSA em vez do codigo. Ele ja mordeu nas duas
+ * direcoes.
  *
  * Falso VERMELHO: a primeira versao de `rest-overlay-source.test.ts` reprovou
  * contra o codigo CERTO, porque o docblock do SabbathVideo cita o dominio da
@@ -34,6 +36,19 @@
  */
 
 /**
+ * Os tres padroes, em UMA lista e nesta ordem, porque ha DOIS consumidores
+ * abaixo — `semComentario` e `semComentarioMantendoLinhas` — e a licao deste
+ * arquivo inteiro e que copia de antidoto DIVERGE. Sao tres regex separadas, e
+ * nao uma alternancia `|`, para a ordem das PASSADAS continuar sendo a mesma
+ * coisa que o docblock logo abaixo descreve.
+ */
+const COMENTARIOS = [
+  /\{\s*\/\*[\s\S]*?\*\/\s*\}/g,
+  /\/\*[\s\S]*?\*\//g,
+  /(?<!:)\/\/[^\n]*/g,
+];
+
+/**
  * Codigo TypeScript/TSX sem comentario: bloco `/* *\/` e linha `//`, esteja o
  * `//` no comeco da linha ou no rabo de uma linha de codigo.
  *
@@ -41,11 +56,53 @@
  * propria URL do embed do SabbathVideo e a assertiva do dominio passaria a medir
  * o nada.
  *
+ * O comentario de JSX — `{/* ... *\/}` — sai com as CHAVES junto, e essa e a
+ * primeira troca de proposito. Tirar so o miolo deixava um `{}` orfao no meio
+ * do markup, e `{}` nao e espaco em branco: toda assertiva que costura duas
+ * partes vizinhas com `\s*` deixa de casar. Isso e falso VERMELHO contra codigo
+ * CERTO, o modo de falha que este arquivo inteiro existe para evitar — so que
+ * pela porta dos fundos.
+ *
+ * MEDIDO em 2026-08-21: inserir `{/* ... *\/}` entre o `<option value="">` e o
+ * `CANONICAL_POSITIONS.map(` do RegistrationWizard — comentario util, na mesma
+ * posicao em que EditPlayerForm.tsx ja tem um — reprovava
+ * `position-wiring.test.ts`. O castigo caia sobre quem comentasse bem, e o jeito
+ * de voltar ao verde era apagar a explicacao.
+ *
+ * A ordem importa: o caso com chaves vem ANTES do bloco nu, senao o `/* *\/` sai
+ * primeiro e as chaves ficam para tras — que e exatamente o defeito.
+ *
  * NAO serve para SQL: aqui `--` e decremento (`i--`), e la e comentario. Para
  * SQL, use `semComentarioSql`.
  */
 export function semComentario(fonte: string): string {
-  return fonte.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(?<!:)\/\/[^\n]*/g, "");
+  return COMENTARIOS.reduce((texto, re) => texto.replace(re, ""), fonte);
+}
+
+/**
+ * O mesmo strip, mas trocando cada caractere de comentario por ESPACO em vez de
+ * apagar: a quebra de linha fica.
+ *
+ * ── POR QUE UM SEGUNDO ──
+ *
+ * Porque `semComentario` come as quebras de linha de dentro de um bloco
+ * `/* *\/`, e quem numera linha em cima dele MENTE. MEDIDO em 2026-08-22: a
+ * varredura de `features/players/vocabulary-sweep.test.ts` acusava
+ * `features/registration/skills.ts:26` para um defeito que estava na linha 41 —
+ * as quinze linhas de docblock acima tinham sumido. Numa mensagem de erro cujo
+ * trabalho e dizer ONDE, apontar quinze linhas acima e pior do que nao apontar:
+ * a linha 26 daquele arquivo existe, e e comentario.
+ *
+ * Quem assevera com regex sobre o arquivo INTEIRO nao paga esse preco e nao
+ * precisa deste aqui — a alternativa mais barata para eles seria pior, porque
+ * espaco no meio do codigo atrapalha assertiva que costura vizinhos com `\s*`.
+ * Por isso sao dois, e nao um so com flag.
+ */
+export function semComentarioMantendoLinhas(fonte: string): string {
+  return COMENTARIOS.reduce(
+    (texto, re) => texto.replace(re, (achado) => achado.replace(/[^\n]/g, " ")),
+    fonte,
+  );
 }
 
 /**

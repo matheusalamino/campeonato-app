@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/draft-auth";
 import { computePotRemainderSettlement } from "@/lib/pot-settlement";
+import { EXTRA_POT_POSITION, potTitle } from "@/features/draft/pot-position";
 
 export async function POST(req: Request) {
   const auth = await requireAdmin();
@@ -68,7 +69,7 @@ export async function POST(req: Request) {
       const remaining = row.remaining_budget;
       const { fine, returned } = computePotRemainderSettlement(remaining);
 
-      const potLabel = `Pote ${potNumber} (${normalizedPosition})`;
+      const potLabel = potTitle(potNumber, normalizedPosition);
 
       if (remaining > 0) {
         // Log the full leftover amount first; fine debit below makes net effect = returned.
@@ -161,7 +162,12 @@ export async function POST(req: Request) {
     const playerIds = (potPlayers ?? []).map((r) => r.player_id);
     let extraPotNumber: number | null = null;
     let movedToExtraCount = 0;
-    const extraPosition = "Extra";
+    // Esta linha e a UNICA nascente do quinto valor do vocabulario de pote: o
+    // `EXT` nao vem de jogador nenhum, e por isso a CHECK das sete colunas
+    // aceita CINCO valores enquanto a de `players.preferred_position` aceita
+    // quatro. Da constante, e nao `"EXT"` na mao, porque e la que a diferenca
+    // entre os dois dominios esta explicada.
+    const extraPosition = EXTRA_POT_POSITION;
 
     if (playerIds.length > 0) {
       const [{ data: regs, error: regErr }, { data: buys, error: buyErr }] =

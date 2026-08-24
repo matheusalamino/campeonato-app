@@ -70,7 +70,16 @@ export async function POST(req: Request) {
         );
       }
 
-      if (normalizedPosition.toLowerCase() === "goleiro") {
+      // `GOL`, e nao `goleiro`: a coluna guarda CODIGO desde a 20260821020000,
+      // e com a palavra este `if` viraria falso SEMPRE — a guarda "pote de
+      // goleiro nao usa habilitacao" sumiria calada, e a janela de lance cego
+      // abriria para o pote que nao a usa.
+      //
+      // A comparacao e EXATA e o valor vem do corpo da requisicao, mas isso nao
+      // abre porta: quem escapasse daqui com outra caixa morreria no
+      // `.eq("position", normalizedPosition)` logo abaixo, que nao acha pote
+      // nenhum. Falha fechada nos dois caminhos.
+      if (normalizedPosition === "GOL") {
         return NextResponse.json(
           {
             error:

@@ -4,11 +4,18 @@ import { useMemo, useRef } from "react";
 import type { MatchDetail, MatchPlayer, MatchEventItem } from "@/features/hooks/useMatchDetail";
 
 // ─── Position mapping ────────────────────────────────────────────────────────
+//
+// As quatro faixas do desenho, e nao uma conversao de vocabulario. As PALAVRAS
+// que estavam aqui sairam na virada da 20260821010000 —
+// `players.preferred_position` guarda codigo, entao nenhuma delas voltaria a
+// casar, e entrada morta em mapa de conversao e o que faz o proximo leitor
+// acreditar que o repo suporta dois vocabularios de proposito.
+//
+// O que sobra tem funcao: `LAT`/`VOL` (codigos que a CHECK da coluna nao
+// aceita, e que desde a Task 2 do A8 nem rotulo tem -- sobrevivem so como
+// apelido de ENTRADA em `POSITION_ALIASES`) e qualquer vocabulario novo caem
+// no `?? "MEI"` do corredor.
 const POSITION_KEY: Record<string, string> = {
-  Goleiro: "GOL",
-  Zagueiro: "ZAG",
-  Meia: "MEI",
-  Atacante: "ATA",
   GOL: "GOL",
   ZAG: "ZAG",
   MEI: "MEI",

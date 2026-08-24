@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePotBidsStatus } from "@/features/hooks/usePotBidsStatus";
 import type { ManagerBidStatus } from "@/app/api/draft/pot-bids-status/route";
 import type { DraftPot } from "@/features/hooks/useDraftPots";
+import { potLabel } from "@/features/draft/pot-position";
 
 // ── Helpers ────────────────────────────────────────────────
 function computeRanking(
@@ -200,7 +201,11 @@ export default function PotBidsSlide({
   onBack,
   onProceedToAuction,
 }: Props) {
-  const isGoalkeeper = pot.position.toLowerCase().includes("goleiro");
+  // `GOL`, e nao `goleiro`: `pot.position` vem de `draft_pots.position`, que
+  // guarda CODIGO desde a 20260821020000. Com a palavra isto seria falso
+  // SEMPRE, e o `useEffect` logo abaixo abriria a janela de habilitacao para o
+  // pote de goleiro — que nao a usa.
+  const isGoalkeeper = pot.position === "GOL";
   const [windowOpened, setWindowOpened] = useState(false);
   const [windowError, setWindowError] = useState<string | null>(null);
   const [revealError, setRevealError] = useState<string | null>(null);
@@ -421,7 +426,7 @@ export default function PotBidsSlide({
             ← Potes
           </button>
           <p className="pb-pot-letter">Pote {pot.pot_letter}</p>
-          <p className="pb-position">{pot.position}</p>
+          <p className="pb-position">{potLabel(pot.position)}</p>
           <div className="pb-divider">
             <div className="pb-dline" />
             <div className="pb-dgem" />

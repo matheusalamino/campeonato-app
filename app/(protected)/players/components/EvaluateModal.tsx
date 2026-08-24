@@ -50,8 +50,10 @@ export default function EvaluateModal({
 
   const [photo, setPhoto] = useState<string | null>(null);
 
-  const skills =
-    player?.preferred_position === "Goleiro" ? skillsGol : skillsLinha;
+  // `GOL`, e nao `Goleiro`: o vocabulario da coluna virou codigo na
+  // 20260821010000. Errar aqui nao quebra a tela — o organizador avalia o
+  // goleiro com as seis habilidades de LINHA, e as notas gravam assim.
+  const skills = player?.preferred_position === "GOL" ? skillsGol : skillsLinha;
 
   const [ratings, setRatings] = useState(
     Object.fromEntries(skills.map((s) => [s, 1])),

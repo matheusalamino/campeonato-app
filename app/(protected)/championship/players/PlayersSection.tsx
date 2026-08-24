@@ -7,6 +7,7 @@ import EvaluateModal from "../../players/components/EvaluateModal";
 import PlayerRadarModal from "../../players/components/PlayerRadarModal";
 import { toast } from "sonner";
 import { useLoading } from "@/components/ui/loading-provider";
+import { positionLabel } from "@/lib/public/types";
 import { RegistrationWithPlayer } from "@/types/registration";
 import { Player } from "@/types/player";
 
@@ -268,7 +269,7 @@ export default function PlayersSection({
                 <p className="font-semibold">{player.name}</p>
 
                 <p className="text-sm text-zinc-400">
-                  {player.preferred_position}
+                  {positionLabel(player.preferred_position)}
                 </p>
               </div>
 

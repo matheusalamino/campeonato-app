@@ -1,10 +1,24 @@
 import { describe, it, expect } from "vitest";
 import { makeRegistrationSchema } from "./schema";
+import { CANONICAL_POSITIONS } from "@/features/players/position";
+import { LINE_SKILLS, KEEPER_SKILLS } from "./skills";
 
 const groups = [
   { label: "IASD Campolim", requires_invite_code: false },
   { label: "Convidado Autorizado", requires_invite_code: true },
 ];
+
+/**
+ * As doze notas de uma vez, para o caso que varre as quatro posicoes.
+ *
+ * O schema exige as notas DA POSICAO e tolera chave sobrando (`skills` e
+ * `z.record`), entao mandar tudo isola a assertiva na posicao — que e o que
+ * aquele teste mede. Sem isto, `GOL` reprovaria pelas habilidades e o teste
+ * ficaria verde pelo motivo errado no dia em que o enum aceitasse a palavra.
+ */
+const TODAS_AS_NOTAS = Object.fromEntries(
+  [...LINE_SKILLS, ...KEEPER_SKILLS].map((skill) => [skill, 3]),
+);
 
 function base(overrides: Record<string, unknown> = {}) {
   return {
@@ -18,7 +32,7 @@ function base(overrides: Record<string, unknown> = {}) {
     birth_date: "1990-05-30",
     birth_state: "São Paulo (SP)",
     instagram: "",
-    preferred_position: "Atacante",
+    preferred_position: "ATA",
     height: 1.8,
     weight: 80,
     group_affiliation: "IASD Campolim",
@@ -74,7 +88,7 @@ describe("makeRegistrationSchema", () => {
   });
 
   it("requires keeper skills for a goalkeeper", () => {
-    const r = schema.safeParse(base({ preferred_position: "Goleiro" }));
+    const r = schema.safeParse(base({ preferred_position: "GOL" }));
     // base() supplies line skills, not keeper skills, so a goalkeeper payload must fail
     expect(r.success).toBe(false);
   });
@@ -129,5 +143,34 @@ describe("makeRegistrationSchema", () => {
 
   it("aceita zero ingressos extras", () => {
     expect(schema.safeParse(base({ extra_tickets_count: 0 })).success).toBe(true);
+  });
+
+  it("aceita os quatro codigos canonicos e recusa a palavra por extenso", () => {
+    // Duas listas para a mesma verdade divergem no dia em que uma muda. Desde a
+    // 20260821010000 a CHECK `players_preferred_position_known` so aceita o
+    // codigo, e o valor validado aqui vai DIRETO para o insert em
+    // `services/public-registration.ts`. Palavra que passasse por este enum
+    // chegaria ao Postgres e derrubaria a inscricao publica inteira.
+    for (const codigo of CANONICAL_POSITIONS) {
+      expect(
+        schema.safeParse(base({ preferred_position: codigo, skills: TODAS_AS_NOTAS })).success,
+      ).toBe(true);
+    }
+    for (const palavra of ["Goleiro", "Zagueiro", "Meia", "Atacante"]) {
+      expect(
+        schema.safeParse(base({ preferred_position: palavra, skills: TODAS_AS_NOTAS })).success,
+      ).toBe(false);
+    }
+  });
+
+  it("reprova a posicao vazia, apontando o campo", () => {
+    // O select do wizard passa a nascer vazio: valor nao reconhecido no
+    // preenchimento automatico deixa de virar "Meia" calado e obriga a escolha.
+    // Sem esta recusa, quem nao escolhesse chegaria ao insert com "".
+    const r = schema.safeParse(base({ preferred_position: "" }));
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(r.error.issues.some((i) => i.path[0] === "preferred_position")).toBe(true);
+    }
   });
 });

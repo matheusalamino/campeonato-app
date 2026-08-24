@@ -20,12 +20,12 @@ type PlayerRegistration = {
     | {
         id: string;
         name: string;
-        position: string | null;
+        preferred_position: string | null;
       }
     | {
         id: string;
         name: string;
-        position: string | null;
+        preferred_position: string | null;
       }[]
     | null;
 };
@@ -319,10 +319,10 @@ export function useMatchDetail(matchId: string) {
     // Players for each team
     const [{ data: homePlayers }, { data: awayPlayers }] = await Promise.all([
       resolvedHomeCTId
-        ? supabase.from("championship_team_players").select("id, registration_id, championship_registrations(id, profile_photo_link, players(id, name, position))").eq("championship_team_id", resolvedHomeCTId)
+        ? supabase.from("championship_team_players").select("id, registration_id, championship_registrations(id, profile_photo_link, players(id, name, preferred_position))").eq("championship_team_id", resolvedHomeCTId)
         : Promise.resolve({ data: [] }),
       resolvedAwayCTId
-        ? supabase.from("championship_team_players").select("id, registration_id, championship_registrations(id, profile_photo_link, players(id, name, position))").eq("championship_team_id", resolvedAwayCTId)
+        ? supabase.from("championship_team_players").select("id, registration_id, championship_registrations(id, profile_photo_link, players(id, name, preferred_position))").eq("championship_team_id", resolvedAwayCTId)
         : Promise.resolve({ data: [] }),
     ]);
 
@@ -399,7 +399,7 @@ export function useMatchDetail(matchId: string) {
         return {
           registrationId: row.registration_id,
           name: player?.name ?? "Jogador",
-          position: player?.position ?? null,
+          position: player?.preferred_position ?? null,
           number: null,
           teamId: ctId,
           isStarter: lineup?.isStarter ?? false,

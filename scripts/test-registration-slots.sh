@@ -4,6 +4,11 @@
 #
 # Cria um campeonato descartavel, exercita os cenarios e apaga tudo no fim.
 #
+# No fim ha tambem uma secao que nao mexe em campeonato nenhum: ela confere as
+# strings de .select() do repo contra o catalogo do banco. O que ela cobre e o
+# que ela NAO cobre esta escrito ali, em cima dela -- leia antes de ler o verde
+# dela como "o schema bate".
+#
 # NAO RODE ISTO DURANTE UM SABADO DE VERDADE — do por do sol de sexta ao de
 # sabado a suite falha inteira, e nao por regressao: reserve_registration_slot e
 # commit_registration chamam is_sabbath(now()), sem relogio injetavel, entao
@@ -1067,10 +1072,54 @@ r=$($DB -c "
                          'waitlist_goalkeepers','waitlist_outfield');")
 checar "as cinco colunas do formato existem" "5" "$(echo "$r" | tr -d ' ')"
 
-# NOT VALID e deliberado: producao esta 15 migrations atras e vai receber este
-# CHECK sobre 80 jogadores vivos, onde VALIDATE varre a tabela e pode abortar.
+# VALIDADA, e a inversao e deliberada. O NOT VALID da 20260820010000 existia
+# porque aquele CHECK caia sobre 80 jogadores vivos de origem desconhecida, e
+# VALIDATE podia abortar o deploy. A 20260821010000 NORMALIZA o dado no proprio
+# corpo da migration antes de recriar o CHECK, entao nao ha mais linha de origem
+# desconhecida para varrer -- validar saiu de graca. E aqui abortar e o desfecho
+# BOM: valor que ninguem mapeou tem de aparecer no deploy, e nao meses depois.
+#
+# A assertiva e por convalidated, e nao pelo texto da DDL, de proposito: e o
+# banco que responde, entao ela morre se alguem devolver o NOT VALID.
 r=$($DB -c "SELECT convalidated::text FROM pg_constraint WHERE conname = 'players_preferred_position_known';")
-checar "a CHECK da posicao segue NOT VALID" "false" "$(echo "$r" | tr -d ' ')"
+checar "a CHECK da posicao entrou VALIDADA" "true" "$(echo "$r" | tr -d ' ')"
+
+# E a EXPRESSAO, e nao so o nome e o convalidated. Sem esta linha nada no repo
+# prendia o que a constraint FAZ no banco: o vitest le o ARQUIVO da migration
+# (features/players/position.test.ts) e a assertiva acima le so um booleano --
+# uma `CHECK (true)` batizada `players_preferred_position_known` passaria nas
+# duas, com o banco aceitando qualquer string na coluna.
+#
+# Le pg_get_constraintdef, e nao o texto da migration, porque e o CATALOGO que
+# responde: importa o que esta aplicado, nao o que o arquivo pediu.
+#
+# Extrai o CONJUNTO de codigos em vez de comparar a string inteira porque o
+# Postgres reescreve `IN (...)` como `= ANY (ARRAY[...])` -- comparar texto cru
+# quebraria por normalizacao, sem nenhum defeito real. Assim, sobrar codigo,
+# faltar codigo ou virar `CHECK (true)` (que da 'NENHUM') derruba a assertiva.
+#
+# O padrao pega QUALQUER literal entre aspas, e nao `[A-Z]{3}`. A versao com
+# `[A-Z]{3}` so enxergava exatamente tres maiusculas, entao o unico jeito de
+# esta linha ficar vermelha era sumir com um dos quatro -- e era CEGA justamente
+# para a regressao que ela existe para pegar: a palavra por extenso voltando
+# para a CHECK.
+#
+# MEDIDO em 2026-08-21, com a CHECK alargada dentro de BEGIN...ROLLBACK:
+#
+#   CHECK (... = ANY (ARRAY['GOL','ZAG','MEI','ATA','Goleiro','LATERAL','gol']))
+#     '([A-Z]{3})' -> ATA,GOL,MEI,ZAG                          <- VERDE, nao pega
+#     '([^']*)'    -> ATA,gol,GOL,Goleiro,LATERAL,MEI,ZAG      <- VERMELHO, pega
+#
+# E e drop-in: sobre a CHECK correta o padrao novo devolve os mesmos
+# ATA,GOL,MEI,ZAG, entao o valor esperado abaixo nao muda.
+r=$($DB -c "
+  SELECT coalesce(string_agg(codigo, ',' ORDER BY codigo), 'NENHUM') FROM (
+    SELECT DISTINCT m[1] AS codigo
+      FROM pg_constraint c,
+           LATERAL regexp_matches(pg_get_constraintdef(c.oid), '''([^'']*)''::text', 'g') AS m
+     WHERE c.conname = 'players_preferred_position_known'
+  ) t;")
+checar "a CHECK da posicao lista os quatro codigos, e so eles" "ATA,GOL,MEI,ZAG" "$(echo "$r" | tr -d ' ')"
 
 # As cinco colunas guardam numero, e a aritmetica sobre elas fecha nos mesmos
 # 80/8/72/5 que derivedCapacity devolve para o formato de 2026.
@@ -1112,6 +1161,361 @@ r=$($DB -c "
 checar "commit_registration fechada para anon/authenticated" "false|false" "$(echo "$r" | tr -d ' ')"
 
 limpar
+
+# =============================================================================
+# A PONTE ENTRE A FONTE E O SCHEMA
+#
+# O `tsc` amarra a string do .select() ao acesso do campo -- isso ele faz. O que
+# ele NAO faz e amarrar nenhuma das duas ao banco: renomeando AS DUAS pontas
+# para um campo que nao existe, o typecheck fica limpo e o vitest fica verde.
+# Medido: trocando `preferred_position` por `posicao_inexistente` na string do
+# select E no acesso, em features/hooks/useGoalkeeper.ts, `npx tsc --noEmit`
+# nao disse nada e a suite passou inteira. E a classe de erro que atravessa os
+# dois portoes de uma vez.
+#
+# Esta secao e a rede desse limite: varre as strings de .select() do repo,
+# extrai os campos pedidos da tabela `players` e confere cada um contra
+# information_schema.columns.
+#
+# O QUE ELA COBRE, exatamente -- leia antes de confiar:
+#
+#   1. embeds `players( ... )` dentro de um .select(), em qualquer profundidade,
+#      com ou sem alias (`player:players`), com ou sem dica (`!inner`, `!fk`).
+#   2. os campos de topo de um .select() encadeado direto num .from("players"),
+#      sem `;` entre os dois.
+#   3. o primeiro argumento do .select() quando ele e uma string literal, ou o
+#      nome de uma constante do MESMO arquivo cujo valor e uma string literal
+#      (`const PREFILL_COLUMNS = "..."`). O segundo argumento
+#      (`{ count: "exact", head: true }`) e ignorado de proposito.
+#   4. nome de coluna em QUALQUER caixa. `preferredPosition` e conferido e
+#      acusado como qualquer outro nome que nao exista -- ver a nota em cima de
+#      emitir() para o porque de isso valer uma linha aqui.
+#   5. token que nao e nome de coluna simples nao e conferido, mas TAMBEM nao e
+#      engolido: sai numa lista propria, com arquivo e linha, e derruba a
+#      execucao. "Nao sei ler isto" e uma resposta; silencio nao e.
+#
+# O QUE ELA NAO COBRE -- por isso verde aqui NAO quer dizer "o schema bate":
+#
+#   - qualquer tabela que nao seja `players`. Campo inventado dentro de
+#     `championships( ... )` passa batido. A escolha e deliberada: o nome da
+#     tabela esta colado no parenteses do embed, entao `players` se resolve sem
+#     adivinhacao; generalizar exigiria resolver nome de RELACIONAMENTO para
+#     nome de tabela, e um falso alarme aqui custa mais que a cobertura extra.
+#   - `.select("*")`: nao ha campo nomeado para conferir.
+#   - spec montado em runtime (template com interpolacao) ou constante
+#     importada de outro arquivo.
+#   - o SENTIDO dos valores. Coluna que existe mas guarda a palavra errada e
+#     assunto de features/registration/position-wiring.test.ts, nao daqui.
+#   - comentarios nao sao removidos antes da varredura. A ancora e o `.select(`,
+#     entao prosa solta nao entra; um `.select(` escrito DENTRO de um
+#     comentario entraria.
+#   - o que sai calado, e por que. Token que nao nomeia nada -- virgula dupla,
+#     virgula final, `players()`, `apelido:` sem campo -- e `*` nao tem o que
+#     conferir. Spread (`...players(x)`) e agregado de coluna
+#     (`players(height.sum())`) nem chegam ao filtro de campo: o `(` faz o
+#     token virar embed, e embed que nao se chama `players` so e percorrido
+#     atras de um `players(` mais fundo. Literal com aspas desbalanceadas pula
+#     o .select() inteiro. Nenhum desses da falso alarme; todos custam
+#     COBERTURA, e nenhum deles avisa que custou.
+#   - na cobertura de topo, o `.from()` so e reconhecido escrito
+#     `.from("players")`, com aspas DUPLAS. `.from('players')` sai da conta: o
+#     select fica sem tabela e os campos de topo dele nao sao conferidos.
+#     Medido: zero aspas simples no repo hoje. E so isso -- nao ha Prettier
+#     neste projeto (nem dependencia, nem config) nem regra `quotes` no
+#     eslint.config.mjs, entao nada garante que continue assim. E o estado de
+#     hoje, nao uma promessa do projeto.
+#   - o casador de tabela nao sabe distinguir um `.from(` de tabela dos outros.
+#     Ele pega o ULTIMO `.from(` antes do select e le o argumento: literal de
+#     aspas duplas vira "a tabela" -- inclusive `.from("images")`, que e BUCKET
+#     do storage, nao tabela --, e qualquer outra forma (`.from(bucket)`, e todo
+#     `Array.from(` / `Buffer.from(` do repo, que sao muitos) zera a tabela.
+#     Como so `players` e conferido, nome errado nunca vira acusacao falsa: o
+#     preco e o select seguinte DO MESMO statement passar sem conferencia.
+#     Custa cobertura, nao alarme.
+#
+# A isca abaixo faz a rede provar que morde a CADA execucao, em vez de depender
+# de alguem ter mutado o repo uma vez, um dia.
+# =============================================================================
+echo "== os campos de players pedidos em select() existem na tabela =="
+
+raiz=$(cd "$(dirname "$0")/.." && pwd)
+oficina=$(mktemp -d)
+
+cat > "$oficina/varredor.awk" <<'VARREDOR'
+BEGIN { POS = 1 }
+{ linha[NR] = $0; ini[NR] = POS; POS = POS + length($0) + 1; s = s $0 "\n"; ultima = NR }
+
+# Le a string literal que comeca em p. LITOK=0 quando p nao abre uma.
+function literal(p,   q, i, c) {
+  LITOK = 0; LITVAL = ""
+  q = substr(s, p, 1)
+  if (q != "\"" && q != "'" && q != "`") return
+  i = p + 1
+  while (i <= LEN) {
+    c = substr(s, i, 1)
+    if (c == "\\") { LITVAL = LITVAL substr(s, i, 2); i = i + 2; continue }
+    if (c == q) { LITOK = 1; return }
+    LITVAL = LITVAL c
+    i++
+  }
+}
+
+# `player:players!inner` -> `players`
+function nomeembed(t,   x) {
+  x = t
+  gsub(/[ \t\r\n`]/, "", x)
+  sub(/^.*:/, "", x)
+  sub(/!.*$/, "", x)
+  return x
+}
+
+function nomecampo(t,   x) {
+  x = t
+  gsub(/[ \t\r\n`]/, "", x)
+  sub(/::.*$/, "", x)
+  sub(/^.*:/, "", x)
+  sub(/!.*$/, "", x)
+  return x
+}
+
+# Todo token que NOMEIA algo sai por um destes quatro canos, e nenhum deles e o
+# silencio: `ok`, `desconhecido`, `naoentendido`, `agregado`. Token que nao
+# nomeia nada -- string vazia (virgula dupla, virgula final, `players()`,
+# `apelido:` sem campo) e `*` -- sai calado logo na primeira linha, de
+# proposito: nao ha nome para conferir. Ha ainda o que nem chega ate aqui
+# (spread, agregado de coluna, literal com aspas desbalanceadas); esta na lista
+# do cabecalho, com o motivo.
+#
+# A frase acima ja foi "todo token sai por um dos tres canos, e nenhum e o
+# silencio", com o contraexemplo duas linhas abaixo dela. Vale como aviso: este
+# filtro atrai frase generosa demais.
+#
+# Ate a revisao da 6b ele descartava calado qualquer token com maiuscula:
+# `players(id, nomeFantasma)` reportava so o `id` e o script ficava verde.
+# `preferred_position` -> `preferredPosition` e exatamente a forma do deslize
+# que este bloco existe para pegar, entao a rede engolia justo o caso do
+# assunto. Nome de coluna com maiuscula agora vai ao catalogo como qualquer
+# outro -- Postgres dobra identificador nao-citado para minusculo, entao
+# `nomeFantasma` so estaria la se alguem tivesse criado a coluna citada.
+function emitir(campo,   c) {
+  c = nomecampo(campo)
+  if (c == "" || c == "*") return
+  if (c == "count") {
+    # `players(count)` conta a tabela referenciada: sintaxe do supabase-js (o
+    # repo esta em ^2.98.0) e do PostgREST 12, nao nome de coluna. Acusar seria
+    # falso alarme sobre codigo legal, e chamar de "nao entendi" tambem seria
+    # falso -- entendi. Entao sai reconhecido e nao conferido. O preco, dito
+    # aqui para nao virar surpresa: se `players` ganhar um dia uma coluna
+    # `count`, ela deixa de ser conferida.
+    print "agregado\t" arquivo ":" LINSEL "\t" c
+    return
+  }
+  if (c !~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
+    # Nem nome de coluna simples: caminho JSON (`dados->>chave`), nome entre
+    # aspas, sintaxe do PostgREST que este varredor nao conhece. Conferir isso
+    # contra o catalogo daria falso alarme; engolir repetiria o bug do
+    # camelCase. Entao o varredor diz em voz alta que nao entendeu, e quem le
+    # decide.
+    print "naoentendido\t" arquivo ":" LINSEL "\t" c
+    return
+  }
+  if (index(cols, "," c ",") > 0) print "ok\t" arquivo ":" LINSEL "\t" c
+  else print "desconhecido\t" arquivo ":" LINSEL "\t" c
+}
+
+# Percorre um nivel do spec. tbl = tabela a que os campos DESTE nivel pertencem;
+# "" quer dizer "de alguma outra tabela", e ai so descemos atras de players().
+function nivel(str, tbl,   i, n, c, tok, prof, comeco, corpo, nm) {
+  n = length(str); i = 1; tok = ""
+  while (i <= n + 1) {
+    c = (i <= n) ? substr(str, i, 1) : ","
+    if (c == "(") {
+      comeco = i + 1; prof = 1; i++
+      while (i <= n) {
+        if (substr(str, i, 1) == "(") prof++
+        else if (substr(str, i, 1) == ")") { prof--; if (prof == 0) break }
+        i++
+      }
+      corpo = substr(str, comeco, i - comeco)
+      nm = nomeembed(tok)
+      nivel(corpo, (nm == "players") ? "players" : "")
+      tok = ""; i++
+      continue
+    }
+    if (c == ",") {
+      if (tbl == "players") emitir(tok)
+      tok = ""; i++
+      continue
+    }
+    tok = tok c
+    i++
+  }
+}
+
+# Tabela do .from() mais recente dentro do trecho. Um `;` depois dele fecha o
+# statement, e ai o proximo .select() nao e mais dele.
+function tabela_no_trecho(g, ant,   p, ult, base, resto, nm) {
+  ult = 0; base = 0; resto = g
+  while (1) {
+    p = index(resto, ".from(")
+    if (p == 0) break
+    ult = base + p + 6
+    base = base + p + 5
+    resto = substr(resto, p + 6)
+  }
+  if (ult == 0) {
+    if (index(g, ";") > 0) return ""
+    return ant
+  }
+  if (index(substr(g, ult), ";") > 0) return ""
+  nm = substr(g, ult)
+  if (match(nm, /^"[a-z0-9_]+"/)) return substr(nm, 2, RLENGTH - 2)
+  return ""
+}
+
+END {
+  LEN = length(s)
+
+  # const NOME = "literal" do proprio arquivo
+  for (k = 1; k <= ultima; k++) {
+    L = linha[k]
+    if (match(L, /(^|[^A-Za-z0-9_$])(const|let|var)[ \t]+[A-Za-z_$][A-Za-z0-9_$]*[ \t]*=/)) {
+      nm = substr(L, RSTART, RLENGTH)
+      sub(/^[^A-Za-z0-9_$]*(const|let|var)[ \t]+/, "", nm)
+      sub(/[ \t]*=$/, "", nm)
+      p = ini[k] + RSTART + RLENGTH - 1
+      while (p <= LEN && substr(s, p, 1) ~ /[ \t\r\n]/) p++
+      literal(p)
+      if (LITOK) CONST[nm] = LITVAL
+    }
+  }
+
+  cur = 1; tabela = ""; lin = 1
+  while (1) {
+    cauda = substr(s, cur)
+    p = index(cauda, ".select(")
+    if (p == 0) break
+    q = cur + p - 1
+    trecho = substr(s, cur, q - cur)
+    lin = lin + gsub(/\n/, "\n", trecho)
+    tabela = tabela_no_trecho(trecho, tabela)
+    LINSEL = lin
+
+    i = q + 8
+    while (i <= LEN && substr(s, i, 1) ~ /[ \t\r\n]/) i++
+    literal(i)
+    spec = ""
+    if (LITOK) spec = LITVAL
+    else {
+      pedaco = substr(s, i, 80)
+      if (match(pedaco, /^[A-Za-z_$][A-Za-z0-9_$]*/) && (substr(pedaco, 1, RLENGTH) in CONST))
+        spec = CONST[substr(pedaco, 1, RLENGTH)]
+    }
+    if (spec != "" && index(spec, "${") == 0) nivel(spec, tabela)
+    cur = q + 8
+  }
+
+  # Marca de arquivo lido: sem ela, um varredor que morre na metade da lista
+  # devolveria "nenhum campo desconhecido" -- truncamento lido como sucesso.
+  print "arq\t" arquivo
+}
+VARREDOR
+
+# A isca. Nao roda, nao compila, nao e importada: e so texto para o varredor
+# mastigar. Planta um campo inexistente em cada uma das tres formas que a rede
+# promete cobrir, e cerca cada um de campos legitimos.
+cat > "$oficina/isca.ts" <<'ISCA'
+const LISTA = "id, preferred_position, campo_de_constante_inexistente";
+
+await supabase.from("players").select(LISTA).eq("id", x);
+
+await supabase.from("players").select("id", { count: "exact", head: true });
+
+await supabase
+  .from("championship_registrations")
+  .select(
+    `
+    id,
+    final_overall,
+    player:players!inner (
+      name,
+      campo_de_embed_inexistente,
+      nomeFantasma,
+      dados->>chave
+    )
+  `,
+  );
+
+await supabase
+  .from("championship_team_players")
+  .select(
+    "id, championship_registrations(id, players(shirt_name, campo_aninhado_inexistente, count))",
+  );
+ISCA
+
+colunas_players=$($DB -c "
+  SELECT ',' || string_agg(column_name, ',') || ','
+    FROM information_schema.columns
+   WHERE table_schema = 'public' AND table_name = 'players';")
+
+# --exclude-dir=.worktrees: rodando a partir da arvore principal, o -r desceria
+# nas worktrees e misturaria o codigo de OUTRA branch no relatorio.
+listar() {
+  grep -rl '\.select(' --include='*.ts' --include='*.tsx' \
+    --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=.worktrees \
+    "$1" 2>/dev/null || true
+}
+
+varrer() {
+  base=$1
+  listar "$base" |
+  while read -r f; do
+    awk -v arquivo="${f#$base/}" -v cols="$colunas_players" \
+        -f "$oficina/varredor.awk" "$f" ||
+      printf 'desconhecido\t%s:0\tO_VARREDOR_MORREU_NESTE_ARQUIVO\n' "${f#$base/}"
+  done
+}
+
+# --- primeiro a isca, para saber que a rede morde antes de acreditar nela -----
+juntar() { cut -f3 | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//'; }
+
+saida_isca=$(varrer "$oficina" || true)
+plantados=$(echo "$saida_isca" | grep '^desconhecido' | juntar)
+ilegiveis=$(echo "$saida_isca" | grep '^naoentendido' | juntar)
+agregados=$(echo "$saida_isca" | grep '^agregado' | juntar)
+legitimos=$(echo "$saida_isca" | grep '^ok' | juntar)
+checar "o varredor acusa os campos plantados na isca, camelCase junto" \
+  "campo_aninhado_inexistente campo_de_constante_inexistente campo_de_embed_inexistente nomeFantasma" \
+  "$plantados"
+checar "o varredor confessa o token da isca que nao sabe ler" \
+  "dados->>chave" \
+  "$ilegiveis"
+checar "o varredor reconhece o agregado count da isca, sem acusar" \
+  "count" \
+  "$agregados"
+checar "o varredor deixa passar os campos legitimos da mesma isca" \
+  "id name preferred_position shirt_name" \
+  "$legitimos"
+
+# --- agora o repo -------------------------------------------------------------
+saida_repo=$(varrer "$raiz" || true)
+listados=$(listar "$raiz" | grep -c . || true)
+varridos=$(echo "$saida_repo" | grep -c '^arq' || true)
+# Zero listados e zero varridos bateriam, e verde vazio e o pior dos verdes.
+if [ "$listados" -eq 0 ]; then
+  listados="pelo menos um arquivo com select()"
+fi
+checar "o varredor leu todo arquivo com select() do repo" "$listados" "$varridos"
+
+desconhecidos=$(echo "$saida_repo" | grep '^desconhecido' |
+  awk -F'\t' '{ printf "%s%s %s", (NR > 1 ? "; " : ""), $2, $3 }')
+checar "todo campo de players pedido em select() existe na tabela" "" "$desconhecidos"
+
+ilegiveis_repo=$(echo "$saida_repo" | grep '^naoentendido' |
+  awk -F'\t' '{ printf "%s%s %s", (NR > 1 ? "; " : ""), $2, $3 }')
+checar "o varredor entendeu todo token que leu de players no repo" "" "$ilegiveis_repo"
+
+rm -rf "$oficina"
 
 # ASSERCAO, e nao limpeza, de proposito -- nao "conserte" isto para um DELETE.
 # Este script pode um dia ser apontado para um banco que nao e o local, e apagar

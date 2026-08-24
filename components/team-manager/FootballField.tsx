@@ -15,14 +15,24 @@ type FootballFieldProps = {
   players: SquadPlayer[];
 };
 
+/**
+ * As quatro faixas do desenho do campo, e nao uma conversao de vocabulario.
+ *
+ * As PALAVRAS que estavam aqui (`Goleiro`, `Zagueiro`, `Meia`, `Atacante`, mais
+ * um `MEIA` que nunca foi codigo de nada) sairam na virada da 20260821010000:
+ * `players.preferred_position` guarda codigo, entao nenhuma delas voltaria a
+ * casar. Entrada morta em mapa de conversao nao e reserva — e o que faz o
+ * proximo leitor acreditar que o repo suporta dois vocabularios de proposito.
+ *
+ * O que sobra tem funcao propria: o campo so tem QUATRO faixas, e `LAT`/`VOL`
+ * (codigos que a CHECK da coluna nao aceita, e que desde a Task 2 do A8 nem
+ * rotulo tem -- sobrevivem so como apelido de ENTRADA em `POSITION_ALIASES`)
+ * ou qualquer vocabulario novo caem no `?? "MEI"` do corredor, em vez de
+ * estourar um `grouped` sem a chave.
+ */
 const positionMap: Record<string, string> = {
-  Goleiro: "GOL",
-  Zagueiro: "ZAG",
-  Meia: "MEI",
-  Atacante: "ATA",
   GOL: "GOL",
   ZAG: "ZAG",
-  MEIA: "MEI",
   MEI: "MEI",
   ATA: "ATA",
 };

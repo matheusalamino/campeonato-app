@@ -6,7 +6,35 @@ import type { GoalkeeperScore } from "@/types/goalkeeper";
 
 const supabase = createClient();
 
-const GK_POSITIONS = new Set(["GOL", "Goleiro"]);
+/**
+ * Um vocabulario, nao dois.
+ *
+ * O `"Goleiro"` que ficava ao lado do `GOL` era residuo da tentativa de codigos
+ * que o repo recuou em junho, e nao caso vivo: a 20260821010000 converteu o
+ * DADO, e a CHECK `players_preferred_position_known` recusa a palavra na
+ * escrita. Segundo vocabulario tolerado e o que fez todo este bloco existir.
+ *
+ * Nao ha `ZAG`/`MEI`/`ATA` a enumerar aqui de proposito: a conta e `GOL` contra
+ * tudo que nao e `GOL`, e e isso que tolera vocabulario novo entrando pelo CSV
+ * sem transformar um jogador de linha desconhecido em goleiro.
+ *
+ * E SEGUE UM `Set` de um item so, de proposito, em vez de um `pos === "GOL"`
+ * solto la embaixo: e a costura nomeada onde o vocabulario de goleiro mora, e
+ * quem precisar mexer nele procura por um nome.
+ *
+ * Mas nome NAO e guarda, e a prova esta neste proprio arquivo: o `"Goleiro"`
+ * NASCEU dentro desta constante em 7e44372 (2026-06-13), como
+ * `new Set(["GOL", "Goleiro"])`, e so saiu na b591e55 (2026-08-21). Foram dois
+ * meses hospedado justamente pelo nome que deveria dar visibilidade -- ele
+ * nunca esteve espalhado pelo corpo do hook.
+ *
+ * Quem RECUSA vocabulario errado e a CHECK `players_preferred_position_known`
+ * no banco e, onde um codigo e comparado em TypeScript, a ancora no tipo
+ * `CanonicalPosition` (ver `features/players/position-group.ts`, onde valor de
+ * fora do enum reprova o `tsc` com TS2322). Este `Set` e `Set<string>`: nao tem
+ * esse dente.
+ */
+const GK_POSITIONS = new Set(["GOL"]);
 
 type RawSave = {
   registration_id: string;
@@ -145,15 +173,21 @@ export function useGoalkeeper(championshipId: string | null) {
           .eq("championship_id", championshipId),
         supabase
           .from("championship_registrations")
-          .select("id, profile_photo_link, players(id, name, position)")
+          .select("id, profile_photo_link, players(id, name, preferred_position)")
           .eq("championship_id", championshipId),
       ]);
 
-      // Goalkeeper reg ids: position-based (GOL/Goleiro) + anyone with saves
+      // Goalkeeper reg ids: pela posicao + qualquer um com defesa registrada.
+      //
+      // A varredura do vocabulario JA passou por aqui: `GK_POSITIONS` tem um
+      // item so, e o motivo esta na propria constante.
+      //
+      // A segunda metade da conta e o que segura o caso de vocabulario torto —
+      // quem tem defesa registrada entra por defesa, tenha a posicao que tiver.
       const gkRegIds = new Set<string>();
       for (const reg of regsRes.data ?? []) {
-        const playersRel = reg.players as { position: string | null } | { position: string | null }[] | null;
-        const pos = (Array.isArray(playersRel) ? playersRel[0]?.position : playersRel?.position) ?? null;
+        const playersRel = reg.players as { preferred_position: string | null } | { preferred_position: string | null }[] | null;
+        const pos = (Array.isArray(playersRel) ? playersRel[0]?.preferred_position : playersRel?.preferred_position) ?? null;
         if (pos && GK_POSITIONS.has(pos)) gkRegIds.add(reg.id);
       }
       for (const save of savesRes.data ?? []) gkRegIds.add(save.registration_id);

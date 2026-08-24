@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { potTitle } from "@/features/draft/pot-position";
 import { requireAdminOrAuctionFiscal } from "@/lib/draft-auth";
 
 const FIXED_FINE = 2000;
@@ -47,8 +48,21 @@ export async function POST(req: Request) {
 
     const potNumber = ch.draft_auction_pot_number;
     const potPosition = ch.draft_auction_pot_position.trim();
-    const potLabel = `Pote ${potNumber} (${potPosition})`;
-    const isGoalkeeperPot = potPosition.toUpperCase() === "GOL";
+    const potLabel = potTitle(potNumber, potPosition);
+    // ESTE SITIO ESTAVA QUEBRADO, e nao e teoria: ate a 20260821020000 a coluna
+    // guardava a palavra, e `"Goleiro".toUpperCase()` e `"GOLEIRO"` — nunca
+    // `"GOL"`. Toda multa geral do pote de goleiro saia como `no_bid_player`,
+    // com o rotulo "Sem lance no jogador" no extrato do cartola.
+    //
+    // A conversao da coluna consertou sozinha; o `.toUpperCase()` saiu junto
+    // porque so faria sentido contra um vocabulario de caixa variavel, e a
+    // coluna nunca teve um.
+    //
+    // Quem garante a caixa nao e o route de cima: `auction-window` confere o
+    // valor contra `draft_pots`, mas `set_draft_auction_state` e executavel por
+    // qualquer `authenticated` e so faz `trim`. Quem garante e a CHECK
+    // `championships_draft_auction_pot_position_known`, da 20260821020000.
+    const isGoalkeeperPot = potPosition === "GOL";
     const fineType = isGoalkeeperPot ? "no_bid_goalkeeper" : "no_bid_player";
     const txType = isGoalkeeperPot
       ? "FINE_NO_BID_GOALKEEPER"

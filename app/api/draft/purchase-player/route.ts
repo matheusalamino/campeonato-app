@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminOrAuctionFiscal } from "@/lib/draft-auth";
+import { potTitle } from "@/features/draft/pot-position";
 
 type PurchasePlayerBody = {
   championshipId: string;
@@ -232,7 +233,7 @@ export async function POST(req: NextRequest) {
       throw ctpErr;
     }
 
-    const potLabel = `Pote ${potNumber} (${pos})`;
+    const potLabel = potTitle(potNumber, pos);
     const typeLabel = purchaseTypeLabel(purchaseType);
     const priceFmt = purchasePrice.toLocaleString("pt-BR");
     const descPot = `${typeLabel} — ${playerName} — ${potLabel} · CC$ ${priceFmt} (Orçamento do Pote)`;

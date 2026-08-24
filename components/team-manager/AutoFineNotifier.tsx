@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { useTeamManagerDraft } from "@/components/TeamManagerDraftContext";
+import { potTitle } from "@/features/draft/pot-position";
 
 type FineRow = {
   id: string;
@@ -51,7 +52,7 @@ export function AutoFineNotifier() {
 
         const potLabel =
           fine.pot_number != null && fine.pot_position
-            ? `Pote ${fine.pot_number} (${fine.pot_position})`
+            ? potTitle(fine.pot_number, fine.pot_position)
             : "Draft";
 
         toast.warning(
