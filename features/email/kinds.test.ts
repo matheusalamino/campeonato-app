@@ -74,8 +74,10 @@ describe("os dois kinds que a inscricao enfileira hoje", () => {
     //
     // Renomear um dos dois de um lado so nao quebra nada visivel: o dreno
     // recusaria a linha por `kind` desconhecido e o e-mail simplesmente nao
-    // sairia. Esta assertiva e o unico lugar onde os dois nomes se encontram
-    // fora do SQL.
+    // sairia. Os dois nomes aparecem juntos em `EMAIL_KINDS` e nos `switch` de
+    // kinds.ts, mas esta e a unica assertiva que os prende ao gatilho -- em
+    // nenhum outro lugar fora do SQL eles sao lidos como "o par que a inscricao
+    // enfileira".
     expect(EMAIL_KINDS).toContain("registration_committed");
     expect(EMAIL_KINDS).toContain("organizer_new_registration");
   });

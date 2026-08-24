@@ -471,6 +471,9 @@ describe("drainOutbox", () => {
     const r = await drainOutbox(deps(store, registro));
     expect(r.claimed).toBe(0);
     expect(registro.sabbathCalls).toBe(0);
+    // A cota tambem nao. "Mais nada" so vale se as DUAS perguntas de lote
+    // ficarem de fora -- e a da cota e uma contagem sobre a tabela inteira.
+    expect(registro.quotaSince).toHaveLength(0);
     expect(registro.enviados).toHaveLength(0);
   });
 
@@ -495,11 +498,13 @@ describe("drainOutbox", () => {
     expect(registro.sabbathCalls).toBe(1);
   });
 
-  it("no sabado adia o lote inteiro SEM gastar tentativa", async () => {
-    // `defer` nao mexe em `attempts` nem em `next_attempt_at`. Se o sabado
-    // gastasse degrau da escada, uma pausa de 25 horas empurraria toda linha
-    // parada para o teto de 12h -- e o comprovante de quem se inscreveu na
-    // sexta a noite so sairia meio dia depois de a pausa acabar.
+  it("no sabado a linha e ADIADA, e sem gastar tentativa", async () => {
+    // O que se mede aqui e a escolha entre `defer` e `requeue`: `defer` nao
+    // mexe em `attempts` nem em `next_attempt_at`. Se o sabado gastasse degrau
+    // da escada, uma pausa de 25 horas empurraria toda linha parada para o teto
+    // de 12h -- e o comprovante de quem se inscreveu na sexta a noite so sairia
+    // meio dia depois de a pausa acabar. Que a decisao vale para o LOTE, e nao
+    // por linha, e o que "consulta is_sabbath UMA vez por lote" prende.
     const { store, registro } = fakeStore([linha()], {
       sabbath: true,
       contacts: { "reg-1": contato },
@@ -609,11 +614,16 @@ describe("drainOutbox", () => {
     expect(r.reasons.quota).toBe(2);
   });
 
-  it("sem base de link, adia tudo e nao gasta tentativa", async () => {
+  it("sem base de link, a linha e ADIADA, e sem gastar tentativa", async () => {
     const { store, registro } = fakeStore([linha()], { contacts: { "reg-1": contato } });
     const r = await drainOutbox(deps(store, registro, { siteUrl: null }));
     expect(registro.enviados).toHaveLength(0);
     expect(registro.deferred).toEqual(["row-1"]);
+    // A metade "sem gastar tentativa" do nome, dita direto em vez de deduzida
+    // da de cima: pega o dreno que adia E gasta degrau na mesma linha, que a
+    // assertiva de `deferred` sozinha nao ve. E o mesmo par que o cenario do
+    // sabado ja tinha.
+    expect(registro.requeued).toHaveLength(0);
     expect(r.reasons.no_site_url).toBe(1);
   });
 

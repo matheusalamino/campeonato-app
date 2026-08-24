@@ -73,7 +73,9 @@ KIND_C="test_outbox_claim"
 #
 # O `ORDER BY next_attempt_at` da funcao e a rede: com dez anos de atraso, as
 # linhas deste cenario vem sempre primeiro, e o limite sempre se esgota nelas.
-# Ha assertiva propria conferindo que nenhuma OUTRA linha mudou de estado.
+# Ha assertiva propria conferindo que a CONTAGEM de linhas em 'sending' fora
+# deste kind nao mudou -- ela nao veria uma troca de identidade que mantivesse o
+# total, nem mudanca para status que nao seja 'sending'.
 CLAIM_PASSADO="now() - interval '10 years'"
 CLAIM_PASSADO2="now() - interval '9 years'"
 
@@ -135,16 +137,16 @@ erro_estado() {
   esac
 }
 
-# O indice do dreno so serve se for PARCIAL: e o `WHERE status = 'pending'` que
-# o mantem do tamanho da fila viva em vez do tamanho do historico inteiro, que
-# so cresce. Um indice total responderia as mesmas consultas -- e por isso
-# medir "o indice existe" nao distingue nada.
 # psql imprime o rotulo de cada comando -- BEGIN, ROLLBACK -- junto do
 # resultado. Os cenarios de sondagem do claim PRECISAM da transacao: a funcao
 # nao filtra por kind, e sem o ROLLBACK uma sondagem arrastaria para 'sending'
 # linhas de fora do cenario e as deixaria la. Entao a saida passa por aqui.
 sem_rotulo() { /usr/bin/grep -vE '^(BEGIN|COMMIT|ROLLBACK)$'; }
 
+# O indice do dreno so serve se for PARCIAL: e o `WHERE status = 'pending'` que
+# o mantem do tamanho da fila viva em vez do tamanho do historico inteiro, que
+# so cresce. Um indice total responderia as mesmas consultas -- e por isso
+# medir "o indice existe" nao distingue nada.
 indice_estado() {
   case "$1" in
     '')                  echo "ausente" ;;

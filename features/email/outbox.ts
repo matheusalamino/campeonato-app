@@ -12,9 +12,10 @@ import { isBulkKind, isEmailKind, isOrganizerKind, type EmailKind } from "./kind
  *
  * Porque `vitest.config.ts` nao inclui `services/**`, e um teste escrito la NAO
  * RODA. Isso e medido, nao suposto: um arquivo `services/*.test.ts` afirmando
- * `expect(1).toBe(2)` deixa a suite em 60 arquivos e 702 testes, verde. A regra
- * do repo, escrita no proprio vitest.config.ts, e que regra vai para
- * `features/**` e so a FIACAO fica no servico.
+ * `expect(1).toBe(2)` deixa a suite verde e a contagem de arquivos e de testes
+ * exatamente onde estava -- ele nao e coletado. A regra do repo, escrita no
+ * proprio vitest.config.ts, e que regra vai para `features/**` e so a FIACAO
+ * fica no servico.
  *
  * Entao a divisao aqui e essa: TUDO que decide alguma coisa esta neste arquivo,
  * e `services/email-outbox.ts` so amarra o cliente do Supabase, as variaveis de
@@ -23,9 +24,13 @@ import { isBulkKind, isEmailKind, isOrganizerKind, type EmailKind } from "./kind
  * ── O instante e ARGUMENTO ───────────────────────────────────────────────────
  *
  * `drainOutbox` recebe `now` e nunca chama `Date.now()` por dentro. Isso vem de
- * cicatriz: `scripts/test-registration-slots.sh` nao tem relogio injetavel e
- * por isso falha inteiro durante a pausa de sabado -- um portao cego 24 horas
- * por semana, todo fim de semana.
+ * cicatriz: `scripts/test-registration-slots.sh` nao tem relogio injetavel --
+ * `reserve_registration_slot` e `commit_registration` chamam `is_sabbath(now())`
+ * --, entao durante a pausa de sabado toda reserva e todo commit devolvem
+ * `sabbath` e a suite fica inutilizavel. Nao e a suite inteira que cai (o
+ * cabecalho daquele arquivo tem a medicao: passam os cenarios que montam a
+ * janela DENTRO de uma transacao), mas o portao fica cego 24 horas por semana,
+ * todo fim de semana.
  *
  * ── Nada aqui conhece o Brevo ────────────────────────────────────────────────
  *
@@ -57,9 +62,10 @@ export const RETRY_DELAYS_MS = [
  * A espera depois da tentativa de numero `attempts` -- ou seja, `attempts` ja
  * CONTA a que acabou de falhar. Quem chama incrementa primeiro.
  *
- * Entrada fora da faixa cai no primeiro degrau em vez de virar NaN: uma espera
- * NaN vira `next_attempt_at` invalido, e isso e um e-mail que nunca mais sai
- * sem ninguem perceber que faltou.
+ * Acima da faixa a espera para no ultimo degrau; abaixo dela, e para entrada
+ * que nao e numero, cai no primeiro -- nunca em NaN. Uma espera NaN vira
+ * `next_attempt_at` invalido, e isso e um e-mail que nunca mais sai sem
+ * ninguem perceber que faltou.
  */
 export function nextAttemptDelay(attempts: number): number {
   const degrau = Math.min(Math.max(Math.trunc(attempts) - 1, 0), RETRY_DELAYS_MS.length - 1);
@@ -111,8 +117,13 @@ export type SendDecision =
  *     Se a cota viesse antes, uma fila cheia na noite de sexta apareceria como
  *     cota estourada -- as duas adiam a linha, entao o banco fica igual, e o
  *     leitor de domingo de manha procura o problema no lugar errado.
- *  2. `siteUrl` antes da cota porque sem base de link nada pode sair, e gastar
- *     leitura de cota para uma linha que nao vai sair e ruido.
+ *  2. `siteUrl` antes da cota pelo MESMO motivo do item 1, e nao por economia
+ *     de consulta: a contagem da cota e lida uma vez por lote, antes deste
+ *     laco, com base de link ou sem ela -- esta ordem nao poupa leitura
+ *     nenhuma. O que ela decide e o motivo gravado. Base de link faltando e
+ *     configuracao de implantacao errada, e mostrar isso como cota estourada
+ *     manda quem for depurar procurar no provedor um problema que esta no
+ *     ambiente.
  *  3. `quota` antes de `opt_out` porque as consequencias divergem: cota ADIA,
  *     descadastro MATA. Na ordem trocada, um dia de cota estourada mataria
  *     lembretes que voltariam a ser enviaveis no dia seguinte.

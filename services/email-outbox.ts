@@ -186,9 +186,10 @@ export type RunDrainOptions = {
  * Um disparo do dreno.
  *
  * O instante e ARGUMENTO e nunca `new Date()` la dentro. Vem de cicatriz:
- * `scripts/test-registration-slots.sh` nao tem relogio injetavel e por isso
- * falha inteiro durante a pausa de sabado -- um portao cego 24 horas por
- * semana.
+ * `scripts/test-registration-slots.sh` nao tem relogio injetavel -- as funcoes
+ * que ele exercita chamam `is_sabbath(now())` --, entao durante a pausa de
+ * sabado toda reserva e todo commit devolvem `sabbath` e a suite fica
+ * inutilizavel. Um portao cego 24 horas por semana.
  *
  * Na data deste arquivo ninguem chama esta funcao: nao ha rota de cron. Ela e o
  * ponto de entrada que essa rota vai usar.
