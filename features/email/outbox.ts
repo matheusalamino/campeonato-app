@@ -1,5 +1,12 @@
-import type { EmailMessage, EmailSender } from "@/lib/email/port";
+import type { EmailSender } from "@/lib/email/port";
 import { isBulkKind, isEmailKind, isOrganizerKind, type EmailKind } from "./kinds";
+// `import type`, e dos DOIS lados: `render.ts` importa `OutboxRow`,
+// `Recipient` e `RegistrationSummary` daqui. Import de TIPO e apagado na
+// compilacao, entao nao existe ciclo em tempo de execucao -- e `tsc --noEmit`
+// em zero e a prova. No dia em que um dos dois lados precisar de um VALOR do
+// outro, a saida e mover os tipos partilhados para `features/email/types.ts`,
+// e nao forcar.
+import type { EmailRenderer } from "./render";
 
 /**
  * O DRENO da caixa de saida: quem tira as linhas de `email_outbox` e as
@@ -163,11 +170,36 @@ export type OutboxRow = {
 
 export type Recipient = { email: string; name: string | null };
 
-/** O que o banco sabe sobre quem se inscreveu, do ponto de vista do endereco. */
-export type RegistrationContact = {
+/**
+ * O que o banco sabe sobre uma inscricao, do ponto de vista de quem vai montar
+ * o e-mail: para onde ele vai, e o que ele precisa dizer.
+ *
+ * ── POR QUE NAO SE CHAMA `RegistrationContact` ──
+ *
+ * Porque chamava, enquanto tinha so os tres campos de ENDERECO. Nome de
+ * campeonato e lista de espera nao sao contato de ninguem, e um tipo chamado
+ * `Contact` carregando-os e prosa que nasce mentindo -- este repo ja pagou por
+ * isso.
+ *
+ * ── TUDO NULAVEL, E NADA DISSO E DESCUIDO ──
+ *
+ * `championship_registrations.championship_id` e `player_id` sao NULLABLE
+ * (medido em `\d championship_registrations`), entao os dois joins podem voltar
+ * vazios. O `?? ""` que calaria o TypeScript aqui e exatamente o que produz
+ * "Olá , sua inscrição em  está confirmada": quem decide o que dizer sem o dado
+ * e o TEMPLATE, e ele tem assertiva para cada buraco.
+ *
+ * `isWaitlist` nao e nulavel porque a coluna e NOT NULL DEFAULT false.
+ */
+export type RegistrationSummary = {
   contactEmail: string | null;
   playerEmail: string | null;
   playerName: string | null;
+  championshipName: string | null;
+  isWaitlist: boolean;
+  /** O CODIGO da coluna (`GOL|ZAG|MEI|ATA`), cru. Quem traduz para palavra e o
+   *  template, com `positionLabel`. */
+  preferredPosition: string | null;
 };
 
 /** O identificador que o gatilho grava no payload. Nao aceita numero nem string
@@ -198,41 +230,25 @@ function limpo(valor: string | null | undefined): string | null {
  * (`shouldPersistPlayerIdentity`), entao para quem ja tem cadastro o endereco
  * de `players` pode estar velho -- e e justamente quem trocou de e-mail que
  * digita o novo no formulario.
+ *
+ * Recebe o RESUMO inteiro e olha so os tres campos de endereco, e isso e
+ * deliberado: DESTINO e CONTEUDO se decidem separado. Enquanto esta funcao nao
+ * souber o que o e-mail diz, ela nao tem como escolher o destino em funcao do
+ * texto -- que e o caminho para o aviso interno cair na caixa do inscrito.
  */
 export function recipientFor(
   kind: EmailKind,
-  contact: RegistrationContact | null,
+  summary: RegistrationSummary | null,
   organizerEmail: string | null,
 ): Recipient | null {
   if (isOrganizerKind(kind)) {
     const org = limpo(organizerEmail);
     return org ? { email: org, name: null } : null;
   }
-  if (!contact) return null;
-  const email = limpo(contact.contactEmail) ?? limpo(contact.playerEmail);
-  return email ? { email, name: limpo(contact.playerName) } : null;
+  if (!summary) return null;
+  const email = limpo(summary.contactEmail) ?? limpo(summary.playerEmail);
+  return email ? { email, name: limpo(summary.playerName) } : null;
 }
-
-export type RenderInput = {
-  kind: EmailKind;
-  row: OutboxRow;
-  recipient: Recipient;
-  siteUrl: string;
-};
-
-/** Monta o corpo, ou devolve null quando nao ha corpo a montar para esta linha. */
-export type EmailRenderer = (input: RenderInput) => EmailMessage | null;
-
-/**
- * STUB, e nada alem disso: nao existe template neste repo na data deste
- * arquivo, e inventar um aqui seria escrever texto que ninguem revisou para
- * mandar a jogador de verdade.
- *
- * Devolve null para toda linha, e null ADIA em vez de matar -- ver `no_body` em
- * drainOutbox. Enquanto este for o `render` em uso, a fila cresce e nenhum
- * e-mail sai, e essa e a falha correta: visivel e reversivel.
- */
-export const stubRenderer: EmailRenderer = () => null;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // O dreno
@@ -249,7 +265,10 @@ export type OutboxStore = {
   claimBatch(limit: number, now: Date): Promise<OutboxRow[]>;
   isSabbath(at: Date): Promise<boolean>;
   countSentSince(since: Date): Promise<number>;
-  loadContacts(registrationIds: string[]): Promise<Map<string, RegistrationContact>>;
+  /** Chamava-se `loadContacts` enquanto so trazia endereco. Trocou de nome pelo
+   *  mesmo motivo que o tipo: leitura que traz nome de campeonato e lista de
+   *  espera nao e leitura de contato. */
+  loadSummaries(registrationIds: string[]): Promise<Map<string, RegistrationSummary>>;
   markSent(id: string, providerMessageId: string, at: Date): Promise<void>;
   /** Volta para `pending` GASTANDO um degrau da escada: e para falha de envio. */
   requeue(id: string, attempts: number, nextAttemptAt: Date, lastError: string): Promise<void>;
@@ -323,7 +342,7 @@ export async function drainOutbox(deps: DrainDeps): Promise<DrainReport> {
   let sentToday = await store.countSentSince(startOfUtcDay(now));
 
   const ids = [...new Set(rows.map(registrationIdFrom).filter((id): id is string => id !== null))];
-  const contacts = ids.length > 0 ? await store.loadContacts(ids) : new Map();
+  const resumos = ids.length > 0 ? await store.loadSummaries(ids) : new Map();
 
   for (const row of rows) {
     // `kind` e coluna `text` sem CHECK de valor. Uma linha com nome que este
@@ -339,8 +358,8 @@ export async function drainOutbox(deps: DrainDeps): Promise<DrainReport> {
     const kind: EmailKind = row.kind;
 
     const regId = registrationIdFrom(row);
-    const contact = regId ? (contacts.get(regId) ?? null) : null;
-    const recipient = recipientFor(kind, contact, deps.organizerEmail);
+    const summary: RegistrationSummary | null = regId ? (resumos.get(regId) ?? null) : null;
+    const recipient = recipientFor(kind, summary, deps.organizerEmail);
 
     const decision = decideSend({
       sabbath,
@@ -371,6 +390,7 @@ export async function drainOutbox(deps: DrainDeps): Promise<DrainReport> {
       row,
       recipient: recipient ?? { email: decision.recipient, name: null },
       siteUrl: decision.siteUrl,
+      summary,
     });
 
     // Template que falta e buraco de implantacao, nao dado ruim: matar a linha

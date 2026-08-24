@@ -9,13 +9,12 @@ import {
   recipientFor,
   registrationIdFrom,
   startOfUtcDay,
-  stubRenderer,
   type DrainDeps,
-  type EmailRenderer,
   type OutboxRow,
   type OutboxStore,
-  type RegistrationContact,
+  type RegistrationSummary,
 } from "./outbox";
+import type { EmailRenderer } from "./render";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // A rede, envenenada
@@ -248,10 +247,16 @@ describe("decideSend", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Quem recebe
 // ─────────────────────────────────────────────────────────────────────────────
-const contato: RegistrationContact = {
+// Os tres campos de ENDERECO mais os tres de CONTEUDO. `recipientFor` so olha
+// os primeiros, e ha assertiva disso logo abaixo -- a separacao entre destino e
+// conteudo e o que impede o aviso interno de cair na caixa do inscrito.
+const resumo: RegistrationSummary = {
   contactEmail: "novo@exemplo.test",
   playerEmail: "velho@exemplo.test",
   playerName: "Fulano",
+  championshipName: "Copa Teste",
+  isWaitlist: false,
+  preferredPosition: "ATA",
 };
 
 describe("recipientFor", () => {
@@ -259,7 +264,7 @@ describe("recipientFor", () => {
     // `contact_email` existe justamente porque players.email pode estar velho:
     // a submissao publica so grava identidade para CPF novo. Ver a migration
     // 20260823020000.
-    expect(recipientFor("registration_committed", contato, "org@exemplo.test")).toEqual({
+    expect(recipientFor("registration_committed", resumo, "org@exemplo.test")).toEqual({
       email: "novo@exemplo.test",
       name: "Fulano",
     });
@@ -267,39 +272,65 @@ describe("recipientFor", () => {
 
   it("cai para players.email quando contact_email e nulo", () => {
     expect(
-      recipientFor("registration_committed", { ...contato, contactEmail: null }, "org@exemplo.test"),
+      recipientFor("registration_committed", { ...resumo, contactEmail: null }, "org@exemplo.test"),
     ).toEqual({ email: "velho@exemplo.test", name: "Fulano" });
   });
 
   it("trata string vazia como ausente nos dois", () => {
     expect(
-      recipientFor("registration_committed", { ...contato, contactEmail: "  " }, "org@x.test"),
+      recipientFor("registration_committed", { ...resumo, contactEmail: "  " }, "org@x.test"),
     ).toEqual({ email: "velho@exemplo.test", name: "Fulano" });
     expect(
       recipientFor(
         "registration_committed",
-        { contactEmail: "", playerEmail: "", playerName: null },
+        { ...resumo, contactEmail: "", playerEmail: "", playerName: null },
         "org@x.test",
       ),
     ).toBeNull();
+  });
+
+  it("nao deixa o CONTEUDO escolher o DESTINO", () => {
+    // O resumo passou a carregar nome de campeonato, lista de espera e posicao
+    // junto com os tres campos de endereco. `recipientFor` continua olhando so
+    // os de endereco, e e ISSO que impede o aviso interno de cair na caixa do
+    // inscrito: uma funcao que soubesse o que o e-mail diz poderia, um dia,
+    // escolher o destino em funcao do texto.
+    //
+    // Sem esta assertiva, nada acusaria a mistura -- o `tsc` fica limpo, e as
+    // outras assertivas deste describe passam o resumo INTEIRO, entao nenhuma
+    // delas ve a diferenca entre "ignora os tres" e "usa os tres por acaso do
+    // mesmo jeito".
+    const conteudoDiferente = {
+      ...resumo,
+      championshipName: "Outra Copa",
+      isWaitlist: true,
+      preferredPosition: "GOL",
+    };
+
+    expect(recipientFor("registration_committed", conteudoDiferente, "org@exemplo.test")).toEqual(
+      recipientFor("registration_committed", resumo, "org@exemplo.test"),
+    );
+    expect(
+      recipientFor("organizer_new_registration", conteudoDiferente, "org@exemplo.test"),
+    ).toEqual(recipientFor("organizer_new_registration", resumo, "org@exemplo.test"));
   });
 
   it("manda o aviso da organizacao para a organizacao, nao para o jogador", () => {
     // O erro que esta assertiva impede e o pior desta task: o aviso interno de
     // inscricao nova cair na caixa do proprio inscrito. Ele nao e o
     // destinatario, e o texto nem e escrito para ele.
-    expect(recipientFor("organizer_new_registration", contato, "org@exemplo.test")).toEqual({
+    expect(recipientFor("organizer_new_registration", resumo, "org@exemplo.test")).toEqual({
       email: "org@exemplo.test",
       name: null,
     });
   });
 
   it("sem ORGANIZER_EMAIL, o aviso da organizacao nao tem para onde ir", () => {
-    expect(recipientFor("organizer_new_registration", contato, null)).toBeNull();
-    expect(recipientFor("organizer_new_registration", contato, "")).toBeNull();
+    expect(recipientFor("organizer_new_registration", resumo, null)).toBeNull();
+    expect(recipientFor("organizer_new_registration", resumo, "")).toBeNull();
   });
 
-  it("sem contato, o e-mail do jogador nao tem para onde ir", () => {
+  it("sem resumo, o e-mail do jogador nao tem para onde ir", () => {
     expect(recipientFor("registration_committed", null, "org@exemplo.test")).toBeNull();
   });
 });
@@ -322,22 +353,6 @@ describe("registrationIdFrom", () => {
     expect(registrationIdFrom(linha({ registration_id: null }))).toBeNull();
     expect(registrationIdFrom(linha({ registration_id: 42 }))).toBeNull();
     expect(registrationIdFrom(linha({ registration_id: "" }))).toBeNull();
-  });
-});
-
-describe("stubRenderer", () => {
-  it("nao monta corpo nenhum, e diz isso devolvendo null", () => {
-    // A montagem do corpo e de outro passo. O stub esta aqui para o dreno ter
-    // um `render` de verdade nos testes de fiacao sem que este arquivo invente
-    // um template -- e devolver null faz a linha ser ADIADA, nao morta.
-    expect(
-      stubRenderer({
-        kind: "registration_committed",
-        row: { id: "r", kind: "registration_committed", dedupeKey: "d", payload: {}, attempts: 0 },
-        recipient: { email: "a@b.test", name: null },
-        siteUrl: "https://x.test",
-      }),
-    ).toBeNull();
   });
 });
 
@@ -366,7 +381,7 @@ function fakeStore(
   opts: {
     sabbath?: boolean;
     sentToday?: number;
-    contacts?: Record<string, RegistrationContact>;
+    resumos?: Record<string, RegistrationSummary>;
   } = {},
 ): { store: OutboxStore; registro: Registro } {
   const registro: Registro = {
@@ -394,10 +409,10 @@ function fakeStore(
       registro.quotaSince.push(since.toISOString());
       return opts.sentToday ?? 0;
     },
-    async loadContacts(ids) {
-      const mapa = new Map<string, RegistrationContact>();
+    async loadSummaries(ids) {
+      const mapa = new Map<string, RegistrationSummary>();
       for (const id of ids) {
-        const c = opts.contacts?.[id];
+        const c = opts.resumos?.[id];
         if (c) mapa.set(id, c);
       }
       return mapa;
@@ -482,7 +497,7 @@ describe("drainOutbox", () => {
 
   it("envia e marca sent", async () => {
     const { store, registro } = fakeStore([linha()], {
-      contacts: { "reg-1": contato },
+      resumos: { "reg-1": resumo },
     });
     const r = await drainOutbox(deps(store, registro));
     expect(registro.enviados).toHaveLength(1);
@@ -496,7 +511,7 @@ describe("drainOutbox", () => {
     // no meio do lote e a metade de baixo sairia com decisao diferente da de
     // cima, para o mesmo disparo.
     const rows = [linha({ id: "a", dedupeKey: "reg-1" }), linha({ id: "b", dedupeKey: "reg-1" })];
-    const { store, registro } = fakeStore(rows, { contacts: { "reg-1": contato } });
+    const { store, registro } = fakeStore(rows, { resumos: { "reg-1": resumo } });
     await drainOutbox(deps(store, registro));
     expect(registro.sabbathCalls).toBe(1);
   });
@@ -510,7 +525,7 @@ describe("drainOutbox", () => {
     // por linha, e o que "consulta is_sabbath UMA vez por lote" prende.
     const { store, registro } = fakeStore([linha()], {
       sabbath: true,
-      contacts: { "reg-1": contato },
+      resumos: { "reg-1": resumo },
     });
     const r = await drainOutbox(deps(store, registro));
     expect(registro.enviados).toHaveLength(0);
@@ -521,7 +536,7 @@ describe("drainOutbox", () => {
 
   it("falha retriavel volta para a fila no primeiro degrau", async () => {
     const { store, registro } = fakeStore([linha({ attempts: 0 })], {
-      contacts: { "reg-1": contato },
+      resumos: { "reg-1": resumo },
     });
     const r = await drainOutbox(
       deps(store, registro, {}, { ok: false, retriable: true, error: "429 devagar" }),
@@ -540,7 +555,7 @@ describe("drainOutbox", () => {
 
   it("a escada anda com a tentativa que ja estava gravada", async () => {
     const { store, registro } = fakeStore([linha({ attempts: 3 })], {
-      contacts: { "reg-1": contato },
+      resumos: { "reg-1": resumo },
     });
     await drainOutbox(
       deps(store, registro, {}, { ok: false, retriable: true, error: "500" }),
@@ -554,7 +569,7 @@ describe("drainOutbox", () => {
   it("falha nao retriavel mata a linha", async () => {
     // Endereco invalido continua invalido. Retentar para sempre queima a cota
     // de 300/dia -- o teto do plano gratuito do Brevo.
-    const { store, registro } = fakeStore([linha()], { contacts: { "reg-1": contato } });
+    const { store, registro } = fakeStore([linha()], { resumos: { "reg-1": resumo } });
     const r = await drainOutbox(
       deps(store, registro, {}, { ok: false, retriable: false, error: "400 email invalido" }),
     );
@@ -565,7 +580,7 @@ describe("drainOutbox", () => {
 
   it("kind desconhecido morre e nao chega no provedor", async () => {
     const { store, registro } = fakeStore([linha({ kind: "test_outbox_alpha" })], {
-      contacts: { "reg-1": contato },
+      resumos: { "reg-1": resumo },
     });
     const r = await drainOutbox(deps(store, registro));
     expect(registro.enviados).toHaveLength(0);
@@ -576,7 +591,7 @@ describe("drainOutbox", () => {
 
   it("o aviso da organizacao vai para ORGANIZER_EMAIL", async () => {
     const { store, registro } = fakeStore([linha({ kind: "organizer_new_registration" })], {
-      contacts: { "reg-1": contato },
+      resumos: { "reg-1": resumo },
     });
     await drainOutbox(deps(store, registro));
     expect(registro.enviados[0].to).toBe("org@exemplo.test");
@@ -584,14 +599,14 @@ describe("drainOutbox", () => {
 
   it("cai para players.email quando contact_email e nulo", async () => {
     const { store, registro } = fakeStore([linha()], {
-      contacts: { "reg-1": { ...contato, contactEmail: null } },
+      resumos: { "reg-1": { ...resumo, contactEmail: null } },
     });
     await drainOutbox(deps(store, registro));
     expect(registro.enviados[0].to).toBe("velho@exemplo.test");
   });
 
   it("sem destinatario a linha morre, e nao volta para a fila", async () => {
-    const { store, registro } = fakeStore([linha()], { contacts: {} });
+    const { store, registro } = fakeStore([linha()], { resumos: {} });
     const r = await drainOutbox(deps(store, registro));
     expect(registro.enviados).toHaveLength(0);
     expect(registro.dead).toHaveLength(1);
@@ -609,7 +624,7 @@ describe("drainOutbox", () => {
     ];
     const { store, registro } = fakeStore(rows, {
       sentToday: 299,
-      contacts: { "reg-1": contato },
+      resumos: { "reg-1": resumo },
     });
     const r = await drainOutbox(deps(store, registro, { dailyQuota: 300 }));
     expect(registro.enviados).toHaveLength(1);
@@ -618,7 +633,7 @@ describe("drainOutbox", () => {
   });
 
   it("sem base de link, a linha e ADIADA, e sem gastar tentativa", async () => {
-    const { store, registro } = fakeStore([linha()], { contacts: { "reg-1": contato } });
+    const { store, registro } = fakeStore([linha()], { resumos: { "reg-1": resumo } });
     const r = await drainOutbox(deps(store, registro, { siteUrl: null }));
     expect(registro.enviados).toHaveLength(0);
     expect(registro.deferred).toEqual(["row-1"]);
@@ -634,7 +649,7 @@ describe("drainOutbox", () => {
     const lembrete = linha({ id: "a", kind: "reminder_waitlist", dedupeKey: "reg-1" });
     const comprovante = linha({ id: "b", kind: "registration_committed", dedupeKey: "reg-1" });
     const { store, registro } = fakeStore([lembrete, comprovante], {
-      contacts: { "reg-1": contato },
+      resumos: { "reg-1": resumo },
     });
     const r = await drainOutbox(deps(store, registro, { isOptedOut: async () => true }));
     expect(registro.dead.map((d) => d.id)).toEqual(["a"]);
@@ -646,8 +661,9 @@ describe("drainOutbox", () => {
     // Template que falta e buraco de implantacao, nao dado ruim. Matar a linha
     // aqui perderia o acontecimento para sempre e em silencio; adiar deixa a
     // fila crescer, que e visivel.
-    const { store, registro } = fakeStore([linha()], { contacts: { "reg-1": contato } });
-    const r = await drainOutbox(deps(store, registro, { render: stubRenderer }));
+    const { store, registro } = fakeStore([linha()], { resumos: { "reg-1": resumo } });
+    const semTemplate: EmailRenderer = () => null;
+    const r = await drainOutbox(deps(store, registro, { render: semTemplate }));
     expect(registro.enviados).toHaveLength(0);
     expect(registro.dead).toHaveLength(0);
     expect(registro.deferred).toEqual(["row-1"]);
@@ -672,7 +688,7 @@ describe("drainOutbox", () => {
     // so o contador em memoria do lote. Um cron de cinco em cinco minutos passa
     // a permitir milhares de e-mails por dia contra uma cota de 300, e quem
     // recusa e o Brevo, calado.
-    const { store, registro } = fakeStore([linha()], { contacts: { "reg-1": contato } });
+    const { store, registro } = fakeStore([linha()], { resumos: { "reg-1": resumo } });
     await drainOutbox(deps(store, registro));
     expect(registro.quotaSince).toEqual(["2026-08-24T00:00:00.000Z"]);
     expect(registro.quotaSince[0]).toBe(startOfUtcDay(AGORA).toISOString());
@@ -683,7 +699,7 @@ describe("drainOutbox", () => {
     // pausa com o instante errado manda e-mail durante o sabado, e isso nao se
     // desfaz. `sabbathCalls` sozinho so contava as chamadas -- o QUANDO era
     // inobservavel.
-    const { store, registro } = fakeStore([linha()], { contacts: { "reg-1": contato } });
+    const { store, registro } = fakeStore([linha()], { resumos: { "reg-1": resumo } });
     await drainOutbox(deps(store, registro));
     expect(registro.sabbathAt).toEqual([AGORA.toISOString()]);
   });
@@ -699,7 +715,7 @@ describe("drainOutbox", () => {
     // so quem volta para a fila o zera. Um `at` aqui existiria para sobrescrever
     // `claimed_at` com o instante da falha, que quebraria essa uniformidade.
     const { store, registro } = fakeStore([linha({ kind: "test_outbox_alpha" })], {
-      contacts: { "reg-1": contato },
+      resumos: { "reg-1": resumo },
     });
     await drainOutbox(deps(store, registro));
     expect(registro.dead).toHaveLength(1);
@@ -709,7 +725,7 @@ describe("drainOutbox", () => {
   it("uma linha ruim nao derruba o resto do lote", async () => {
     const ruim = linha({ id: "a", kind: "test_outbox_alpha", dedupeKey: "reg-1" });
     const boa = linha({ id: "b", dedupeKey: "reg-1" });
-    const { store, registro } = fakeStore([ruim, boa], { contacts: { "reg-1": contato } });
+    const { store, registro } = fakeStore([ruim, boa], { resumos: { "reg-1": resumo } });
     await drainOutbox(deps(store, registro));
     expect(registro.sent.map((s) => s.id)).toEqual(["b"]);
   });

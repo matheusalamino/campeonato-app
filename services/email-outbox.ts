@@ -5,13 +5,12 @@ import { createBrevoSender } from "@/lib/email/brevo";
 import { siteUrlFrom } from "@/lib/email/site-url";
 import {
   drainOutbox,
-  stubRenderer,
   type DrainReport,
-  type EmailRenderer,
   type OutboxRow,
   type OutboxStore,
-  type RegistrationContact,
+  type RegistrationSummary,
 } from "@/features/email/outbox";
+import { renderEmail, type EmailRenderer } from "@/features/email/render";
 
 /**
  * A FIACAO do dreno: o cliente do Supabase, as variaveis de ambiente e o
@@ -27,12 +26,32 @@ import {
  * isso em mente.
  */
 
-/** As colunas que a fila precisa saber sobre quem se inscreveu. O `players`
- *  aninhado vem do relacionamento por `player_id`. */
-type LinhaContato = {
+/**
+ * As colunas que a fila precisa saber sobre uma inscricao. Os dois objetos
+ * aninhados vem dos relacionamentos por `championship_id` e `player_id`, e os
+ * DOIS podem voltar nulos: as duas colunas sao NULLABLE (medido em
+ * `\d championship_registrations`).
+ *
+ * ── ESTE TIPO NAO E GUARDA DE NADA, E VOCE PRECISA SABER DISSO ──
+ *
+ * Ele descreve o que se ESPERA da resposta, e o `as unknown as` do `loadSummaries`
+ * o impoe sem conferir. A string de `select` logo abaixo nao passa por
+ * typecheck nenhum: tirar uma coluna dali deixa `tsc --noEmit` em zero, deixa a
+ * suite do vitest verde (ela usa store falso) e faz o campo chegar `undefined`
+ * ao template, calado. `services/**` nem sequer e coletado pelo
+ * `vitest.config.ts`.
+ *
+ * E a mesma armadilha da allowlist do `toRow` no admin, e a rede contra ela nao
+ * mora aqui: e o cenario "o dreno le as seis colunas pelo caminho do PostgREST"
+ * em `scripts/test-email-outbox.sh`, que faz esta MESMA leitura contra o banco
+ * de verdade e confere que as seis voltam preenchidas.
+ */
+type LinhaResumo = {
   id: string;
+  is_waitlist: boolean;
   contact_email: string | null;
-  players: { email: string | null; name: string | null } | null;
+  championships: { name: string | null } | null;
+  players: { email: string | null; name: string | null; preferred_position: string | null } | null;
 };
 
 type LinhaClaim = {
@@ -92,19 +111,30 @@ export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore
       return count;
     },
 
-    async loadContacts(registrationIds) {
-      const mapa = new Map<string, RegistrationContact>();
+    async loadSummaries(registrationIds) {
+      const mapa = new Map<string, RegistrationSummary>();
       if (registrationIds.length === 0) return mapa;
       const { data, error } = await supabase
         .from("championship_registrations")
-        .select("id, contact_email, players(email, name)")
+        .select(
+          "id, is_waitlist, contact_email, championships(name), players(email, name, preferred_position)",
+        )
         .in("id", registrationIds);
-      if (error) throw new Error(`leitura dos contatos falhou: ${error.message}`);
-      for (const linha of (data ?? []) as unknown as LinhaContato[]) {
+      if (error) throw new Error(`leitura dos resumos falhou: ${error.message}`);
+      for (const linha of (data ?? []) as unknown as LinhaResumo[]) {
         mapa.set(linha.id, {
           contactEmail: linha.contact_email,
           playerEmail: linha.players?.email ?? null,
           playerName: linha.players?.name ?? null,
+          championshipName: linha.championships?.name ?? null,
+          // `?? false` aqui, e SO aqui: a coluna e NOT NULL DEFAULT false, e o
+          // que este `??` cobre e a coluna nao ter vindo no `select` -- caso em
+          // que tratar como "nao e espera" e o menos errado dos dois, porque o
+          // comprovante de vaga garantida e o que a maioria esmagadora das
+          // linhas de fato e. O que NAO deixa isso virar silencio e a assertiva
+          // do PostgREST no scripts/test-email-outbox.sh.
+          isWaitlist: linha.is_waitlist ?? false,
+          preferredPosition: linha.players?.preferred_position ?? null,
         });
       }
       return mapa;
@@ -173,11 +203,12 @@ async function atualizar(
 export type RunDrainOptions = {
   now: Date;
   /**
-   * A montagem do corpo. Nao ha template neste repo na data deste arquivo, e o
-   * padrao e um stub que recusa toda linha ADIANDO-a -- a fila cresce e nada
-   * sai, que e a falha visivel e reversivel. E argumento, e nao constante, para
-   * que o dia em que o template existir seja UMA linha de quem chama, sem tocar
-   * no dreno.
+   * A montagem do corpo. O padrao e `renderEmail`
+   * (features/email/render.ts) -- ha template desde a T5, e o stub que recusava
+   * toda linha saiu do repo junto.
+   *
+   * Continua sendo ARGUMENTO, e nao constante, porque e a unica junta por onde
+   * um teste de ponta a ponta poderia trocar o texto sem tocar no dreno.
    */
   render?: EmailRenderer;
   batchSize?: number;
@@ -208,7 +239,7 @@ export async function runOutboxDrain(options: RunDrainOptions): Promise<DrainRep
   return drainOutbox({
     store: createSupabaseOutboxStore(supabase),
     send: createBrevoSender({ apiKey, fromEmail, fromName }),
-    render: options.render ?? stubRenderer,
+    render: options.render ?? renderEmail,
     // Nao existe registro de descadastro neste repo -- nem tabela, nem coluna.
     // A pergunta ja e feita pelo dreno, e a resposta de hoje e sempre "nao".
     // Trocar isto por uma consulta e o unico ponto que precisa mudar quando o
