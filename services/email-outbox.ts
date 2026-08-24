@@ -11,6 +11,8 @@ import {
   type RegistrationSummary,
 } from "@/features/email/outbox";
 import { renderEmail, type EmailRenderer } from "@/features/email/render";
+import { summaryFromRow } from "@/features/email/summary-row";
+import type { RegistrationSummaryRow } from "@/features/email/summary-row";
 
 /**
  * A FIACAO do dreno: o cliente do Supabase, as variaveis de ambiente e o
@@ -25,44 +27,6 @@ import { renderEmail, type EmailRenderer } from "@/features/email/render";
  * O que sobra neste arquivo e o que nenhuma suite deste repo cobre. Leia com
  * isso em mente.
  */
-
-/**
- * As colunas que a fila precisa saber sobre uma inscricao. Os dois objetos
- * aninhados vem dos relacionamentos por `championship_id` e `player_id`, e os
- * DOIS podem voltar nulos: as duas colunas sao NULLABLE (medido em
- * `\d championship_registrations`).
- *
- * ── ESTE TIPO NAO E GUARDA DE NADA, E VOCE PRECISA SABER DISSO ──
- *
- * Ele descreve o que se ESPERA da resposta, e o `as unknown as` do `loadSummaries`
- * o impoe sem conferir. A string de `select` logo abaixo nao passa por
- * typecheck nenhum: tirar uma coluna dali deixa `tsc --noEmit` em zero, deixa a
- * suite do vitest verde (ela usa store falso) e faz o campo chegar `undefined`
- * ao template, calado. `services/**` nem sequer e coletado pelo
- * `vitest.config.ts`.
- *
- * E a mesma armadilha da allowlist do `toRow` no admin, e a rede contra ela nao
- * mora aqui. Sao DUAS, e uma sozinha nao bastava:
- *
- *  1. `scripts/test-email-outbox.sh`, cenario "as seis colunas do resumo voltam
- *     preenchidas pelo PostgREST": faz esta MESMA leitura contra o banco de
- *     verdade -- PostgREST, chave do service_role, o mesmo embed aninhado -- e
- *     confere que as seis voltam. MEDIDO: tirando `is_waitlist` de la, o
- *     cenario fica vermelho (`sim|nao|sim|sim|sim|sim`).
- *  2. `features/email/service-wiring.test.ts`: le ESTE arquivo e AQUELE script
- *     como texto e confere que os dois pedem a mesma lista. Sem ela, o `select`
- *     do script era uma COPIA que ninguem conferia -- coluna acrescentada so
- *     aqui ficaria sem prova nenhuma, com o script verde provando as seis
- *     velhas. MEDIDO: tirando `is_waitlist` da linha de baixo, `tsc --noEmit`
- *     fica em ZERO e a suite inteira acende UMA assertiva, a dela.
- */
-type LinhaResumo = {
-  id: string;
-  is_waitlist: boolean;
-  contact_email: string | null;
-  championships: { name: string | null } | null;
-  players: { email: string | null; name: string | null; preferred_position: string | null } | null;
-};
 
 type LinhaClaim = {
   id: string;
@@ -121,6 +85,43 @@ export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore
       return count;
     },
 
+    /**
+     * A leitura das colunas que a fila precisa saber sobre uma inscricao. Os dois
+     * objetos aninhados vem dos relacionamentos por `championship_id` e
+     * `player_id`, e os DOIS podem voltar nulos: as duas colunas sao NULLABLE
+     * (medido em `\d championship_registrations`).
+     *
+     * ── O `select` NAO E GUARDA DE NADA, E VOCE PRECISA SABER DISSO ──
+     *
+     * `RegistrationSummaryRow` descreve o que se ESPERA da resposta, e o
+     * `as unknown as` abaixo o impoe sem conferir. A string de `select` nao passa por
+     * typecheck nenhum: tirar uma coluna dali deixa `tsc --noEmit` em zero, deixa a
+     * suite do vitest verde (ela usa store falso) e faz o campo chegar `undefined`
+     * ao template, calado. `services/**` nem sequer e coletado pelo
+     * `vitest.config.ts`.
+     *
+     * E a mesma armadilha da allowlist do `toRow` no admin, e a rede contra ela nao
+     * mora aqui. Sao DUAS, e uma sozinha nao bastava:
+     *
+     *  1. `scripts/test-email-outbox.sh`, cenario "as seis colunas do resumo voltam
+     *     preenchidas pelo PostgREST": faz esta MESMA leitura contra o banco de
+     *     verdade -- PostgREST, chave do service_role, o mesmo embed aninhado -- e
+     *     confere que as seis voltam. MEDIDO: tirando `is_waitlist` de la, o
+     *     cenario fica vermelho (`sim|nao|sim|sim|sim|sim`).
+     *  2. `features/email/service-wiring.test.ts`: le ESTE arquivo e AQUELE script
+     *     como texto e confere que os dois pedem a mesma lista. Sem ela, o `select`
+     *     do script era uma COPIA que ninguem conferia -- coluna acrescentada so
+     *     aqui ficaria sem prova nenhuma, com o script verde provando as seis
+     *     velhas. MEDIDO: tirando `is_waitlist` da linha de baixo, `tsc --noEmit`
+     *     fica em ZERO e a suite inteira acende UMA assertiva, a dela.
+     *
+     * ── E A TRADUCAO NAO MORA MAIS AQUI ──
+     *
+     * `summaryFromRow` (features/email/summary-row.ts) e quem poe cada coluna no
+     * seu campo, e ela esta la porque AQUI nao havia rede: MEDIDO, com o
+     * mapeamento neste arquivo, `isWaitlist: !linha.is_waitlist` e a troca de
+     * `contactEmail` por `playerEmail` passavam pelos quatro portoes inteiros.
+     */
     async loadSummaries(registrationIds) {
       const mapa = new Map<string, RegistrationSummary>();
       if (registrationIds.length === 0) return mapa;
@@ -131,21 +132,8 @@ export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore
         )
         .in("id", registrationIds);
       if (error) throw new Error(`leitura dos resumos falhou: ${error.message}`);
-      for (const linha of (data ?? []) as unknown as LinhaResumo[]) {
-        mapa.set(linha.id, {
-          contactEmail: linha.contact_email,
-          playerEmail: linha.players?.email ?? null,
-          playerName: linha.players?.name ?? null,
-          championshipName: linha.championships?.name ?? null,
-          // `?? false` aqui, e SO aqui: a coluna e NOT NULL DEFAULT false, e o
-          // que este `??` cobre e a coluna nao ter vindo no `select` -- caso em
-          // que tratar como "nao e espera" e o menos errado dos dois, porque o
-          // comprovante de vaga garantida e o que a maioria esmagadora das
-          // linhas de fato e. O que NAO deixa isso virar silencio sao as duas
-          // redes nomeadas no docblock de `LinhaResumo`, aqui em cima.
-          isWaitlist: linha.is_waitlist ?? false,
-          preferredPosition: linha.players?.preferred_position ?? null,
-        });
+      for (const linha of (data ?? []) as unknown as RegistrationSummaryRow[]) {
+        mapa.set(linha.id, summaryFromRow(linha));
       }
       return mapa;
     },

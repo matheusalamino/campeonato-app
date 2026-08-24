@@ -111,6 +111,35 @@ describe("o select do resumo, nos dois lugares onde ele existe", () => {
     expect(semEspaco(achado?.[1] ?? "")).toBe(SELECT_ESPERADO);
   });
 
+  it("a traducao coluna->campo e delegada, e nao refeita aqui", () => {
+    // O mapeamento voltou para `features/` porque AQUI nao havia rede nenhuma:
+    // MEDIDO, com ele neste arquivo, `isWaitlist: !linha.is_waitlist` e a troca
+    // de `contactEmail` por `playerEmail` passavam pelos quatro portoes.
+    //
+    // Extrair sozinho nao fecha o buraco -- alguem pode reinlinar um objeto
+    // literal aqui e o teste de `summaryFromRow` continuaria verde, provando
+    // uma funcao que ninguem mais chama. Esta assertiva prende as duas pontas:
+    // a chamada existe, e nao ha construcao de resumo a mao neste arquivo.
+    expect(servico).toMatch(/summaryFromRow\(\s*\w+\s*,?\s*\)/);
+
+    for (const campo of [
+      "contactEmail:",
+      "playerEmail:",
+      "playerName:",
+      "championshipName:",
+      "isWaitlist:",
+      "preferredPosition:",
+    ]) {
+      expect(
+        servico,
+        `services/email-outbox.ts voltou a montar \`${campo}\` a mao. A traducao ` +
+          "coluna->campo mora em features/email/summary-row.ts, onde ha teste: " +
+          "`services/**` nao e coletado pelo vitest, e um mapeamento escrito " +
+          "aqui nao tem portao nenhum.",
+      ).not.toContain(campo);
+    }
+  });
+
   it("o dreno usa o render de verdade, e o stub nao voltou", () => {
     // `render: options.render ?? renderEmail`. Trocar o padrao de volta por um
     // que devolvesse null faria a fila crescer sem nenhum e-mail sair, e nenhum

@@ -1,0 +1,114 @@
+import { describe, it, expect } from "vitest";
+import { summaryFromRow, type RegistrationSummaryRow } from "./summary-row";
+
+/**
+ * A traducao coluna -> campo, que ate a revisao da T5 nao tinha rede NENHUMA.
+ *
+ * Ela morava em `services/email-outbox.ts`, e `vitest.config.ts` nao coleta
+ * `services/**`. MEDIDO com o codigo la: `isWaitlist: !linha.is_waitlist` e a
+ * troca de `contactEmail` por `playerEmail` passavam pelos QUATRO portoes --
+ * 806 testes verdes, `tsc` em zero, os dois scripts de banco verdes.
+ *
+ * As duas redes que a T5 ja tinha nao alcancavam isto, e vale saber por que:
+ * elas provam a STRING do `select` (que as seis colunas sao pedidas, e que
+ * voltam preenchidas do banco). Coluna pedida e coluna lida sao coisas
+ * diferentes -- entre uma e outra ha esta funcao.
+ */
+
+/** Uma linha COMPLETA e com todo campo DISTINTO dos vizinhos. A distincao e o
+ *  ponto: com dois campos iguais, troca-los um pelo outro e invisivel. */
+const LINHA: RegistrationSummaryRow = {
+  id: "reg-1",
+  is_waitlist: false,
+  contact_email: "digitado-agora@exemplo.test",
+  championships: { name: "Copa Teste" },
+  players: {
+    email: "cadastro-velho@exemplo.test",
+    name: "Fulano de Tal",
+    preferred_position: "ATA",
+  },
+};
+
+describe("summaryFromRow", () => {
+  it("poe cada coluna no seu campo", () => {
+    // Assertiva de objeto INTEIRO, e nao campo a campo: assim um campo novo no
+    // resumo sem traducao aqui tambem acende, em vez de passar despercebido.
+    expect(summaryFromRow(LINHA)).toEqual({
+      contactEmail: "digitado-agora@exemplo.test",
+      playerEmail: "cadastro-velho@exemplo.test",
+      playerName: "Fulano de Tal",
+      championshipName: "Copa Teste",
+      isWaitlist: false,
+      preferredPosition: "ATA",
+    });
+  });
+
+  it("nao troca o endereco digitado pelo do cadastro", () => {
+    // A troca que esta assertiva impede e silenciosa e cara: `contact_email`
+    // existe porque `players.email` pode estar VELHO -- a submissao publica so
+    // grava identidade para CPF novo. Quem trocou de e-mail e justamente quem
+    // digita o novo no formulario, e e essa pessoa que pararia de receber.
+    //
+    // `recipientFor` prefere `contactEmail`, e trocar os dois AQUI inverte
+    // aquela preferencia sem tocar nele -- os dois campos sao `string | null` e
+    // o `tsc` fica limpo.
+    const resumo = summaryFromRow(LINHA);
+
+    expect(resumo.contactEmail).toBe(LINHA.contact_email);
+    expect(resumo.playerEmail).toBe(LINHA.players?.email);
+    expect(resumo.contactEmail).not.toBe(resumo.playerEmail);
+  });
+
+  it("repassa a lista de espera como ela veio, nos DOIS valores", () => {
+    // Um valor so nao distingue copia de negacao: `!linha.is_waitlist` acerta
+    // metade dos casos por acaso. Os dois lados, e nenhum dos dois e opcional.
+    expect(summaryFromRow({ ...LINHA, is_waitlist: true }).isWaitlist).toBe(true);
+    expect(summaryFromRow({ ...LINHA, is_waitlist: false }).isWaitlist).toBe(false);
+  });
+
+  it("repassa a posicao CRUA, sem traduzir", () => {
+    // Quem traduz e o template, com `positionLabel`. Traduzir aqui poria a
+    // palavra dentro do resumo e o organizador receberia o rotulo duas vezes
+    // convertido -- ou, pior, o comprovante passaria a carregar palavra de
+    // posicao que ninguem pediu.
+    expect(summaryFromRow({ ...LINHA, players: { ...LINHA.players!, preferred_position: "GOL" } })
+      .preferredPosition).toBe("GOL");
+  });
+
+  it("sobrevive ao join vazio, sem inventar texto", () => {
+    // `championship_id` e `player_id` sao NULLABLE, entao os dois aninhados
+    // podem voltar nulos. `?? ""` aqui e o que produz "Olá , sua inscrição em
+    // está confirmada" -- quem decide o que dizer sem o dado e o template.
+    const resumo = summaryFromRow({
+      id: "reg-1",
+      is_waitlist: true,
+      contact_email: null,
+      championships: null,
+      players: null,
+    });
+
+    expect(resumo).toEqual({
+      contactEmail: null,
+      playerEmail: null,
+      playerName: null,
+      championshipName: null,
+      isWaitlist: true,
+      preferredPosition: null,
+    });
+  });
+
+  it("trata coluna AUSENTE como nula, e nao como undefined", () => {
+    // O `as unknown as` do servico impoe o tipo sem conferir: se uma coluna
+    // sumir do `select`, ela chega `undefined` aqui, e `undefined` vazando para
+    // o resumo vira a string "undefined" dentro de um corpo de e-mail. Os
+    // templates tem assertiva contra isso, mas a defesa mais barata e nao
+    // deixar sair daqui.
+    const capenga = { id: "reg-1", players: {}, championships: {} } as unknown as RegistrationSummaryRow;
+    const resumo = summaryFromRow(capenga);
+
+    for (const [campo, valor] of Object.entries(resumo)) {
+      expect(valor, `${campo} veio undefined`).not.toBeUndefined();
+    }
+    expect(resumo.isWaitlist).toBe(false);
+  });
+});
