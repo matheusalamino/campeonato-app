@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { assuntoCom, corpoDe, escapeHtml, saudacao } from "./body";
+import { assuntoCom, corpoDe, saudacao } from "./body";
 
 /**
  * As pecas partilhadas pelos templates. Elas tem teste proprio, e nao so o
@@ -8,11 +8,18 @@ import { assuntoCom, corpoDe, escapeHtml, saudacao } from "./body";
  * e-mail que sair.
  */
 
-describe("escapeHtml", () => {
+describe("o escape de HTML, pela superficie que o usa", () => {
+  // As assertivas batem em `corpoDe`, e nao no `escapeHtml` direto, DE
+  // PROPOSITO. MEDIDO: com o teste chamando a peca interna, tirar o
+  // `escapeHtml(p.link)` de `corpoDe` ficava verde nos quatro portoes -- a peca
+  // continuava certa e ninguem a chamava para o link. Teste que fura para a
+  // peca interna deixa de provar a montagem.
+  const html = (texto: string) => corpoDe([{ texto }]).html;
+
   it("fecha os cinco caracteres que viram marcacao", () => {
-    expect(escapeHtml("<b>x</b>")).toBe("&lt;b&gt;x&lt;/b&gt;");
-    expect(escapeHtml("a & b")).toBe("a &amp; b");
-    expect(escapeHtml('aspas "duplas" e \'simples\'')).toBe(
+    expect(html("<b>x</b>")).toContain("&lt;b&gt;x&lt;/b&gt;");
+    expect(html("a & b")).toContain("a &amp; b");
+    expect(html('aspas "duplas" e \'simples\'')).toContain(
       "aspas &quot;duplas&quot; e &#39;simples&#39;",
     );
   });
@@ -20,8 +27,25 @@ describe("escapeHtml", () => {
   it("escapa o `&` primeiro, ou o escape sai escapado duas vezes", () => {
     // A ordem das cinco trocas nao e livre: com `&` por ultimo, o `&lt;` recem
     // produzido viraria `&amp;lt;` e o leitor veria `&lt;` na tela.
-    expect(escapeHtml("<")).toBe("&lt;");
-    expect(escapeHtml("&lt;")).toBe("&amp;lt;");
+    expect(html("<")).toContain("&lt;");
+    expect(html("&lt;")).toContain("&amp;lt;");
+  });
+
+  it("escapa o LINK, e nao so o texto do paragrafo", () => {
+    // O link entra em DOIS lugares do HTML: dentro do atributo `href` e como
+    // texto visivel da ancora. Um `"` cru no href FECHA o atributo, e dali para
+    // frente o que vier vira marcacao -- e o link e o unico campo deste corpo
+    // que a T6 vai montar a partir de um token.
+    //
+    // Os dois links dos outros testes nao tem caractere especial nenhum, entao
+    // sem ESTE caso remover o `escapeHtml(p.link)` de `corpoDe` fica verde.
+    const link = 'https://x.test/verify-email?token=a&nome="b"';
+    const { html: h, text } = corpoDe([{ texto: "veja:", link }]);
+
+    expect(h).toContain("token=a&amp;nome=&quot;b&quot;");
+    expect(h).not.toContain('&nome="b"');
+    // O texto puro nao e marcacao: la o endereco sai clicavel como ele e.
+    expect(text).toContain(link);
   });
 });
 

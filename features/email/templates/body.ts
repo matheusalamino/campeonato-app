@@ -34,8 +34,15 @@ export type Paragrafo = { texto: string; link?: string };
  *
  * Os cinco de sempre. `'` sai como `&#39;` e nao `&apos;` porque `&apos;` nao
  * existe em HTML4 e clientes de e-mail antigos o renderizam cru.
+ *
+ * NAO e exportado, e isso e deliberado: fora deste arquivo ninguem escapa nada
+ * -- quem monta HTML de e-mail e `corpoDe`, aqui embaixo, e so ele. Exportar
+ * daria a esta funcao um leitor que nao existe, e o unico que ela chegou a ter
+ * era o proprio teste. Teste que chama a peca interna tambem para de provar a
+ * peca PUBLICA: MEDIDO -- com o teste batendo direto aqui, tirar o
+ * `escapeHtml(p.link)` de `corpoDe` ficava VERDE nos quatro portoes.
  */
-export function escapeHtml(valor: string): string {
+function escapeHtml(valor: string): string {
   return valor
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

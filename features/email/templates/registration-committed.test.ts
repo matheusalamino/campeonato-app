@@ -83,6 +83,20 @@ describe("registrationCommittedEmail", () => {
       // Buraco a direita: `Ola, {nome}!` com o nome vazio vira `Ola, !`.
       expect(lido).not.toMatch(/[,;:]\s*[!?.]/);
     }
+
+    // ── A LARGURA, que a leitura sem marcacao sozinha nao da ──
+    //
+    // `semMarcacao` colapsa `\s+` ANTES de olhar, entao um `?? ""` no MEIO de
+    // uma frase -- "a organizacao de ⎵⎵e ela confere" -- nao encosta em
+    // pontuacao nenhuma e escapa dos dois padroes acima. MEDIDO: passava os 806
+    // testes.
+    //
+    // Estes dois olham o corpo CRU, e por isso ficam fora do `html`: la a
+    // indentacao da marcacao produz espaco duplo legitimo, e uma reindentacao
+    // (que nao muda comportamento) reprovaria. `subject` e `text` nao tem
+    // marcacao nenhuma, entao neles espaco duplo so pode ser buraco.
+    expect(m.subject).not.toMatch(/ {2}/);
+    expect(m.text).not.toMatch(/ {2}/);
   });
 
   it("leva o link de verificacao no HTML e no texto, quando ha link", () => {
