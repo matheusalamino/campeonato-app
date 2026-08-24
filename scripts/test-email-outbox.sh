@@ -77,6 +77,16 @@ KIND_C="test_outbox_claim"
 # deste kind nao mudou -- ela nao veria uma troca de identidade que mantivesse o
 # total, nem mudanca para status que nao seja 'sending'.
 CLAIM_PASSADO="now() - interval '10 years'"
+
+# O limite do recolhimento, em minutos. Tem de bater com o `interval '30
+# minutes'` de claim_email_outbox_batch (migration 20260823040000): o SQL nao
+# tem como ler esta variavel, entao o que existe e a obrigacao de mudar os dois
+# juntos. As duas linhas do cenario nascem daqui, uma de cada lado do limite --
+# assim mudar o limite move as duas em bloco, em vez de deixar 31 e 29 soltos
+# para alguem ajustar so um.
+CLAIM_LIMITE_MIN=30
+CLAIM_ALEM=$((CLAIM_LIMITE_MIN + 1))
+CLAIM_AQUEM=$((CLAIM_LIMITE_MIN - 1))
 CLAIM_PASSADO2="now() - interval '9 years'"
 
 # Dois passados DISTINTOS, e nao um so, porque `ORDER BY next_attempt_at,
@@ -520,15 +530,15 @@ SQL
 
 # ── Recolhimento do que ficou parado ─────────────────────────────────────────
 #
-# 31 e 29 minutos, dos dois lados do limite de 30. Um so dos dois nao provaria
-# nada: com o recolhimento desligado o de 31 fica para tras, e com o limite
-# frouxo o de 29 e recolhido cedo demais -- e recolher cedo e mandar de novo o
-# que talvez ja tenha saido.
+# Um de cada lado do limite (por padrao 31 e 29 minutos, de CLAIM_LIMITE_MIN).
+# Um so dos dois nao provaria nada: com o recolhimento desligado o de ALEM fica
+# para tras, e com o limite frouxo o de AQUEM e recolhido cedo demais -- e
+# recolher cedo e mandar de novo o que talvez ja tenha saido.
 limpar
 $DB -c "
   INSERT INTO email_outbox (kind, dedupe_key, status, next_attempt_at, claimed_at) VALUES
-    ('$KIND_C', 'claim-parado',  'sending', $CLAIM_PASSADO,  now() - interval '31 minutes'),
-    ('$KIND_C', 'claim-recente', 'sending', $CLAIM_PASSADO2, now() - interval '29 minutes');
+    ('$KIND_C', 'claim-parado',  'sending', $CLAIM_PASSADO,  now() - interval '$CLAIM_ALEM minutes'),
+    ('$KIND_C', 'claim-recente', 'sending', $CLAIM_PASSADO2, now() - interval '$CLAIM_AQUEM minutes');
 " > /dev/null
 
 checar "o claim recolhe a linha parada em sending alem do limite" "claim-parado" \

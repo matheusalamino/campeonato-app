@@ -256,7 +256,19 @@ export type OutboxStore = {
   /** Volta para `pending` sem gastar degrau nem adiar: e para condicao que nao
    *  e falha da linha (sabado, cota, base de link, template faltando). */
   defer(id: string): Promise<void>;
-  markFailedPermanent(id: string, lastError: string, at: Date): Promise<void>;
+  /**
+   * Sem `at`, e a ausencia e deliberada. Estado terminal GUARDA o carimbo do
+   * claim -- e assim que `markSent` se comporta, e e a leitura uniforme das
+   * quatro gravacoes: terminal guarda, volta para a fila zera. Um `at` aqui so
+   * teria uso para sobrescrever `claimed_at` com o instante da falha, que e
+   * justamente o que quebraria essa uniformidade.
+   *
+   * Ha assertiva prendendo isto em outbox.test.ts ("nao passa argumento morto
+   * para markFailedPermanent"): funcao com menos parametros e atribuivel a um
+   * tipo com mais, entao o `tsc` NAO acusa um argumento que ninguem le -- foi
+   * assim que `at` ficou aqui morto por uma rodada inteira.
+   */
+  markFailedPermanent(id: string, lastError: string): Promise<void>;
 };
 
 export type DrainDeps = {
@@ -319,7 +331,7 @@ export async function drainOutbox(deps: DrainDeps): Promise<DrainReport> {
     // adiando para sempre esconderia o defeito: morre e deixa o nome no
     // `last_error`.
     if (!isEmailKind(row.kind)) {
-      await store.markFailedPermanent(row.id, `kind desconhecido: ${row.kind}`, now);
+      await store.markFailedPermanent(row.id, `kind desconhecido: ${row.kind}`);
       report.failedPermanent += 1;
       conta(report, "unknown_kind");
       continue;
@@ -346,7 +358,7 @@ export async function drainOutbox(deps: DrainDeps): Promise<DrainReport> {
         await store.defer(row.id);
         report.deferred += 1;
       } else {
-        await store.markFailedPermanent(row.id, `recusado: ${decision.reason}`, now);
+        await store.markFailedPermanent(row.id, `recusado: ${decision.reason}`);
         report.failedPermanent += 1;
       }
       continue;
@@ -397,7 +409,7 @@ export async function drainOutbox(deps: DrainDeps): Promise<DrainReport> {
 
     // Endereco invalido continua invalido, e chave errada continua errada.
     // Retentar isso para sempre queima a cota de 300/dia a toa.
-    await store.markFailedPermanent(row.id, result.error, now);
+    await store.markFailedPermanent(row.id, result.error);
     report.failedPermanent += 1;
   }
 

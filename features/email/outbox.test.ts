@@ -357,7 +357,7 @@ type Registro = {
   sent: Array<{ id: string; providerMessageId: string }>;
   requeued: Array<{ id: string; attempts: number; nextAttemptAt: string; lastError: string }>;
   deferred: string[];
-  dead: Array<{ id: string; lastError: string }>;
+  dead: Array<{ id: string; lastError: string; extras: number }>;
   enviados: EmailMessage[];
 };
 
@@ -416,8 +416,11 @@ function fakeStore(
     async defer(id) {
       registro.deferred.push(id);
     },
-    async markFailedPermanent(id, lastError) {
-      registro.dead.push({ id, lastError });
+    async markFailedPermanent(id, lastError, ...resto: unknown[]) {
+      // O `...resto` e a rede do parametro morto: `markFailedPermanent` ja
+      // recebeu um terceiro argumento que ninguem lia, e o `tsc` nao acusou --
+      // funcao com menos parametros e atribuivel a um tipo com mais.
+      registro.dead.push({ id, lastError, extras: resto.length });
     },
   };
   return { store, registro };
@@ -555,7 +558,7 @@ describe("drainOutbox", () => {
     const r = await drainOutbox(
       deps(store, registro, {}, { ok: false, retriable: false, error: "400 email invalido" }),
     );
-    expect(registro.dead).toEqual([{ id: "row-1", lastError: "400 email invalido" }]);
+    expect(registro.dead).toEqual([{ id: "row-1", lastError: "400 email invalido", extras: 0 }]);
     expect(registro.requeued).toHaveLength(0);
     expect(r.failedPermanent).toBe(1);
   });
@@ -683,6 +686,24 @@ describe("drainOutbox", () => {
     const { store, registro } = fakeStore([linha()], { contacts: { "reg-1": contato } });
     await drainOutbox(deps(store, registro));
     expect(registro.sabbathAt).toEqual([AGORA.toISOString()]);
+  });
+
+  it("nao passa argumento morto para markFailedPermanent", async () => {
+    // Prende a assinatura de fora. `markFailedPermanent` carregou um terceiro
+    // parametro `at: Date` que a fiacao ignorava e o tipo declarava; o `tsc`
+    // ficou calado porque funcao com menos parametros e atribuivel a um tipo
+    // com mais. Sem esta assertiva, o parametro morto volta na primeira vez que
+    // alguem achar que "seria bom ter o instante aqui".
+    //
+    // A escolha que ela defende: estado terminal GUARDA o carimbo do claim, e
+    // so quem volta para a fila o zera. Um `at` aqui existiria para sobrescrever
+    // `claimed_at` com o instante da falha, que quebraria essa uniformidade.
+    const { store, registro } = fakeStore([linha({ kind: "test_outbox_alpha" })], {
+      contacts: { "reg-1": contato },
+    });
+    await drainOutbox(deps(store, registro));
+    expect(registro.dead).toHaveLength(1);
+    expect(registro.dead[0].extras).toBe(0);
   });
 
   it("uma linha ruim nao derruba o resto do lote", async () => {

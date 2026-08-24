@@ -163,8 +163,10 @@ async function atualizar(
 ): Promise<void> {
   const { error } = await supabase.from("email_outbox").update(campos).eq("id", id);
   // Estourar em vez de engolir: uma gravacao perdida aqui deixa a linha em
-  // 'sending' com o e-mail JA ENVIADO, e o recolhimento a mandaria de novo meia
-  // hora depois.
+  // 'sending' com o e-mail JA ENVIADO, e o recolhimento a mandaria de novo
+  // passados os 30 minutos do limite. Esse numero e o `interval '30 minutes'`
+  // de claim_email_outbox_batch (migration 20260823040000) -- nao ha constante
+  // ligando os dois, e mudar la nao muda esta frase.
   if (error) throw new Error(`gravacao da linha ${id} falhou: ${error.message}`);
 }
 

@@ -3,7 +3,7 @@
 --
 -- A migration 20260823010000 criou a tabela e a 20260823030000 pos um gatilho
 -- para enche-la. Desde entao a fila so cresce: nao ha ninguem do outro lado.
--- Esta migration cria a UNICA instrucao SQL do dreno -- pegar o proximo lote --
+-- Esta migration cria a unica SQL do dreno ESCRITA A MAO -- pegar o proximo lote --
 -- e ela precisa existir aqui, e nao no TypeScript, por um motivo so: o cliente
 -- do Supabase nao manda SQL cru, e sem SQL cru nao ha `FOR UPDATE SKIP LOCKED`.
 --
@@ -66,9 +66,6 @@ CREATE INDEX IF NOT EXISTS email_outbox_sending
   ON public.email_outbox (claimed_at)
   WHERE status = 'sending';
 
--- Quanto tempo uma linha pode ficar em 'sending' antes de ser considerada
--- abandonada. Escrito no corpo da funcao e nao em coluna nenhuma: e politica do
--- dreno, e muda por ALTER FUNCTION.
 CREATE OR REPLACE FUNCTION public.claim_email_outbox_batch(
   p_limit int,
   p_now   timestamptz
@@ -91,6 +88,20 @@ AS $$
         -- O recolhimento do que ficou parado. `claimed_at IS NULL` entra junto
         -- porque linha em 'sending' sem carimbo so pode ter vindo de antes
         -- desta migration, e essas tambem estao abandonadas.
+        --
+        -- Os 30 minutos sao o limite: passou disso, a linha e considerada
+        -- abandonada. Ele mora no CORPO da funcao, e nao em coluna nem em
+        -- parametro, porque e politica do dreno e nao propriedade do dado --
+        -- e trocar o numero exige reescrever a funcao inteira com
+        -- CREATE OR REPLACE FUNCTION. (`ALTER FUNCTION` nao serve: no
+        -- PostgreSQL ele troca PROPRIEDADES -- dono, volatilidade, search_path
+        -- --, nunca o corpo.)
+        --
+        -- O numero aparece em mais dois lugares, e NADA os amarra: o comentario
+        -- de `atualizar` em services/email-outbox.ts o cita em prosa, e
+        -- scripts/test-email-outbox.sh deriva de `CLAIM_LIMITE_MIN` as duas
+        -- linhas que cercam o limite. Quem mudar aqui muda os dois a mao; nao e
+        -- coincidencia, e duplicacao que o SQL nao tem como evitar.
         OR (o.status = 'sending'
             AND (o.claimed_at IS NULL OR o.claimed_at <= p_now - interval '30 minutes'))
      ORDER BY o.next_attempt_at, o.created_at
@@ -114,9 +125,18 @@ FOR UPDATE SKIP LOCKED, para dois disparos do dreno nao mandarem os mesmos
 e-mails. Tambem recolhe o que ficou em ''sending'' por mais de 30 minutos, que e
 como uma linha se perde quando o processo morre no meio do envio.
 
-O instante e ARGUMENTO e nao now(): o dreno inteiro recebe o relogio de fora,
-para que a suite consiga exercitar a pausa de sabado em qualquer dia da semana.
-scripts/test-registration-slots.sh nao tem essa injecao, e por isso falha
-inteiro durante a pausa -- um portao cego 24 horas por semana.';
+O instante e ARGUMENTO e nao now(). Esta funcao NAO consulta is_sabbath --
+p_now governa duas coisas so: o filtro next_attempt_at <= p_now e a janela dos
+30 minutos do recolhimento. A razao de ele entrar de fora e que os dois viram
+observaveis: da para pedir o lote de um instante escolhido e conferir o que sai,
+em vez de depender de quando o teste rodou. Quem exercita a pausa de sabado e o
+dreno em TypeScript, com o duble de isSabbath.
+
+O mesmo desenho falta em scripts/test-registration-slots.sh, onde
+reserve_registration_slot e commit_registration chamam is_sabbath(now()) sem
+relogio injetavel. Durante a pausa aquela suite falha em GRANDE PARTE -- medido
+em 18 de 33 assertivas na epoca --, e nao inteira: o proprio cabecalho do script
+lista o que passa (os cenarios que montam a janela dentro de uma transacao) e o
+que quebra (os controles que dependem do relogio de fora).';
 
 COMMIT;
