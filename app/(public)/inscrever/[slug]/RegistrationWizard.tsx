@@ -8,6 +8,7 @@ import { formatPhoneBR, formatHeightM, heightToMask, formatBRL } from "@/lib/mas
 import { BR_STATES } from "@/lib/br-states";
 import { groupRequiresInviteCode } from "@/features/registration/groups";
 import { CANONICAL_POSITIONS, normalizePreferredPosition } from "@/features/players/position";
+import { normalizePositionGroup } from "@/features/players/position-group";
 import { POSITION_LABELS } from "@/lib/public/types";
 import { skillsFor, SKILL_LABELS } from "@/features/registration/skills";
 import { computeTicketsTotal } from "@/features/registration/pricing";
@@ -77,17 +78,22 @@ const BLOCKED_BY_SLOT = "Não é possível seguir agora. Veja o aviso no topo da
  * `p_is_goalkeeper boolean` de proposito — nenhuma delas conhece o vocabulario
  * de posicao, e por isso nenhuma delas quebra no dia em que ele mudar.
  *
- * Passa por `normalizePreferredPosition` em vez de comparar a string do
- * formulario direto, e a diferenca nao e cosmetica. O valor pode chegar do
- * banco pelo preenchimento automatico do CPF, e `' goleiro '` com espaco
- * sobrando nao e `"Goleiro"` para comparacao nenhuma — mandaria um goleiro para
- * o balde de linha, calado. E o resultado normalizado e `CanonicalPosition |
- * null`, entao a comparacao aqui e a UNICA que o `tsc` cobra: se o vocabulario
- * canonico deixar de ter esta palavra, isto vira erro de tipo em vez de virar
- * `false` em silencio.
+ * Passa por `normalizePositionGroup` em vez de comparar a string do formulario
+ * direto, e a diferenca nao e cosmetica. O valor pode chegar do banco pelo
+ * preenchimento automatico do CPF, e `' gol '` com espaco sobrando nao e
+ * `"GOL"` para comparacao nenhuma — mandaria um goleiro para o balde de linha,
+ * calado. A funcao apara e sobe a caixa antes de decidir.
+ *
+ * A versao anterior comparava contra a PALAVRA, e o docblock dela previa o que
+ * de fato aconteceu: quando o vocabulario virou codigo, isto deixou de ser
+ * `false` em silencio e virou erro de tipo (TS2367). A previsao valeu, e a
+ * propriedade continua de pe — `normalizePositionGroup` devolve um union de
+ * tres membros, entao comparar com `"goalkeeper"` segue sendo cobrado pelo
+ * `tsc`. O que mudou e onde o vocabulario mora: agora so em
+ * `features/players/position-group.ts`, e nao aqui.
  */
 function isGoalkeeperPosition(position: string): boolean {
-  return normalizePreferredPosition(position).position === "Goleiro";
+  return normalizePositionGroup(position) === "goalkeeper";
 }
 
 const inputBase =

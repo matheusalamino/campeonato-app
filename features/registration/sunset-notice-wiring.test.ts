@@ -428,17 +428,23 @@ describe("a fiacao do balde da reserva", () => {
     expect(fontes.filter((fonte) => /\.current\b/.test(fonte))).toHaveLength(2);
   });
 
-  it("o balde nasce do canonico, e nao da palavra crua do formulario", () => {
-    // O select do passo 1 grava a palavra que o jogador escolheu, mas o
+  it("o balde nasce do canonico, e nao do valor cru do formulario", () => {
+    // O select do passo 1 grava o codigo que o jogador escolheu, mas o
     // preenchimento automatico do CPF grava o que estiver no BANCO, e o CSV do
-    // admin aceita celula arbitraria de planilha. `' goleiro '` com espaco
-    // sobrando nao e igual a nenhuma palavra, e mandaria um goleiro para o
-    // balde de linha sem erro nenhum.
+    // admin aceita celula arbitraria de planilha. `' gol '` com espaco sobrando
+    // nao e igual a `"GOL"`, e mandaria um goleiro para o balde de linha sem
+    // erro nenhum.
     //
     // Le a comparacao inteira em vez do nome da funcao que a envolve: renomear
     // o helper pelo atalho da IDE continua sendo no-op.
-    const comparacoes = [...wizard.matchAll(/([\w.()]+)\s*===\s*"Goleiro"/g)];
+    //
+    // A versao original desta assertiva cobrava `=== "Goleiro"` passando por
+    // `normalizePreferredPosition`. O vocabulario virou codigo e a comparacao
+    // migrou para `normalizePositionGroup`, que devolve um grupo em vez de uma
+    // posicao -- e apara e sobe a caixa pelo mesmo motivo de antes. A INTENCAO
+    // e a mesma; o que mudou foi onde o vocabulario mora.
+    const comparacoes = [...wizard.matchAll(/([\w.()]+)\s*===\s*"goalkeeper"/g)];
     expect(comparacoes).toHaveLength(1);
-    expect(comparacoes[0][1]).toContain("normalizePreferredPosition(");
+    expect(comparacoes[0][1]).toContain("normalizePositionGroup(");
   });
 });
