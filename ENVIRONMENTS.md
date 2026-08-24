@@ -143,6 +143,26 @@ Se voce ja tem um dump de producao salvo e quer apenas reaplicar o mais recente 
 npm run local:restore:last-production
 ```
 
+## Variaveis do app
+
+Os modelos commitados em `.secrets/staging.app.env.example` e `.secrets/production.app.env.example` listam tudo que o app espera em cada ambiente remoto. Copie o modelo e preencha; nunca commite o arquivo preenchido.
+
+### E-mail transacional (bloco C)
+
+O comprovante da inscricao publica nao sai no submit. A inscricao grava uma linha em `email_outbox` dentro da mesma transacao, e um dreno envia depois — o provedor pode demorar ou falhar, e ninguem espera a rede de terceiro para ver a tela de sucesso.
+
+As sete variaveis desse caminho, presentes nos dois modelos:
+
+- `BREVO_API_KEY`: chave v3 do Brevo, gerada em Settings > SMTP & API > Chaves de API. Nao sao as credenciais SMTP da mesma tela: o app fala HTTP, nao SMTP.
+- `EMAIL_FROM`: o remetente. Tem de ser exatamente o endereco verificado no Brevo, ou a API recusa.
+- `EMAIL_FROM_NAME`: o nome que aparece na caixa de entrada.
+- `ORGANIZER_EMAIL`: para onde vai o aviso de cada inscricao nova.
+- `NEXT_PUBLIC_SITE_URL`: a base dos links do e-mail, com esquema e sem barra final. Diferente por ambiente: com a base errada, o link de verificacao manda o jogador para o ambiente errado e ele nao tem como saber.
+- `EMAIL_TOKEN_SECRET`: segredo do HMAC do link de descadastro. Gere com `openssl rand -base64 32`.
+- `CRON_SECRET`: protege o endpoint do dreno contra quem nao e o cron. Gere com `openssl rand -base64 32`.
+
+O plano usado e o gratuito do Brevo: remetente unico verificado, sem dominio proprio, com teto de 300 e-mails por dia. Esse teto e o motivo de o envio classificar o erro — so 429 e 5xx voltam para a fila, porque retentar endereco invalido queima cota a toa.
+
 ## Arquivos sensiveis
 
 Arquivos ignorados pelo Git:
