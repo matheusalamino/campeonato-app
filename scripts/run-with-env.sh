@@ -47,8 +47,9 @@ read_var() {
 OBRIGATORIAS="NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY"
 
 # As do bloco C: exportadas quando presentes, e silenciosas quando nao. Elas nao
-# entram em OBRIGATORIAS porque a ausencia delas nao impede rodar o app -- so
-# impede mandar e-mail, e quem precisa disso falha com mensagem propria.
+# entram em OBRIGATORIAS porque a ausencia delas nao impede rodar o app -- vai
+# impedir mandar e-mail quando o dreno existir (bloco C), e ai quem precisar
+# delas falha com mensagem propria.
 OPCIONAIS="BREVO_API_KEY EMAIL_FROM EMAIL_FROM_NAME ORGANIZER_EMAIL NEXT_PUBLIC_SITE_URL EMAIL_TOKEN_SECRET CRON_SECRET"
 
 # Uma variavel faltando aqui faria o app cair de volta no valor do .env.local,
@@ -87,8 +88,10 @@ for KEY in $OBRIGATORIAS; do
   export "$KEY=$(read_var "$KEY")"
 done
 
-# Sem `if`, um `[ -n "$VALOR" ]` falso derrubaria o script inteiro por causa do
-# `set -e` la em cima, e as variaveis seguintes sumiriam sem uma linha de aviso.
+# `if` em vez de `[ -n "$VALOR" ] && export ...` por legibilidade, nao por
+# seguranca: a forma AND-OR sobrevive ao `set -e` num corpo de laco (medido em
+# sh, bash, zsh e dash -- saida identica, exit 0). Ela so esconde a intencao
+# atras de um idioma.
 for KEY in $OPCIONAIS; do
   VALOR=$(read_var "$KEY" || true)
   if [ -n "$VALOR" ]; then

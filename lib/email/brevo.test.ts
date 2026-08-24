@@ -22,7 +22,7 @@ describe("isRetriableStatus", () => {
     expect(isRetriableStatus(503)).toBe(true);
   });
 
-  it("trata 400 e 401 como definitivos", () => {
+  it("trata 400, 401 e 403 como definitivos", () => {
     // Endereco invalido e chave errada nao melhoram com espera, e retentar
     // queima a cota de 300/dia, que e o recurso escasso deste bloco.
     expect(isRetriableStatus(400)).toBe(false);
@@ -97,5 +97,31 @@ describe("createBrevoSender", () => {
 
     expect(r.ok).toBe(false);
     expect(r.ok === false && r.retriable).toBe(true);
+  });
+
+  it("trata estouro de timeout como retentavel", async () => {
+    // O `AbortSignal.timeout` rejeita com TimeoutError. Sem teto de espera, uma
+    // requisicao pendurada seguraria a fila inteira ate o proximo cron; e sem
+    // esta assertiva, o teto poderia sumir sem ninguem notar.
+    const fakeFetch = vi.fn().mockRejectedValue(new DOMException("timeout", "TimeoutError"));
+    const send = createBrevoSender(CONFIG, fakeFetch as unknown as typeof fetch);
+
+    const r = await send(MSG);
+
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.retriable).toBe(true);
+  });
+
+  it("passa um signal com teto de espera ao fetch", async () => {
+    // Prende o teto ao comportamento: sem `signal`, o fetch espera para sempre.
+    const fakeFetch = vi.fn().mockResolvedValue({
+      ok: true, status: 201, json: async () => ({ messageId: "x" }),
+    });
+    const send = createBrevoSender(CONFIG, fakeFetch as unknown as typeof fetch);
+
+    await send(MSG);
+
+    const [, init] = fakeFetch.mock.calls[0];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 });
