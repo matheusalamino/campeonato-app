@@ -424,6 +424,13 @@ export async function submitRegistration(
       payment_receipt_link: data.payment_receipt_link,
       legal_authorization_link: data.legal_authorization_link,
       pix_txid: data.pix_txid,
+      // `data.email`, e nao `playerRow.email` nem o e-mail que veio do cadastro:
+      // e o endereco que a pessoa deu NESTA inscricao. A diferenca so aparece
+      // para CPF ja cadastrado, e e ali que ela importa — `shouldPersistPlayerIdentity`
+      // nao deixa a submissao publica atualizar o cadastro, entao o e-mail de
+      // `players` pode estar velho justamente para quem acabou de digitar o novo.
+      // Ate esta linha existir, o valor digitado era descartado em silencio.
+      contact_email: data.email,
     },
     p_skills: skills,
   });

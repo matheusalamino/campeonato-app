@@ -56,6 +56,19 @@ retry_estado() {
 
 limpar() {
   $DB -c "
+    -- ANTES de apagar as inscricoes, e nao depois: a partir de
+    -- 20260823030000 toda inscricao gravada enfileira duas linhas em
+    -- email_outbox, com kind DE VERDADE, e nao ha FK entre as duas tabelas --
+    -- apagar a inscricao primeiro deixaria a fila sem como achar o que era
+    -- lixo de teste. Medido antes desta linha existir: uma execucao inteira
+    -- deste script deixava 20 linhas para tras, e a proxima deixava mais 20,
+    -- porque cada inscricao nasce com id novo e nada colide.
+    --
+    -- Igualdade exata contra os ids das inscricoes deste campeonato, nunca
+    -- LIKE em kind: apagar linha real de fila de e-mail e dano silencioso.
+    DELETE FROM email_outbox WHERE dedupe_key IN
+      (SELECT id::text FROM championship_registrations WHERE championship_id = '$CHAMP');
+
     DELETE FROM self_evaluations WHERE registration_id IN
       (SELECT id FROM championship_registrations WHERE championship_id = '$CHAMP');
     DELETE FROM championship_registrations WHERE championship_id = '$CHAMP';
@@ -103,6 +116,12 @@ preparar() {
 limpar
 sabbath_linhas_antes=$($DB -c "SELECT count(*) FROM sabbath_windows;")
 sabbath_cobrindo_antes=$($DB -c "SELECT count(*) FROM sabbath_windows WHERE now() BETWEEN starts_at AND ends_at;")
+
+# email_outbox tambem e GLOBAL, e passou a ser escrita por este script sem que
+# ele peca: o gatilho de 20260823030000 enfileira duas linhas por inscricao
+# gravada. A fotografia existe pelo mesmo motivo da de sabbath_windows -- a
+# guarda que a le esta no fim do arquivo.
+outbox_antes=$($DB -c "SELECT count(*) FROM email_outbox;")
 
 # O cabecalho acima serve a quem LE o arquivo; este bloco serve a quem le a
 # SAIDA, que e onde a pessoa esta olhando quando a suite quebra. Sem bypass de
@@ -1527,6 +1546,14 @@ rm -rf "$oficina"
 # e uma janela cobrindo now() e do ano corrente por definicao. Esta assercao ja
 # pagou por si: uma linha viva ficou onze minutos na tabela porque um trap com
 # `|| true` engoliu o erro do DELETE. Foi a contagem que gritou, nao o trap.
+# A contrapartida da fotografia la de cima. Aqui limpeza AUTOMATICA e segura --
+# limpar() apaga por id exato das inscricoes deste campeonato, nunca por kind --
+# entao esta e uma assertiva comum, e nao o banner de sabbath_windows. O que ela
+# pega e o limpar() furado: cada inscricao gravada por este script deixa duas
+# linhas numa fila de e-mail de verdade, e elas so cresceriam.
+checar "email_outbox voltou ao tamanho de antes" "$outbox_antes" \
+  "$($DB -c "SELECT count(*) FROM email_outbox;")"
+
 sabbath_linhas_depois=$($DB -c "SELECT count(*) FROM sabbath_windows;")
 sabbath_cobrindo_depois=$($DB -c "SELECT count(*) FROM sabbath_windows WHERE now() BETWEEN starts_at AND ends_at;")
 

@@ -7,21 +7,27 @@
 #
 # O QUE ESTE ARQUIVO COBRE, e por que ele existe em sh e nao em vitest: o
 # vitest deste repo nao abre conexao com o banco, entao nada do que a TABELA
-# promete tem onde ser provado la. Sao tres familias:
+# promete tem onde ser provado la. Sao quatro familias:
 #
 #   1. unicidade por acontecimento -- o indice UNIQUE (kind, dedupe_key);
 #   2. o formato da linha -- `dedupe_key` NOT NULL, o CHECK de `status` e o
 #      indice parcial do dreno;
 #   3. concorrencia -- `FOR UPDATE SKIP LOCKED`, que so aparece com DUAS
-#      conexoes ao mesmo tempo.
+#      conexoes ao mesmo tempo;
+#   4. quem ESCREVE na fila -- o gatilho da inscricao e o `contact_email` que
+#      commit_registration passou a gravar.
 #
-# A familia 2 nao aparece em nenhum cenario das outras duas, e essa e a razao de
-# ela existir separada: os cenarios das outras escrevem linhas bem formadas, e
-# um defeito que afrouxasse o formato passaria por todos eles calado.
+# A familia 2 nao aparece em nenhum cenario das outras, e essa e a razao de ela
+# existir separada: os cenarios das outras escrevem linhas bem formadas, e um
+# defeito que afrouxasse o formato passaria por todos eles calado.
 #
-# O QUE ELE NAO COBRE: nao ha gatilho nem dreno ainda. Este script prova o
-# comportamento da TABELA, nao o de quem escreve nela nem o de quem a esvazia.
-# Verde aqui nao quer dizer que algum e-mail saiu.
+# A familia 4 e a unica que toca outras tabelas -- championships, players e
+# championship_registrations --, porque o gatilho so existe em relacao a elas.
+# Ela tem seu proprio par de fixtures e sua propria limpeza; leia limpar().
+#
+# O QUE ELE NAO COBRE: nao ha dreno. Este script prova o que a TABELA promete e
+# o que o GATILHO escreve nela, nao o que sai dela. Verde aqui nao quer dizer
+# que algum e-mail foi enviado -- so que o acontecimento ficou registrado.
 #
 # ATENCAO ao cenario de concorrencia: um teste sequencial passa IDENTICO com o
 # SKIP LOCKED quebrado, porque sem disputa nao ha nada para pular. Por isso a
@@ -49,6 +55,29 @@ KIND_B="test_outbox_beta"
 KIND_L="test_outbox_lock"
 KIND_N="test_outbox_null"
 KIND_S="test_outbox_status"
+
+# Os cenarios do gatilho NAO tem kind proprio, e nao podem ter: quem escolhe o
+# `kind` la e o gatilho, e o que se quer provar e justamente que ele escolhe
+# 'registration_committed' e 'organizer_new_registration' -- os kinds DE
+# VERDADE. Um kind de teste aqui provaria o gatilho de um mundo que nao existe.
+#
+# Isso troca a rede: nao da mais para apagar por kind. A limpeza destes cenarios
+# e por `dedupe_key`, que e o id da inscricao, e por isso os ids sao FIXOS e
+# listados aqui em vez de virem do gen_random_uuid(). Igualdade exata, nunca
+# LIKE -- apagar linha real de fila de e-mail e dano silencioso.
+CHAMP_T="aaaaaaaa-0000-4000-8000-0000000ec301"
+REG_FILA="bbbbbbbb-0000-4000-8000-0000000ec301"
+REG_ROLL="bbbbbbbb-0000-4000-8000-0000000ec302"
+EMAIL_T="digitado-agora@teste.local"
+EMAIL_CADASTRO="cadastro-velho@teste.local"
+
+# Dois jogadores, e nao um: championship_registrations tem UNIQUE
+# (championship_id, player_id), entao o mesmo jogador nao serve para dois
+# cenarios que gravam inscricao no mesmo campeonato. O prefixo e 998 e nao 999
+# de proposito -- scripts/test-registration-slots.sh apaga `cpf LIKE '999%'`, e
+# uma execucao paralela levaria estes jogadores embora no meio da suite.
+CPF_T="99800000301"
+CPF_T2="99800000302"
 
 falhou=0
 checar() {
@@ -89,10 +118,50 @@ indice_estado() {
   esac
 }
 
+# "A coluna nao foi gravada" e "a coluna nao existe" sao defeitos DIFERENTES com
+# o mesmo sintoma se a medida for so o valor: nos dois casos nao ha e-mail
+# nenhum na linha. Por isso a leitura vem com stderr junto e passa por aqui --
+# coluna ausente aparece como erro do Postgres, valor perdido aparece como
+# `(NULO)`, e cada um manda o leitor para um lugar diferente.
+#
+# `(NULO)` vem de um coalesce na consulta, e nao do vazio do psql, porque em
+# `psql -tA` uma coluna nula e uma linha inexistente saem as duas como string
+# vazia -- e "a RPC nao gravou o e-mail" nao e a mesma coisa que "a RPC nao
+# gravou a inscricao".
+email_estado() {
+  case "$1" in
+    *'does not exist'*)   echo "coluna_ausente" ;;
+    *ERROR*)              echo "outro_erro" ;;
+    "$EMAIL_T")           echo "digitado" ;;
+    "$EMAIL_CADASTRO")    echo "veio_do_cadastro" ;;
+    '(NULO)')             echo "nulo" ;;
+    '')                   echo "sem_linha" ;;
+    *)                    echo "outro_valor" ;;
+  esac
+}
+
 limpar() {
   $DB -c "
     DELETE FROM email_outbox
      WHERE kind IN ('$KIND_A', '$KIND_B', '$KIND_L', '$KIND_N', '$KIND_S');
+
+    -- As linhas do gatilho. Duas passadas, e a segunda nao e redundante: a
+    -- primeira alcanca as inscricoes que ainda existem, e o cenario do
+    -- ON CONFLICT APAGA uma inscricao de proposito -- as linhas de fila dela
+    -- sobrevivem, porque nao ha FK entre as duas tabelas. Sem a lista literal,
+    -- aquelas duas linhas ficariam para tras, com kind de verdade, numa fila de
+    -- e-mail de verdade.
+    DELETE FROM email_outbox WHERE dedupe_key IN
+      (SELECT id::text FROM championship_registrations WHERE championship_id = '$CHAMP_T');
+    DELETE FROM email_outbox
+     WHERE dedupe_key IN ('$REG_FILA', '$REG_ROLL');
+
+    DELETE FROM self_evaluations WHERE registration_id IN
+      (SELECT id FROM championship_registrations WHERE championship_id = '$CHAMP_T');
+    DELETE FROM championship_registrations WHERE championship_id = '$CHAMP_T';
+    DELETE FROM registration_slot_reservations WHERE championship_id = '$CHAMP_T';
+    DELETE FROM players WHERE cpf IN ('$CPF_T', '$CPF_T2');
+    DELETE FROM championships WHERE id = '$CHAMP_T';
   " > /dev/null
 }
 
@@ -302,11 +371,130 @@ rm -rf "$oficina"
 checar "a conexao 1 ainda segurava o lock quando a 2 rodou" "1" "$segurando"
 checar "as duas conexoes pegam linhas diferentes" "lock-1|lock-2" "$conn1|$conn2"
 
+echo "== o gatilho: quem escreve na fila =="
+# Daqui para baixo os cenarios usam os kinds DE VERDADE, porque quem escolhe o
+# kind e o gatilho -- ver o comentario junto de CHAMP_T. A limpeza destes e por
+# dedupe_key, e ela mora no limpar() la de cima.
+limpar
+$DB -c "
+  INSERT INTO championships (id, name, slug, status, max_players, max_waitlist_players)
+  VALUES ('$CHAMP_T', 'Teste fila C1', 'teste-fila-c1', 'subscribing', 10, 5);
+  INSERT INTO players (cpf, name, email) VALUES
+    ('$CPF_T',  'Fila C1 um',   '$EMAIL_CADASTRO'),
+    ('$CPF_T2', 'Fila C1 dois', '$EMAIL_CADASTRO');
+" > /dev/null 2>&1 || true
+pid1=$($DB -c "SELECT id FROM players WHERE cpf='$CPF_T';")
+pid2=$($DB -c "SELECT id FROM players WHERE cpf='$CPF_T2';")
+checar "as fixturas do gatilho existem" "1|1|1" \
+  "$($DB -c "SELECT (SELECT count(*) FROM championships WHERE id='$CHAMP_T') || '|' ||
+                    (SELECT count(*) FROM players WHERE cpf='$CPF_T') || '|' ||
+                    (SELECT count(*) FROM players WHERE cpf='$CPF_T2');")"
+
+echo "== ROLLBACK da inscricao nao deixa e-mail na fila =="
+# A propriedade CENTRAL do desenho: o gatilho roda na mesma transacao de quem
+# grava a inscricao. Sem ela, uma inscricao desfeita -- por habilidade invalida,
+# por erro no meio da RPC -- deixaria para tras a confirmacao de uma inscricao
+# que nao existe, e alguem receberia "sua inscricao foi confirmada" sem estar
+# inscrito.
+#
+# Este cenario vem ANTES do de baixo de proposito: ele usa o jogador 1, e o
+# UNIQUE (championship_id, player_id) so o deixa livre enquanto ele nao tem
+# inscricao gravada neste campeonato.
+#
+# A medida DENTRO da transacao nao e enfeite -- e ela que faz o zero de depois
+# significar alguma coisa. Sem gatilho nenhum o "0 depois do ROLLBACK" sai
+# verde igual, e o cenario inteiro viraria a constatacao de que uma tabela
+# vazia continua vazia.
+saida=$($DB 2>&1 <<SQL || true
+BEGIN;
+INSERT INTO championship_registrations (id, championship_id, player_id)
+VALUES ('$REG_ROLL', '$CHAMP_T', '$pid1');
+SELECT 'DENTRO=' || count(*) FROM email_outbox WHERE dedupe_key = '$REG_ROLL';
+ROLLBACK;
+SQL
+)
+checar "dentro da transacao a fila JA tinha as duas linhas" "2" \
+  "$(echo "$saida" | sed -n 's/^DENTRO=//p' | tr -d ' ')"
+checar "depois do ROLLBACK a fila nao guardou nada" "0" \
+  "$($DB -c "SELECT count(*) FROM email_outbox WHERE dedupe_key='$REG_ROLL';")"
+checar "e a propria inscricao tambem foi desfeita" "0" \
+  "$($DB -c "SELECT count(*) FROM championship_registrations WHERE id='$REG_ROLL';")"
+
+echo "== uma inscricao gravada enfileira DUAS linhas =="
+# Um gatilho, duas linhas -- e nao dois gatilhos. Sao dois destinatarios do
+# MESMO acontecimento, e por isso a dedupe_key das duas e a mesma (o id da
+# inscricao) e o que as separa e o kind.
+$DB -c "
+  INSERT INTO championship_registrations (id, championship_id, player_id)
+  VALUES ('$REG_FILA', '$CHAMP_T', '$pid1');
+" > /dev/null 2>&1 || true
+checar "a dedupe_key das duas linhas e o id da inscricao" "2" \
+  "$($DB -c "SELECT count(*) FROM email_outbox WHERE dedupe_key='$REG_FILA';")"
+# Contar duas linhas nao diz QUAIS: um gatilho que enfileirasse a confirmacao
+# duas vezes daria 2 tambem, e a organizacao nunca saberia da inscricao.
+checar "e as duas sao a confirmacao e o aviso da organizacao" \
+  "organizer_new_registration|registration_committed" \
+  "$($DB -c "SELECT string_agg(kind, '|' ORDER BY kind) FROM email_outbox WHERE dedupe_key='$REG_FILA';")"
+# O contrato do payload: IDENTIFICADOR, nunca texto pronto. E o que faz o corpo
+# ser montado na hora do envio, com o dado ja corrigido.
+checar "o payload das duas leva o identificador da inscricao" "2" \
+  "$($DB -c "SELECT count(*) FROM email_outbox
+              WHERE dedupe_key='$REG_FILA' AND payload->>'registration_id' = '$REG_FILA';")"
+
+echo "== commit_registration grava o contact_email do jsonb =="
+# ESTE e o cenario da armadilha: o INSERT da funcao tem lista EXPLICITA de
+# colunas, entao acrescentar a chave ao jsonb sem acrescentar a coluna la nao
+# grava nada e nao levanta erro nenhum. Mutacao que o prende: tire
+# `contact_email` da lista de colunas do INSERT de commit_registration e a
+# assertiva de baixo tem de ficar VERMELHA, com o rotulo `nulo`.
+#
+# Jogador 2, porque o 1 ja tem inscricao neste campeonato.
+r=$($DB -c "SELECT commit_registration('$CHAMP_T', '$pid2', '$CPF_T2',
+      '{\"group_affiliation\":\"G\",\"shirt_size\":\"M\",\"profile_photo_link\":\"http://x/y.jpg\",\"tickets_total\":0,\"contact_email\":\"$EMAIL_T\"}'::jsonb,
+      '{}'::jsonb)::text;" 2>&1 || true)
+# Esta assertiva vem primeiro porque ela e a que diz se a proxima significa
+# alguma coisa -- e porque e ela que acende quando o relogio esta dentro da
+# pausa de sabado, em vez de a proxima acender por um motivo que nao e o dela.
+checar "a RPC gravou a inscricao" "true" \
+  "$(echo "$r" | sed 's/.*"success" : \([a-z]*\).*/\1/')"
+reg_rpc=$($DB -c "SELECT id FROM championship_registrations WHERE player_id='$pid2' AND championship_id='$CHAMP_T';")
+checar "o contact_email do jsonb chegou na coluna" "digitado" \
+  "$(email_estado "$($DB -c "SELECT coalesce(contact_email, '(NULO)')
+                               FROM championship_registrations WHERE id='$reg_rpc';" 2>&1)")"
+checar "e a inscricao vinda da RPC tambem enfileirou as duas" "2" \
+  "$($DB -c "SELECT count(*) FROM email_outbox WHERE dedupe_key='$reg_rpc';")"
+
+echo "== a mesma inscricao entrando de novo nao duplica a fila =="
+# O caso real e o restore: a inscricao volta com o MESMO id, o gatilho dispara
+# de novo, e as linhas de fila dela nunca sairam -- nao ha FK entre as duas
+# tabelas. Sem `ON CONFLICT DO NOTHING` este INSERT levantaria erro de
+# unicidade e derrubaria a transacao de quem esta gravando a inscricao.
+$DB -c "DELETE FROM championship_registrations WHERE id='$REG_FILA';" > /dev/null 2>&1 || true
+checar "a fila sobrevive a inscricao apagada" "2" \
+  "$($DB -c "SELECT count(*) FROM email_outbox WHERE dedupe_key='$REG_FILA';")"
+saida=$($DB -c "
+  INSERT INTO championship_registrations (id, championship_id, player_id)
+  VALUES ('$REG_FILA', '$CHAMP_T', '$pid1');
+" 2>&1 || true)
+checar "a reinsercao do mesmo id passa sem erro" "sem_erro" "$(erro_estado "$saida")"
+checar "e nao acrescentou linha nenhuma a fila" "2" \
+  "$($DB -c "SELECT count(*) FROM email_outbox WHERE dedupe_key='$REG_FILA';")"
+
 echo "== a limpeza devolve a tabela ao estado de antes =="
 limpar
 checar "as linhas de teste sumiram" "0" \
   "$($DB -c "SELECT count(*) FROM email_outbox
               WHERE kind IN ('$KIND_A', '$KIND_B', '$KIND_L', '$KIND_N', '$KIND_S');")"
+# Assertiva propria para as linhas do gatilho porque elas tem kind DE VERDADE:
+# a de cima nao as ve, e a de baixo so acusaria um total diferente, sem dizer
+# quem sobrou. Estas sao as unicas linhas desta suite que, esquecidas, ficariam
+# numa fila de e-mail real esperando um dreno.
+checar "e as linhas do gatilho tambem" "0" \
+  "$($DB -c "SELECT count(*) FROM email_outbox
+              WHERE dedupe_key IN ('$REG_FILA', '$REG_ROLL', '$reg_rpc');")"
+checar "as fixturas do gatilho sairam junto" "0|0" \
+  "$($DB -c "SELECT (SELECT count(*) FROM championship_registrations WHERE championship_id='$CHAMP_T') || '|' ||
+                    (SELECT count(*) FROM championships WHERE id='$CHAMP_T');")"
 checar "a tabela voltou ao tamanho de antes" "$linhas_antes" \
   "$($DB -c "SELECT count(*) FROM email_outbox;")"
 
