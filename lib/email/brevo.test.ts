@@ -45,7 +45,17 @@ describe("createBrevoSender", () => {
     expect(r).toEqual({ ok: true, providerMessageId: "<abc@smtp-relay.mailin.fr>" });
   });
 
-  it("manda o remetente e o destinatario no formato que a API espera", async () => {
+  it("monta as CINCO chaves do payload como a API espera", async () => {
+    // As cinco, e nao as tres de antes. `subject`, `htmlContent` e `textContent`
+    // saem todos de campos `string` do MESMO objeto, entao trocar um pelo outro
+    // nao muda tipo nenhum e nao acende `tsc`. MEDIDO: com so tres asseveradas,
+    // `htmlContent: msg.html` -> `msg.text` (o corpo HTML de todo e-mail virando
+    // texto puro) e `subject: msg.subject` -> `msg.text` (o assunto virando o
+    // corpo) passavam os quatro portoes inteiros.
+    //
+    // E por isso que os tres campos de `MSG` sao deliberadamente DIFERENTES
+    // entre si: se `text` e `html` tivessem o mesmo valor, a troca entre eles
+    // ficaria invisivel aqui.
     const fakeFetch = vi.fn().mockResolvedValue({
       ok: true, status: 201, json: async () => ({ messageId: "x" }),
     });
@@ -59,6 +69,8 @@ describe("createBrevoSender", () => {
     const payload = JSON.parse(init.body as string);
     expect(payload.sender).toEqual({ name: "CLS 2026", email: "remetente@exemplo.com" });
     expect(payload.to).toEqual([{ email: "jogador@exemplo.com", name: "Jogador" }]);
+    expect(payload.subject).toBe("Assunto");
+    expect(payload.htmlContent).toBe("<p>corpo</p>");
     expect(payload.textContent).toBe("corpo");
   });
 
