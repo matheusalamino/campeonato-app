@@ -65,7 +65,19 @@ describe("renderEmail", () => {
     // escrever a T7 a atualizar esta declaracao CONSCIENTEMENTE. Isso e o
     // desenho, e nao um incomodo -- template novo que ninguem declarou aqui e
     // template que passou sem revisao de texto.
-    const comCorpo = EMAIL_KINDS.filter((kind) => renderEmail(entrada(kind)) !== null);
+    //
+    // ── POR QUE `typeof === "object"`, E NAO `!== null` ──
+    //
+    // MEDIDO: com o filtro em `!== null`, remover o `case
+    // "organizer_new_registration"` de render.ts deixava esta assertiva VERDE.
+    // O `default` devolve a PROPRIA STRING (`"organizer_new_registration"`), que
+    // nao e null, entao o kind continuava contado como "tem corpo" e a lista
+    // saia identica. A assertiva so pegava template ACRESCENTADO, e nao `case`
+    // REMOVIDO -- metade do trabalho que ela existe para fazer.
+    const comCorpo = EMAIL_KINDS.filter((kind) => {
+      const m = renderEmail(entrada(kind));
+      return typeof m === "object" && m !== null;
+    });
 
     expect(comCorpo).toEqual(["registration_committed", "organizer_new_registration"]);
   });
