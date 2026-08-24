@@ -111,32 +111,73 @@ describe("o select do resumo, nos dois lugares onde ele existe", () => {
     expect(semEspaco(achado?.[1] ?? "")).toBe(SELECT_ESPERADO);
   });
 
-  it("a traducao coluna->campo e delegada, e nao refeita aqui", () => {
-    // O mapeamento voltou para `features/` porque AQUI nao havia rede nenhuma:
-    // MEDIDO, com ele neste arquivo, `isWaitlist: !linha.is_waitlist` e a troca
-    // de `contactEmail` por `playerEmail` passavam pelos quatro portoes.
-    //
-    // Extrair sozinho nao fecha o buraco -- alguem pode reinlinar um objeto
-    // literal aqui e o teste de `summaryFromRow` continuaria verde, provando
-    // uma funcao que ninguem mais chama. Esta assertiva prende as duas pontas:
-    // a chamada existe, e nao ha construcao de resumo a mao neste arquivo.
-    expect(servico).toMatch(/summaryFromRow\(\s*\w+\s*,?\s*\)/);
+  /**
+   * ── SOBRE O TETO DE UMA ASSERTIVA TEXTUAL, E COMO ELE FOI CONTORNADO ──
+   *
+   * Assertiva POSITIVA de texto ("o token `summariesById` aparece") tem um teto
+   * conhecido: ela prova que o nome esta escrito, nao que a funcao certa roda.
+   * Uma funcao local homonima que nao traduz nada a deixa verde -- medido na
+   * revisao desta task.
+   *
+   * As assertivas abaixo sao por isso NEGATIVAS onde importa: elas exigem que
+   * os literais de coluna NAO estejam neste arquivo. Um decoy nao satisfaz uma
+   * negativa -- so satisfaz quem de fato nao escreveu as colunas aqui. E como
+   * as traducoes agora tem teste de COMPORTAMENTO em features/ (summary-row e
+   * outbox-columns), a positiva vira o que ela consegue ser de util: um aviso
+   * de que a delegacao existe, e nao a prova de que ela esta certa.
+   */
+  it("as traducoes do store sao delegadas, e nao refeitas aqui", () => {
+    // As seis juntas que a varredura desta rodada achou NUAS eram exatamente os
+    // seis metodos deste store: `services/**` nao e coletado pelo vitest, entao
+    // toda traducao escrita aqui nasce sem portao. As dezesseis juntas de
+    // `features/**` e `lib/**` estavam todas presas -- a fronteira da nudez era
+    // a fronteira do `include`.
+    for (const chamada of [
+      /outboxRowsFrom\(/,
+      /summariesById\(/,
+      /sentColumns\(/,
+      /requeueColumns\(/,
+      /deferColumns\(/,
+      /failedPermanentColumns\(/,
+    ]) {
+      expect(servico, `a delegacao ${chamada} sumiu de services/email-outbox.ts`).toMatch(chamada);
+    }
+  });
 
-    for (const campo of [
+  it("nenhum literal de coluna sobrou no servico", () => {
+    // A NEGATIVA, que e a que se paga. Reinlinar qualquer uma das traducoes
+    // acende aqui, e nenhum decoy a satisfaz: so a satisfaz quem de fato nao
+    // escreveu coluna neste arquivo.
+    //
+    // A lista e das colunas que as GRAVACOES poem e dos campos do resumo. A
+    // string do `select` fica de fora de proposito -- ela e leitura, e tem as
+    // duas redes das assertivas de cima.
+    const proibidos = [
+      'status: "sent"',
+      'status: "pending"',
+      'status: "failed_permanent"',
+      "provider_message_id:",
+      "next_attempt_at:",
+      "claimed_at:",
+      "last_error:",
       "contactEmail:",
       "playerEmail:",
       "playerName:",
       "championshipName:",
       "isWaitlist:",
       "preferredPosition:",
-    ]) {
+      "dedupeKey:",
+    ];
+
+    for (const literal of proibidos) {
       expect(
         servico,
-        `services/email-outbox.ts voltou a montar \`${campo}\` a mao. A traducao ` +
-          "coluna->campo mora em features/email/summary-row.ts, onde ha teste: " +
-          "`services/**` nao e coletado pelo vitest, e um mapeamento escrito " +
-          "aqui nao tem portao nenhum.",
-      ).not.toContain(campo);
+        `services/email-outbox.ts voltou a escrever \`${literal}\` a mao. As ` +
+          "traducoes moram em features/email/summary-row.ts e " +
+          "features/email/outbox-columns.ts, onde ha teste de comportamento: " +
+          "`services/**` nao e coletado pelo vitest, e as SEIS juntas nuas da " +
+          "varredura desta rodada eram exatamente os seis metodos deste store.",
+      ).not.toContain(literal);
     }
   });
 

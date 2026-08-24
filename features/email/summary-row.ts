@@ -66,3 +66,27 @@ export function summaryFromRow(linha: RegistrationSummaryRow): RegistrationSumma
     preferredPosition: linha.players?.preferred_position ?? null,
   };
 }
+
+/**
+ * As linhas indexadas POR ID DA INSCRICAO -- o formato que o dreno consome.
+ *
+ * ── POR QUE A CHAVE TEM REDE PROPRIA ──
+ *
+ * Porque a chave errada nao tem sintoma de tipo. MEDIDO com este laco ainda no
+ * servico: trocar `mapa.set(linha.id, ...)` por `mapa.set(registrationIds[0], ...)`
+ * passava os QUATRO portoes. Num lote com duas inscricoes, TODO MUNDO recebia o
+ * resumo da primeira -- nome, campeonato e situacao de outra pessoa, num envio
+ * bem-sucedido.
+ *
+ * O dreno ja tinha rede para o outro lado desta mesma junta (`da a cada linha o
+ * resumo da SUA inscricao`, em outbox.test.ts), e ela nao alcancava aqui: o
+ * duble do store monta o mapa por conta propria. As duas pontas precisam de
+ * prova, e sao provas diferentes.
+ */
+export function summariesById(
+  linhas: readonly RegistrationSummaryRow[],
+): Map<string, RegistrationSummary> {
+  const mapa = new Map<string, RegistrationSummary>();
+  for (const linha of linhas) mapa.set(linha.id, summaryFromRow(linha));
+  return mapa;
+}

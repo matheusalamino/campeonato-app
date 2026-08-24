@@ -8,11 +8,18 @@ import {
   type DrainReport,
   type OutboxRow,
   type OutboxStore,
-  type RegistrationSummary,
 } from "@/features/email/outbox";
 import { renderEmail, type EmailRenderer } from "@/features/email/render";
-import { summaryFromRow } from "@/features/email/summary-row";
+import { summariesById } from "@/features/email/summary-row";
 import type { RegistrationSummaryRow } from "@/features/email/summary-row";
+import {
+  deferColumns,
+  failedPermanentColumns,
+  outboxRowsFrom,
+  requeueColumns,
+  sentColumns,
+} from "@/features/email/outbox-columns";
+import type { ClaimedOutboxRow } from "@/features/email/outbox-columns";
 
 /**
  * A FIACAO do dreno: o cliente do Supabase, as variaveis de ambiente e o
@@ -28,14 +35,6 @@ import type { RegistrationSummaryRow } from "@/features/email/summary-row";
  * isso em mente.
  */
 
-type LinhaClaim = {
-  id: string;
-  kind: string;
-  dedupe_key: string;
-  payload: Record<string, unknown> | null;
-  attempts: number;
-};
-
 export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore {
   return {
     async claimBatch(limit, now): Promise<OutboxRow[]> {
@@ -48,13 +47,7 @@ export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore
         p_now: now.toISOString(),
       });
       if (error) throw new Error(`claim_email_outbox_batch falhou: ${error.message}`);
-      return ((data ?? []) as LinhaClaim[]).map((l) => ({
-        id: l.id,
-        kind: l.kind,
-        dedupeKey: l.dedupe_key,
-        payload: l.payload ?? {},
-        attempts: l.attempts,
-      }));
+      return outboxRowsFrom((data ?? []) as ClaimedOutboxRow[]);
     },
 
     async isSabbath(at) {
@@ -117,14 +110,19 @@ export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore
      *
      * ── E A TRADUCAO NAO MORA MAIS AQUI ──
      *
-     * `summaryFromRow` (features/email/summary-row.ts) e quem poe cada coluna no
-     * seu campo, e ela esta la porque AQUI nao havia rede: MEDIDO, com o
-     * mapeamento neste arquivo, `isWaitlist: !linha.is_waitlist` e a troca de
-     * `contactEmail` por `playerEmail` passavam pelos quatro portoes inteiros.
+     * `summariesById` / `summaryFromRow` (features/email/summary-row.ts) sao quem
+     * poe cada coluna no seu campo e quem indexa o mapa, e estao la porque AQUI
+     * nao ha rede -- `services/**` nao e coletado pelo vitest.
+     *
+     * MEDIDO, com as traducoes neste arquivo: `isWaitlist: !linha.is_waitlist`,
+     * a troca de `contactEmail` por `playerEmail` e a chave fixa
+     * (`mapa.set(registrationIds[0], ...)`) passavam pelos quatro portoes
+     * inteiros. A varredura de juntas da terceira rodada achou OITO juntas nuas
+     * no caminho `linha do banco -> e-mail enviado`, e SEIS eram os seis metodos
+     * deste store; as dezesseis de `features/**` e `lib/**` estavam presas.
      */
     async loadSummaries(registrationIds) {
-      const mapa = new Map<string, RegistrationSummary>();
-      if (registrationIds.length === 0) return mapa;
+      if (registrationIds.length === 0) return new Map();
       const { data, error } = await supabase
         .from("championship_registrations")
         .select(
@@ -132,54 +130,23 @@ export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore
         )
         .in("id", registrationIds);
       if (error) throw new Error(`leitura dos resumos falhou: ${error.message}`);
-      for (const linha of (data ?? []) as unknown as RegistrationSummaryRow[]) {
-        mapa.set(linha.id, summaryFromRow(linha));
-      }
-      return mapa;
+      return summariesById((data ?? []) as unknown as RegistrationSummaryRow[]);
     },
 
     async markSent(id, providerMessageId, at) {
-      await atualizar(supabase, id, {
-        status: "sent",
-        sent_at: at.toISOString(),
-        provider_message_id: providerMessageId,
-        last_error: null,
-      });
+      await atualizar(supabase, id, sentColumns(providerMessageId, at));
     },
 
     async requeue(id, attempts, nextAttemptAt, lastError) {
-      // `claimed_at` volta a nulo junto com o status: linha pendente nao esta
-      // na mao de ninguem, e deixar o carimbo velho la confundiria o
-      // recolhimento do que ficou parado.
-      await atualizar(supabase, id, {
-        status: "pending",
-        attempts,
-        next_attempt_at: nextAttemptAt.toISOString(),
-        last_error: lastError,
-        claimed_at: null,
-      });
+      await atualizar(supabase, id, requeueColumns(attempts, nextAttemptAt, lastError));
     },
 
     async defer(id) {
-      // Sem tocar em `attempts` nem em `next_attempt_at`: sabado, cota
-      // estourada e template faltando nao sao falhas DESTA linha, e gastar
-      // degrau da escada com eles empurraria para 12 horas de espera um e-mail
-      // que so precisava do proximo disparo do cron.
-      await atualizar(supabase, id, { status: "pending", claimed_at: null });
+      await atualizar(supabase, id, deferColumns());
     },
 
     async markFailedPermanent(id, lastError) {
-      // `claimed_at` fica como estava, igual em markSent: ele diz quando um
-      // dreno PEGOU a linha, e sobrescreve-lo com o instante da falha seria
-      // usar a coluna para dizer outra coisa. Nao muda comportamento -- o
-      // recolhimento so le esta coluna quando `status = 'sending'` --, mas
-      // deixa as quatro gravacoes com a mesma leitura: estado terminal guarda o
-      // carimbo, volta para a fila zera.
-      await atualizar(supabase, id, {
-        status: "failed_permanent",
-        last_error: lastError,
-        sent_at: null,
-      });
+      await atualizar(supabase, id, failedPermanentColumns(lastError));
     },
   };
 }

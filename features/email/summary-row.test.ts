@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { summaryFromRow, type RegistrationSummaryRow } from "./summary-row";
+import { summariesById, summaryFromRow, type RegistrationSummaryRow } from "./summary-row";
 
 /**
  * A traducao coluna -> campo, que ate a revisao da T5 nao tinha rede NENHUMA.
@@ -110,5 +110,33 @@ describe("summaryFromRow", () => {
       expect(valor, `${campo} veio undefined`).not.toBeUndefined();
     }
     expect(resumo.isWaitlist).toBe(false);
+  });
+});
+
+describe("summariesById", () => {
+  const outra: RegistrationSummaryRow = {
+    id: "reg-b",
+    is_waitlist: true,
+    contact_email: "bruno@exemplo.test",
+    championships: { name: "Copa B" },
+    players: { email: "b@cadastro.test", name: "Bruno", preferred_position: "GOL" },
+  };
+
+  it("indexa cada resumo pelo id da SUA inscricao", () => {
+    // DUAS linhas, e com conteudo distinto: com uma so, `mapa.set(ids[0], ...)`
+    // e indistinguivel de `mapa.set(linha.id, ...)`. MEDIDO -- essa troca
+    // passava os quatro portoes, e mandava a todo mundo o resumo da primeira
+    // inscricao do lote.
+    const mapa = summariesById([LINHA, outra]);
+
+    expect([...mapa.keys()]).toEqual(["reg-1", "reg-b"]);
+    expect(mapa.get("reg-1")?.playerName).toBe("Fulano de Tal");
+    expect(mapa.get("reg-b")?.playerName).toBe("Bruno");
+    expect(mapa.get("reg-1")?.isWaitlist).toBe(false);
+    expect(mapa.get("reg-b")?.isWaitlist).toBe(true);
+  });
+
+  it("devolve mapa vazio para lote vazio", () => {
+    expect(summariesById([]).size).toBe(0);
   });
 });
