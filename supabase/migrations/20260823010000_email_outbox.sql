@@ -59,16 +59,24 @@ CREATE INDEX IF NOT EXISTS email_outbox_pending
 
 ALTER TABLE public.email_outbox ENABLE ROW LEVEL SECURITY;
 
--- Nenhuma policy: sem policy, RLS nega tudo. O service-role tem BYPASSRLS e e
--- o unico que escreve aqui. O REVOKE nominal fecha o caminho do PostgREST.
+-- Nenhuma policy, e e isso que define o acesso: sem policy, a RLS nega tudo a
+-- quem esta sujeito a ela -- `anon` e `authenticated`. Passa quem ignora RLS: o
+-- `service_role`, e o `postgres` do proprio banco, que e por onde a suite de
+-- teste grava. O REVOKE nominal fecha o caminho do PostgREST.
+--
+-- Na data desta migration ninguem escreve aqui ainda: quem alimenta a fila e o
+-- gatilho da inscricao, que vem depois.
 REVOKE ALL ON TABLE public.email_outbox FROM PUBLIC;
 REVOKE ALL ON TABLE public.email_outbox FROM anon, authenticated;
 
 COMMENT ON TABLE public.email_outbox IS
 'Fila de e-mails a enviar. Cada linha e um ACONTECIMENTO, nao uma mensagem
-pronta: `payload` guarda identificadores e o corpo e montado no envio. O par
-(kind, dedupe_key) e unico, e e o que impede repeticao virar e-mail repetido.';
+pronta: `payload` guarda identificadores, e o corpo deve ser montado no momento
+do envio. O par (kind, dedupe_key) e unico, e e o que impede repeticao virar
+e-mail repetido.';
 
 COMMENT ON COLUMN public.email_outbox.next_attempt_at IS
-'Antes deste instante o dreno ignora a linha. E como o backoff se expressa sem
-precisar de agendador proprio.';
+'O instante a partir do qual esta linha pode ser tentada. Quem drenar a fila
+deve ignorar linha cujo next_attempt_at ainda esta no futuro -- e assim que o
+backoff se expressa, sem precisar de agendador proprio. Na data desta migration
+nao existe dreno: a coluna define a regra antes de haver quem a obedeca.';

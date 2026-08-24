@@ -244,8 +244,7 @@ oficina=$(mktemp -d)
 # commitar. O marcador CONN1SEGURANDO viaja no texto do pg_sleep para a
 # assertiva de sobreposicao poder achar esta sessao em pg_stat_activity.
 # Sem underscore no marcador: ele e procurado com LIKE, onde `_` e coringa.
-docker exec -i supabase_db_campeonato-app psql -U postgres -d postgres -tA \
-  > "$oficina/conn1.txt" 2>&1 <<SQL &
+$DB > "$oficina/conn1.txt" 2>&1 <<SQL &
 BEGIN;
 SELECT 'CONN1=' || dedupe_key
   FROM email_outbox
@@ -263,7 +262,7 @@ sleep 2
 
 # A conexao 2 roda a MESMA consulta enquanto a 1 segura. Com SKIP LOCKED ela
 # tem de pular a linha travada e voltar com a OUTRA.
-conn2=$(docker exec -i supabase_db_campeonato-app psql -U postgres -d postgres -tA -c "
+conn2=$($DB -c "
   SELECT dedupe_key
     FROM email_outbox
    WHERE kind = '$KIND_L' AND status = 'pending' AND next_attempt_at <= now()
