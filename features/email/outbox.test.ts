@@ -209,6 +209,19 @@ describe("decideSend", () => {
     });
   });
 
+  it("a falta de base de link vence a cota", () => {
+    // A ordem entre a guarda 2 e a 3. As duas ADIAM, entao trocar uma pela
+    // outra nao muda o estado da linha no banco -- muda so o `reason` gravado,
+    // e o `reason` e a unica coisa que sobra para quem for entender por que
+    // nada saiu. Sem esta assertiva o comentario de `decideSend` afirmava uma
+    // ordem que nenhum teste defendia.
+    expect(decideSend({ ...base, siteUrl: null, sentToday: 300, dailyQuota: 300 })).toEqual({
+      send: false,
+      reason: "no_site_url",
+      requeue: true,
+    });
+  });
+
   it("a cota vence o descadastro", () => {
     // Cota antes de opt-out importa porque as consequencias sao diferentes:
     // cota ADIA, opt-out MATA. Na ordem trocada, um lembrete de quem se
@@ -334,6 +347,13 @@ describe("stubRenderer", () => {
 type Registro = {
   claims: Array<{ limit: number; now: string }>;
   sabbathCalls: number;
+  // Os instantes com que o dreno pergunta, e nao so quantas vezes perguntou.
+  // Duble que ignora o argumento torna o argumento INOBSERVAVEL: a chamada pode
+  // passar qualquer coisa e nenhuma assertiva ve. Foi assim que a janela da
+  // cota ficou sem rede -- havia teste para `startOfUtcDay` e teste para a
+  // guarda de cota, e nenhum para a linha que liga os dois.
+  sabbathAt: string[];
+  quotaSince: string[];
   sent: Array<{ id: string; providerMessageId: string }>;
   requeued: Array<{ id: string; attempts: number; nextAttemptAt: string; lastError: string }>;
   deferred: string[];
@@ -352,6 +372,8 @@ function fakeStore(
   const registro: Registro = {
     claims: [],
     sabbathCalls: 0,
+    sabbathAt: [],
+    quotaSince: [],
     sent: [],
     requeued: [],
     deferred: [],
@@ -363,11 +385,13 @@ function fakeStore(
       registro.claims.push({ limit, now: now.toISOString() });
       return rows;
     },
-    async isSabbath() {
+    async isSabbath(at) {
       registro.sabbathCalls += 1;
+      registro.sabbathAt.push(at.toISOString());
       return opts.sabbath ?? false;
     },
-    async countSentSince() {
+    async countSentSince(since) {
+      registro.quotaSince.push(since.toISOString());
       return opts.sentToday ?? 0;
     },
     async loadContacts(ids) {
@@ -624,6 +648,31 @@ describe("drainOutbox", () => {
     const { store, registro } = fakeStore([]);
     await drainOutbox(deps(store, registro, { batchSize: 7 }));
     expect(registro.claims).toEqual([{ limit: 7, now: AGORA.toISOString() }]);
+  });
+
+  it("a janela da cota comeca na meia-noite UTC do instante recebido", async () => {
+    // A linha que liga `startOfUtcDay` a guarda de cota. Sem esta assertiva,
+    // trocar `countSentSince(startOfUtcDay(now))` por `countSentSince(now)`
+    // passa com a suite inteira verde -- e o dano nao aparece em teste nenhum:
+    // `sent_at >= now` nunca casa com envio anterior, entao `sentToday` nasce 0
+    // em TODO disparo. O teto de 300/dia deixa de existir entre disparos e sobra
+    // so o contador em memoria do lote. Um cron de cinco em cinco minutos passa
+    // a permitir milhares de e-mails por dia contra uma cota de 300, e quem
+    // recusa e o Brevo, calado.
+    const { store, registro } = fakeStore([linha()], { contacts: { "reg-1": contato } });
+    await drainOutbox(deps(store, registro));
+    expect(registro.quotaSince).toEqual(["2026-08-24T00:00:00.000Z"]);
+    expect(registro.quotaSince[0]).toBe(startOfUtcDay(AGORA).toISOString());
+  });
+
+  it("pergunta pelo sabado no instante recebido", async () => {
+    // Mesmo buraco, outra pergunta, e esta e a pior das duas: perguntar pela
+    // pausa com o instante errado manda e-mail durante o sabado, e isso nao se
+    // desfaz. `sabbathCalls` sozinho so contava as chamadas -- o QUANDO era
+    // inobservavel.
+    const { store, registro } = fakeStore([linha()], { contacts: { "reg-1": contato } });
+    await drainOutbox(deps(store, registro));
+    expect(registro.sabbathAt).toEqual([AGORA.toISOString()]);
   });
 
   it("uma linha ruim nao derruba o resto do lote", async () => {

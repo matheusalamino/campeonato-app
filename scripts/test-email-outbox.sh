@@ -461,7 +461,19 @@ claim1=$(sed -n 's/^CLAIM1=//p' "$oficina/claim1.txt" | tr -d ' ')
 rm -rf "$oficina"
 oficina=""
 
-# Primeiro esta, porque ela e a que diz se a proxima significa alguma coisa.
+# Primeiro esta, porque ela e a que diz se a proxima significa alguma coisa --
+# e porque, neste cenario, ela e CORDA UNICA.
+#
+# MEDIDO: trocando `FOR UPDATE SKIP LOCKED` por `FOR UPDATE` puro na funcao, a
+# assertiva de baixo fica VERDE. A conexao 2 bloqueia, espera a 1 commitar, e
+# so entao pega a outra linha -- o resultado final e o mesmo, e o unico sinal
+# de que houve espera em vez de salto e esta contagem, que le a sessao 1 ainda
+# ativa. Sem SKIP LOCKED o dreno nao manda e-mail repetido; ele SERIALIZA, e um
+# disparo fica pendurado atras do outro ate estourar o tempo da funcao.
+#
+# Quem for mexer nos `sleep` deste cenario esta mexendo na unica corda: e a
+# folga entre os dois (a 2 roda por volta de t=2s, a 1 so solta em t=5s) que faz
+# a sobreposicao existir para ser medida.
 checar "a conexao 1 ainda segurava o lock quando a 2 chamou o claim" "1" "$segurando_claim"
 checar "os dois claims pegam linhas diferentes" "claim-1|claim-2" "$claim1|$claim2"
 

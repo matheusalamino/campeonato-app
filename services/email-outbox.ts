@@ -140,12 +140,17 @@ export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore
       await atualizar(supabase, id, { status: "pending", claimed_at: null });
     },
 
-    async markFailedPermanent(id, lastError, at) {
+    async markFailedPermanent(id, lastError) {
+      // `claimed_at` fica como estava, igual em markSent: ele diz quando um
+      // dreno PEGOU a linha, e sobrescreve-lo com o instante da falha seria
+      // usar a coluna para dizer outra coisa. Nao muda comportamento -- o
+      // recolhimento so le esta coluna quando `status = 'sending'` --, mas
+      // deixa as quatro gravacoes com a mesma leitura: estado terminal guarda o
+      // carimbo, volta para a fila zera.
       await atualizar(supabase, id, {
         status: "failed_permanent",
         last_error: lastError,
         sent_at: null,
-        claimed_at: at.toISOString(),
       });
     },
   };
