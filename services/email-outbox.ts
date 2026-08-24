@@ -28,11 +28,23 @@ import type { ClaimedOutboxRow } from "@/features/email/outbox-columns";
  * Nao ha decisao nenhuma aqui de proposito. Toda regra -- a ordem das guardas
  * de envio, a escada de reentrega, quem recebe cada `kind` -- esta em
  * `features/`, porque o `include` do `vitest.config.ts` NAO alcanca
- * `services/**` e um teste escrito aqui nao roda. Isso foi medido: um
- * `services/*.test.ts` afirmando `expect(1).toBe(2)` deixa a suite verde.
+ * `services/**`. Isso foi medido: um `services/*.test.ts` afirmando
+ * `expect(1).toBe(2)` deixa a suite PRINCIPAL verde.
  *
- * O que sobra neste arquivo e o que nenhuma suite deste repo cobre. Leia com
- * isso em mente.
+ * ── MAS O STORE NAO ESTA MAIS NU (T5b) ──
+ *
+ * `services/email-outbox.contract.ts` exercita os OITO metodos de
+ * `createSupabaseOutboxStore` contra o Postgres local, sem dublar nada -- ela e
+ * a unica funcao exportada daqui que RECEBE o cliente do Supabase por
+ * argumento, e e por essa porta que o contrato entra. Ele mora numa segunda
+ * suite, com `include` proprio, porque a principal nao pode precisar de banco.
+ * Roda a mao, com o stack local de pe:
+ *
+ *     npx vitest run --config vitest.contract.config.ts
+ *
+ * O que continua sem portao neste arquivo e `runOutboxDrain`, que monta o
+ * cliente la dentro com `createAdminClient()` e le o ambiente. Leia com isso em
+ * mente.
  */
 
 export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore {
@@ -94,7 +106,7 @@ export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore
      * `vitest.config.ts`.
      *
      * E a mesma armadilha da allowlist do `toRow` no admin, e a rede contra ela nao
-     * mora aqui. Sao DUAS, e uma sozinha nao bastava:
+     * mora aqui. Sao TRES -- a terceira chegou na T5b --, e nenhuma sozinha bastava:
      *
      *  1. `scripts/test-email-outbox.sh`, cenario "as seis colunas do resumo voltam
      *     preenchidas pelo PostgREST": faz esta MESMA leitura contra o banco de
@@ -107,6 +119,11 @@ export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore
      *     aqui ficaria sem prova nenhuma, com o script verde provando as seis
      *     velhas. MEDIDO: tirando `is_waitlist` da linha de baixo, `tsc --noEmit`
      *     fica em ZERO e a suite inteira acende UMA assertiva, a dela.
+     *  3. `services/email-outbox.contract.ts` ("da a cada inscricao o resumo da
+     *     SUA inscricao"): faz esta leitura pelo cliente de verdade e confere os
+     *     seis CAMPOS ja traduzidos, em DUAS inscricoes. E a unica das tres que
+     *     passa pelo caminho inteiro -- select, embed do PostgREST e
+     *     `summariesById` --; as outras duas veem cada uma so um pedaco.
      *
      * ── E A TRADUCAO NAO MORA MAIS AQUI ──
      *
