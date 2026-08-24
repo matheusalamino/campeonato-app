@@ -7,7 +7,7 @@
 #
 # O QUE ESTE ARQUIVO COBRE, e por que ele existe em sh e nao em vitest: o
 # vitest deste repo nao abre conexao com o banco, entao nada do que a TABELA
-# promete tem onde ser provado la. Sao quatro familias:
+# promete tem onde ser provado la. Sao cinco familias:
 #
 #   1. unicidade por acontecimento -- o indice UNIQUE (kind, dedupe_key);
 #   2. o formato da linha -- `dedupe_key` NOT NULL, o CHECK de `status` e o
@@ -15,7 +15,9 @@
 #   3. concorrencia -- `FOR UPDATE SKIP LOCKED`, que so aparece com DUAS
 #      conexoes ao mesmo tempo;
 #   4. quem ESCREVE na fila -- o gatilho da inscricao e o `contact_email` que
-#      commit_registration passou a gravar.
+#      commit_registration passou a gravar;
+#   5. quem TIRA da fila -- `claim_email_outbox_batch`, o recolhimento do que
+#      ficou parado em 'sending', e quem tem permissao de chamar.
 #
 # A familia 2 nao aparece em nenhum cenario das outras, e essa e a razao de ela
 # existir separada: os cenarios das outras escrevem linhas bem formadas, e um
@@ -25,9 +27,15 @@
 # championship_registrations --, porque o gatilho so existe em relacao a elas.
 # Ela tem seu proprio par de fixtures e sua propria limpeza; leia limpar().
 #
-# O QUE ELE NAO COBRE: nao ha dreno. Este script prova o que a TABELA promete e
-# o que o GATILHO escreve nela, nao o que sai dela. Verde aqui nao quer dizer
-# que algum e-mail foi enviado -- so que o acontecimento ficou registrado.
+# O QUE ELE NAO COBRE: nenhum envio. Verde aqui nao quer dizer que algum e-mail
+# saiu -- so que o acontecimento ficou registrado e que a linha foi entregue ao
+# dreno sem ser entregue duas vezes. O que acontece DEPOIS do claim -- a ordem
+# das guardas de envio, a escada de reentrega, quem recebe -- e decidido em
+# `features/email/outbox.ts` e provado no vitest, sem tocar a rede.
+#
+# Nao ha, e nao deve haver, assertiva de envio aqui: mandar e-mail de verdade a
+# partir de um script de teste e o defeito que a porta `EmailSender` existe para
+# tornar impossivel.
 #
 # ATENCAO ao cenario de concorrencia: um teste sequencial passa IDENTICO com o
 # SKIP LOCKED quebrado, porque sem disputa nao ha nada para pular. Por isso a
@@ -55,6 +63,27 @@ KIND_B="test_outbox_beta"
 KIND_L="test_outbox_lock"
 KIND_N="test_outbox_null"
 KIND_S="test_outbox_status"
+KIND_C="test_outbox_claim"
+
+# O PASSADO REMOTO das linhas do cenario do claim, e por que ele precisa ser
+# absurdo: `claim_email_outbox_batch` NAO filtra por kind -- ela pega o proximo
+# lote da fila inteira, que e o trabalho dela. Num banco local com fila de
+# execucoes anteriores parada, um claim de limite 2 pegaria linhas de outra
+# pessoa em vez das deste cenario.
+#
+# O `ORDER BY next_attempt_at` da funcao e a rede: com dez anos de atraso, as
+# linhas deste cenario vem sempre primeiro, e o limite sempre se esgota nelas.
+# Ha assertiva propria conferindo que nenhuma OUTRA linha mudou de estado.
+CLAIM_PASSADO="now() - interval '10 years'"
+CLAIM_PASSADO2="now() - interval '9 years'"
+
+# Dois passados DISTINTOS, e nao um so, porque `ORDER BY next_attempt_at,
+# created_at` nao desempata linhas gravadas no mesmo INSERT: `now()` e estavel
+# dentro da transacao, entao as duas nascem com o mesmo created_at e a ordem
+# entre elas fica por conta do Postgres. MEDIDO: com o mesmo passado nas duas, a
+# assertiva "os dois claims pegam linhas diferentes" ficava vermelha por
+# inversao de ordem sob mutacoes que nao tinham nada a ver com o lock -- vermelho
+# comprado barato, que mandaria o leitor para o lugar errado.
 
 # Os cenarios do gatilho NAO tem kind proprio, e nao podem ter: quem escolhe o
 # `kind` la e o gatilho, e o que se quer provar e justamente que ele escolhe
@@ -110,6 +139,12 @@ erro_estado() {
 # o mantem do tamanho da fila viva em vez do tamanho do historico inteiro, que
 # so cresce. Um indice total responderia as mesmas consultas -- e por isso
 # medir "o indice existe" nao distingue nada.
+# psql imprime o rotulo de cada comando -- BEGIN, ROLLBACK -- junto do
+# resultado. Os cenarios de sondagem do claim PRECISAM da transacao: a funcao
+# nao filtra por kind, e sem o ROLLBACK uma sondagem arrastaria para 'sending'
+# linhas de fora do cenario e as deixaria la. Entao a saida passa por aqui.
+sem_rotulo() { /usr/bin/grep -vE '^(BEGIN|COMMIT|ROLLBACK)$'; }
+
 indice_estado() {
   case "$1" in
     '')                  echo "ausente" ;;
@@ -143,7 +178,7 @@ email_estado() {
 limpar() {
   $DB -c "
     DELETE FROM email_outbox
-     WHERE kind IN ('$KIND_A', '$KIND_B', '$KIND_L', '$KIND_N', '$KIND_S');
+     WHERE kind IN ('$KIND_A', '$KIND_B', '$KIND_L', '$KIND_N', '$KIND_S', '$KIND_C');
 
     -- As linhas do gatilho. Duas passadas, e a segunda nao e redundante: a
     -- primeira alcanca as inscricoes que ainda existem, e o cenario do
@@ -371,6 +406,170 @@ rm -rf "$oficina"
 checar "a conexao 1 ainda segurava o lock quando a 2 rodou" "1" "$segurando"
 checar "as duas conexoes pegam linhas diferentes" "lock-1|lock-2" "$conn1|$conn2"
 
+echo "== o claim do dreno: pegar e marcar na mesma instrucao =="
+# Esta familia prova a UNICA instrucao SQL do dreno,
+# `claim_email_outbox_batch` (migration 20260823040000). Ela nao prova envio
+# nenhum: quem envia recebe um EmailSender e vive em features/email/outbox.ts,
+# com suite propria no vitest e sem tocar a rede.
+limpar
+# Fotografia do que ja estava em 'sending' por fora deste cenario. A funcao NAO
+# filtra por kind -- ela pega o proximo lote da fila inteira --, entao ha
+# assertiva no fim conferindo que ela nao arrastou linha de ninguem junto.
+sending_fora_antes=$($DB -c "SELECT count(*) FROM email_outbox WHERE status='sending' AND kind <> '$KIND_C';")
+
+$DB -c "
+  INSERT INTO email_outbox (kind, dedupe_key, next_attempt_at) VALUES
+    ('$KIND_C', 'claim-1', $CLAIM_PASSADO),
+    ('$KIND_C', 'claim-2', $CLAIM_PASSADO2);
+" > /dev/null
+
+# ── Concorrencia, que e a razao de a funcao existir ──────────────────────────
+#
+# Mesma armadilha do cenario da consulta crua acima: sequencial, isto passaria
+# IDENTICO com o lock quebrado. A conexao 1 abre transacao, chama o claim e
+# SEGURA sem commitar; a 2 chama enquanto isso e tem de voltar com a OUTRA
+# linha.
+#
+# O defeito que isto pega e o unico que importa aqui: sem o lock, os dois
+# disparos do cron leem as mesmas linhas pendentes e mandam os mesmos e-mails.
+# A unicidade (kind, dedupe_key) da tabela NAO protege disso -- ela impede linha
+# repetida, nao envio repetido da mesma linha.
+oficina=$(mktemp -d)
+$DB > "$oficina/claim1.txt" 2>&1 <<SQL &
+BEGIN;
+SELECT 'CLAIM1=' || dedupe_key FROM claim_email_outbox_batch(1, now());
+SELECT pg_sleep(5) /* CLAIMSEGURANDO */;
+COMMIT;
+SQL
+claim1_pid=$!
+
+sleep 2
+
+claim2=$($DB -c "SELECT dedupe_key FROM claim_email_outbox_batch(1, now());" | tr -d ' ')
+
+# Medida ANTES do wait, pelo mesmo motivo detalhado no cenario da consulta crua:
+# depois do wait a sessao 1 ja fechou e isto voltaria 0 num cenario perfeito.
+segurando_claim=$($DB -c "
+  SELECT count(*) FROM pg_stat_activity
+   WHERE pid <> pg_backend_pid()
+     AND state = 'active'
+     AND query LIKE '%CLAIMSEGURANDO%';
+")
+
+wait "$claim1_pid" || true
+claim1=$(sed -n 's/^CLAIM1=//p' "$oficina/claim1.txt" | tr -d ' ')
+rm -rf "$oficina"
+oficina=""
+
+# Primeiro esta, porque ela e a que diz se a proxima significa alguma coisa.
+checar "a conexao 1 ainda segurava o lock quando a 2 chamou o claim" "1" "$segurando_claim"
+checar "os dois claims pegam linhas diferentes" "claim-1|claim-2" "$claim1|$claim2"
+
+checar "o claim marcou as duas linhas como sending" "sending|sending" \
+  "$($DB -c "SELECT string_agg(status, '|' ORDER BY dedupe_key) FROM email_outbox WHERE kind='$KIND_C';")"
+
+# Sem carimbo, 'sending' e estado sem saida: a linha nao esta pendente para ser
+# tentada nem enviada para alguem ter recebido. E assim que um e-mail se perde
+# em silencio quando o processo morre no meio.
+checar "e carimbou claimed_at nas duas" "true|true" \
+  "$($DB -c "SELECT string_agg((claimed_at IS NOT NULL)::text, '|' ORDER BY dedupe_key) FROM email_outbox WHERE kind='$KIND_C';")"
+
+# ROLLBACK porque o claim NAO filtra por kind: sem ele, este claim de sondagem
+# arrastaria para 'sending' duas linhas de fora do cenario e as deixaria la.
+checar "a linha ja pega nao volta no claim seguinte" "0" \
+  "$($DB <<'SQL' | sem_rotulo
+BEGIN;
+SELECT count(*) FROM claim_email_outbox_batch(2, now()) WHERE dedupe_key IN ('claim-1','claim-2');
+ROLLBACK;
+SQL
+)"
+
+# ── next_attempt_at no futuro: e assim que o backoff se expressa ─────────────
+limpar
+$DB -c "
+  INSERT INTO email_outbox (kind, dedupe_key, next_attempt_at)
+  VALUES ('$KIND_C', 'claim-futuro', now() + interval '1 hour');
+" > /dev/null
+# Limite absurdo, e ele e o ponto. Com um limite pequeno esta assertiva NAO
+# DISCRIMINA -- foi medido: `ORDER BY next_attempt_at` poe a linha do futuro no
+# FIM da fila, entao com o filtro `next_attempt_at <= p_now` arrancado ela
+# continua fora do lote, e a assertiva sai verde sobre um dreno que ignora o
+# backoff inteiro. Pedindo a fila toda, a linha do futuro so fica de fora se o
+# filtro estiver la. O ROLLBACK e o que torna isso seguro.
+checar "o claim nao pega linha cujo next_attempt_at ainda esta no futuro" "0" \
+  "$($DB <<'SQL' | sem_rotulo
+BEGIN;
+SELECT count(*) FROM claim_email_outbox_batch(1000000, now()) WHERE dedupe_key = 'claim-futuro';
+ROLLBACK;
+SQL
+)"
+
+# ── Recolhimento do que ficou parado ─────────────────────────────────────────
+#
+# 31 e 29 minutos, dos dois lados do limite de 30. Um so dos dois nao provaria
+# nada: com o recolhimento desligado o de 31 fica para tras, e com o limite
+# frouxo o de 29 e recolhido cedo demais -- e recolher cedo e mandar de novo o
+# que talvez ja tenha saido.
+limpar
+$DB -c "
+  INSERT INTO email_outbox (kind, dedupe_key, status, next_attempt_at, claimed_at) VALUES
+    ('$KIND_C', 'claim-parado',  'sending', $CLAIM_PASSADO,  now() - interval '31 minutes'),
+    ('$KIND_C', 'claim-recente', 'sending', $CLAIM_PASSADO2, now() - interval '29 minutes');
+" > /dev/null
+
+checar "o claim recolhe a linha parada em sending alem do limite" "claim-parado" \
+  "$($DB -c "SELECT dedupe_key FROM claim_email_outbox_batch(1, now());" | tr -d ' ')"
+
+checar "e nao recolhe a que ainda esta dentro do limite" "(vazio)" \
+  "$($DB <<'SQL' | sem_rotulo
+BEGIN;
+SELECT coalesce(string_agg(dedupe_key, ','), '(vazio)')
+  FROM claim_email_outbox_batch(1, now()) WHERE dedupe_key = 'claim-recente';
+ROLLBACK;
+SQL
+)"
+
+checar "o claim nao arrastou nenhuma linha de fora deste cenario" "$sending_fora_antes" \
+  "$($DB -c "SELECT count(*) FROM email_outbox WHERE status='sending' AND kind <> '$KIND_C';")"
+
+# ── Quem pode chamar ────────────────────────────────────────────────────────
+#
+# `REVOKE ... FROM PUBLIC` NAO fecha nada sozinho neste projeto: `anon` e
+# `authenticated` recebem privilegio NOMINAL por ALTER DEFAULT PRIVILEGES, e
+# privilegio nominal so sai por REVOKE nominal. As duas metades da assertiva
+# importam -- so "o dreno consegue" passaria identico com a funcao aberta a
+# todo mundo.
+checar "o dreno executa o claim, e anon e authenticated nao" "true|false|false" \
+  "$($DB -c "SELECT has_function_privilege('service_role','public.claim_email_outbox_batch(int,timestamptz)','EXECUTE')::text
+             || '|' || has_function_privilege('anon','public.claim_email_outbox_batch(int,timestamptz)','EXECUTE')::text
+             || '|' || has_function_privilege('authenticated','public.claim_email_outbox_batch(int,timestamptz)','EXECUTE')::text;")"
+
+# `is_sabbath` levou o mesmo REVOKE na migration 20260819030000, e o dreno
+# depende dela: e a primeira das cinco guardas de envio. Se ela fechasse para o
+# service_role, o dreno nao teria como saber que a pausa comecou.
+checar "o dreno executa is_sabbath, e anon e authenticated nao" "true|false|false" \
+  "$($DB -c "SELECT has_function_privilege('service_role','public.is_sabbath(timestamptz)','EXECUTE')::text
+             || '|' || has_function_privilege('anon','public.is_sabbath(timestamptz)','EXECUTE')::text
+             || '|' || has_function_privilege('authenticated','public.is_sabbath(timestamptz)','EXECUTE')::text;")"
+
+# O privilegio no banco nao e o caminho do dreno: ele chama por RPC do
+# PostgREST, e la um privilegio certo com a funcao fora do cache do schema da
+# 404. As duas metades de novo -- a do anon e o controle que prova que a
+# primeira nao e so "qualquer chave passa".
+API_URL=$(supabase status -o env 2>/dev/null | sed -n 's/^API_URL="\(.*\)"$/\1/p')
+SRK=$(supabase status -o env 2>/dev/null | sed -n 's/^SERVICE_ROLE_KEY="\(.*\)"$/\1/p')
+ANONK=$(supabase status -o env 2>/dev/null | sed -n 's/^ANON_KEY="\(.*\)"$/\1/p')
+rpc_status() {
+  # $1 = chave. Devolve so o codigo HTTP.
+  curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/rest/v1/rpc/is_sabbath" \
+    -H "apikey: $1" -H "Authorization: Bearer $1" -H "Content-Type: application/json" \
+    -d '{"p_at":"2026-08-22T20:00:00Z"}'
+}
+checar "is_sabbath responde ao dreno pelo PostgREST, e recusa o anon" "200|401" \
+  "$(rpc_status "$SRK")|$(rpc_status "$ANONK")"
+
+limpar
+
 echo "== o gatilho: quem escreve na fila =="
 # Daqui para baixo os cenarios usam os kinds DE VERDADE, porque quem escolhe o
 # kind e o gatilho -- ver o comentario junto de CHAMP_T. A limpeza destes e por
@@ -490,7 +689,7 @@ echo "== a limpeza devolve a tabela ao estado de antes =="
 limpar
 checar "as linhas de teste sumiram" "0" \
   "$($DB -c "SELECT count(*) FROM email_outbox
-              WHERE kind IN ('$KIND_A', '$KIND_B', '$KIND_L', '$KIND_N', '$KIND_S');")"
+              WHERE kind IN ('$KIND_A', '$KIND_B', '$KIND_L', '$KIND_N', '$KIND_S', '$KIND_C');")"
 # Assertiva propria para as linhas do gatilho porque elas tem kind DE VERDADE:
 # a de cima nao as ve, e a de baixo so acusaria um total diferente, sem dizer
 # quem sobrou. Estas sao as unicas linhas desta suite que, esquecidas, ficariam

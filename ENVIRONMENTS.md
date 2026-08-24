@@ -149,7 +149,7 @@ Os modelos commitados em `.secrets/staging.app.env.example` e `.secrets/producti
 
 ### E-mail transacional (bloco C)
 
-Nada disso esta construido ainda — as variaveis vem primeiro, e o caminho nasce adiante no bloco C. O desenho e este: o comprovante da inscricao publica nao vai sair no submit. A inscricao vai gravar uma linha em `email_outbox` dentro da mesma transacao, e um dreno vai enviar depois — o provedor pode demorar ou falhar, e ninguem espera a rede de terceiro para ver a tela de sucesso.
+O caminho existe em parte. O comprovante da inscricao publica nao sai no submit: a inscricao grava linha em `email_outbox` dentro da mesma transacao, e um dreno envia depois — o provedor pode demorar ou falhar, e ninguem espera a rede de terceiro para ver a tela de sucesso. Hoje ja existem a fila, o gatilho que a enche, e o dreno (`services/email-outbox.ts`). Ainda NAO existem duas pecas, e sem elas nenhum e-mail sai: a rota de cron que dispara o dreno, e o texto dos e-mails — o dreno recebe um renderizador, e o unico disponivel recusa toda linha, adiando-a.
 
 As sete variaveis desse caminho, presentes nos dois modelos:
 
