@@ -124,11 +124,11 @@ limpar
 linhas_antes=$($DB -c "SELECT count(*) FROM email_outbox;")
 
 echo "== unicidade: o mesmo acontecimento nao entra duas vezes =="
-# Todo INSERT desta suite e tolerado e MEDIDO logo abaixo, sem excecao. Nao e
-# frouxidao: nenhum deles esta sendo ignorado, e um comando que quebra vira
-# vermelho na assertiva seguinte em vez de matar a suite no meio -- que e o
-# unico modo de falha em que a tela mente, porque a ultima linha impressa passa
-# a ser a assertiva ANTERIOR e a limpeza do fim nao roda.
+# Todo INSERT desta suite e tolerado, e o resultado de cada um chega a alguma
+# assertiva. Nao e frouxidao: nenhum deles esta sendo ignorado, e um comando
+# que quebra vira vermelho em vez de matar a suite no meio -- que e o modo de
+# falha caro, porque as assertivas seguintes nunca imprimem e a limpeza do fim
+# nao roda.
 $DB -c "
   INSERT INTO email_outbox (kind, dedupe_key, payload)
   VALUES ('$KIND_A', 'inscricao-1', '{\"registration_id\":\"r1\"}'::jsonb);
@@ -140,7 +140,9 @@ checar "a primeira insercao cria a linha" "1" \
 # restricao. O `|| true` aqui nao afrouxa nada -- o erro nao esta sendo
 # ignorado, esta sendo medido na linha seguinte. O que ele evita e o `set -e`
 # matar o script no meio e levar junto as assertivas que ainda tem o que dizer:
-# num banco sem o indice unico, e justamente aqui que ele morreria.
+# num banco COM o indice -- o caso normal -- este insert erra em TODA execucao,
+# entao sem a guarda a suite morreria aqui sempre. (Sem o indice ele passa
+# calado; quem quebra naquele banco e o ON CONFLICT logo abaixo.)
 saida=$($DB -c "
   INSERT INTO email_outbox (kind, dedupe_key)
   VALUES ('$KIND_A', 'inscricao-1');
@@ -170,8 +172,7 @@ echo "== a mesma dedupe_key sob outro kind e outro acontecimento =="
 # O `|| true` NAO e decoracao aqui, e e o defeito que ele antecipa que explica:
 # se alguem estreitar a unicidade para `UNIQUE (dedupe_key)` sozinho, e ESTE
 # insert que passa a quebrar. Sem a guarda, o `set -e` matava a suite nesta
-# linha -- as assertivas seguintes nunca imprimiam, a ultima mensagem na tela
-# era a ANTERIOR (a tela mentia sobre onde parou) e o limpar() do fim nao
+# linha -- as assertivas seguintes nunca imprimiam e o limpar() do fim nao
 # rodava, deixando linha de teste na fila. Com a guarda, o mesmo defeito vira
 # vermelho legivel e a suite termina inteira.
 saida=$($DB -c "
@@ -305,7 +306,8 @@ checar "as duas conexoes pegam linhas diferentes" "lock-1|lock-2" "$conn1|$conn2
 echo "== a limpeza devolve a tabela ao estado de antes =="
 limpar
 checar "as linhas de teste sumiram" "0" \
-  "$($DB -c "SELECT count(*) FROM email_outbox WHERE kind IN ('$KIND_A', '$KIND_B', '$KIND_L');")"
+  "$($DB -c "SELECT count(*) FROM email_outbox
+              WHERE kind IN ('$KIND_A', '$KIND_B', '$KIND_L', '$KIND_N', '$KIND_S');")"
 checar "a tabela voltou ao tamanho de antes" "$linhas_antes" \
   "$($DB -c "SELECT count(*) FROM email_outbox;")"
 
