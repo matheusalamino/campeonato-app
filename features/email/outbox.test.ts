@@ -14,7 +14,7 @@ import {
   type OutboxStore,
   type RegistrationSummary,
 } from "./outbox";
-import type { EmailRenderer } from "./render";
+import type { EmailRenderer, RenderInput } from "./render";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // A rede, envenenada
@@ -374,6 +374,12 @@ type Registro = {
   deferred: string[];
   dead: Array<{ id: string; lastError: string; extras: number }>;
   enviados: EmailMessage[];
+  // O que o dreno ENTREGOU ao render, e nao so o que saiu do send. Duble que
+  // ignora a entrada torna a entrada INOBSERVAVEL, e foi assim que a fiacao do
+  // `summary` ficou sem rede: MEDIDO, trocar o argumento por `summary: null` na
+  // chamada real deixava os 806 testes verdes e o `tsc` em zero -- e em
+  // producao todo e-mail cairia em `no_body`, adiado para sempre, calado.
+  renderizados: RenderInput[];
 };
 
 function fakeStore(
@@ -394,6 +400,7 @@ function fakeStore(
     deferred: [],
     dead: [],
     enviados: [],
+    renderizados: [],
   };
   const store: OutboxStore = {
     async claimBatch(limit, now) {
@@ -461,6 +468,21 @@ const renderOk: EmailRenderer = ({ recipient, siteUrl }) => ({
   text: siteUrl,
 });
 
+/**
+ * O mesmo duble, agora ANOTANDO a entrada.
+ *
+ * Continua sendo duble e nao `renderEmail`: o que estes testes exercitam e o
+ * DRENO, e amarra-los ao texto de verdade faria uma frase reescrita no template
+ * quebrar a suite da fila. O que mudou e so a observabilidade -- sem ela, o
+ * dreno podia passar qualquer coisa em `summary` e nenhuma assertiva veria.
+ */
+function renderRegistrando(registro: Registro): EmailRenderer {
+  return (input) => {
+    registro.renderizados.push(input);
+    return renderOk(input);
+  };
+}
+
 function deps(
   store: OutboxStore,
   registro: Registro,
@@ -474,7 +496,7 @@ function deps(
   return {
     store,
     send,
-    render: renderOk,
+    render: renderRegistrando(registro),
     isOptedOut: async () => false,
     now: AGORA,
     siteUrl: "https://campeonato.exemplo",
@@ -668,6 +690,83 @@ describe("drainOutbox", () => {
     expect(registro.dead).toHaveLength(0);
     expect(registro.deferred).toEqual(["row-1"]);
     expect(r.reasons.no_body).toBe(1);
+  });
+
+  it("entrega ao render o RESUMO carregado, e nao nulo", async () => {
+    // A fiacao `summary` -> `render`, que ate a revisao da T5 nao tinha rede: a
+    // palavra `summary` nao aparecia uma vez sequer neste arquivo. MEDIDO:
+    // trocar o argumento por `summary: null` na chamada real de drainOutbox
+    // deixava 806/806 verde e `tsc` em zero -- e em producao TODO e-mail cairia
+    // em `no_body` e seria adiado para sempre. A fila cresce, nada sai, e
+    // nenhum portao acende.
+    const { store, registro } = fakeStore([linha()], { resumos: { "reg-1": resumo } });
+    await drainOutbox(deps(store, registro));
+
+    expect(registro.renderizados).toHaveLength(1);
+    expect(registro.renderizados[0].summary).toEqual(resumo);
+  });
+
+  it("entrega nulo ao render quando a inscricao nao resolve", async () => {
+    // O outro lado da mesma fiacao. `organizer_new_registration` porque o
+    // destino dele sai do ORGANIZER_EMAIL e nao do cadastro: com um kind de
+    // jogador, a linha morreria antes em `no_recipient` e o render nem seria
+    // chamado -- e a assertiva ficaria verde sem provar nada.
+    const { store, registro } = fakeStore([linha({ kind: "organizer_new_registration" })], {
+      resumos: {},
+    });
+    await drainOutbox(deps(store, registro));
+
+    expect(registro.renderizados).toHaveLength(1);
+    expect(registro.renderizados[0].summary).toBeNull();
+  });
+
+  it("da a cada linha o resumo da SUA inscricao", async () => {
+    // O lote com DUAS inscricoes distintas, que nao existia: os unicos ids do
+    // arquivo eram `reg-1`, `abc` e `""`. Com uma inscricao so, trocar
+    // `resumos.get(regId)` por "o primeiro do mapa" e INVISIVEL -- MEDIDO,
+    // 806/806 verde.
+    //
+    // O defeito que isso esconde e o e-mail de A com os dados de B: nome,
+    // campeonato e situacao de outra pessoa, num envio bem-sucedido. Nenhum
+    // portao acende, porque tudo o que se mede e "saiu e-mail".
+    const linhaA = linha({ id: "row-a", dedupeKey: "reg-a", payload: { registration_id: "reg-a" } });
+    const linhaB = linha({ id: "row-b", dedupeKey: "reg-b", payload: { registration_id: "reg-b" } });
+    const resumoA = {
+      ...resumo,
+      contactEmail: "ana@exemplo.test",
+      playerName: "Ana",
+      championshipName: "Copa A",
+      isWaitlist: false,
+    };
+    const resumoB = {
+      ...resumo,
+      contactEmail: "bruno@exemplo.test",
+      playerName: "Bruno",
+      championshipName: "Copa B",
+      isWaitlist: true,
+    };
+    const { store, registro } = fakeStore([linhaA, linhaB], {
+      resumos: { "reg-a": resumoA, "reg-b": resumoB },
+    });
+
+    await drainOutbox(deps(store, registro));
+
+    // Cada campo separado, e nao so o objeto: assim a mensagem de falha diz
+    // QUAL dado atravessou para a linha errada.
+    expect(registro.renderizados.map((r) => r.row.id)).toEqual(["row-a", "row-b"]);
+    expect(registro.renderizados.map((r) => r.summary?.playerName)).toEqual(["Ana", "Bruno"]);
+    expect(registro.renderizados.map((r) => r.summary?.championshipName)).toEqual([
+      "Copa A",
+      "Copa B",
+    ]);
+    expect(registro.renderizados.map((r) => r.summary?.isWaitlist)).toEqual([false, true]);
+    // E o DESTINO segue a inscricao junto com o conteudo: um resumo trocado que
+    // mantivesse o endereco certo seria o pior caso -- o e-mail chega a pessoa
+    // certa contando a vida de outra.
+    expect(registro.enviados.map((m) => m.to)).toEqual([
+      "ana@exemplo.test",
+      "bruno@exemplo.test",
+    ]);
   });
 
   it("pede o lote com o tamanho e o instante recebidos", async () => {
