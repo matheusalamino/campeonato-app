@@ -17,6 +17,14 @@ describe("siteUrlFrom", () => {
     expect(siteUrlFrom("cls.exemplo.com")).toBeNull();
     expect(siteUrlFrom("/inscrever")).toBeNull();
   });
+
+  it("descarta caminho, query e hash — a base e a origem, e so", () => {
+    // Decisao deliberada: nao ha basePath no next.config.ts, entao a base e
+    // sempre a origem. Se um dia houver, e ESTE teste que falha e obriga a
+    // decisao consciente -- em vez de o link quebrar em silencio.
+    expect(siteUrlFrom("https://cls.exemplo.com/campeonato")).toBe("https://cls.exemplo.com");
+    expect(siteUrlFrom("https://cls.exemplo.com/x?a=1#b")).toBe("https://cls.exemplo.com");
+  });
 });
 
 describe("linkTo", () => {

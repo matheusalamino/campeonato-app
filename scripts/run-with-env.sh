@@ -46,6 +46,11 @@ read_var() {
 
 OBRIGATORIAS="NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY"
 
+# As do bloco C: exportadas quando presentes, e silenciosas quando nao. Elas nao
+# entram em OBRIGATORIAS porque a ausencia delas nao impede rodar o app -- so
+# impede mandar e-mail, e quem precisa disso falha com mensagem propria.
+OPCIONAIS="BREVO_API_KEY EMAIL_FROM EMAIL_FROM_NAME ORGANIZER_EMAIL NEXT_PUBLIC_SITE_URL EMAIL_TOKEN_SECRET CRON_SECRET"
+
 # Uma variavel faltando aqui faria o app cair de volta no valor do .env.local,
 # rodando com a URL do ambiente remoto somada a chave local. Falha cedo.
 for KEY in $OBRIGATORIAS; do
@@ -80,6 +85,15 @@ fi
 
 for KEY in $OBRIGATORIAS; do
   export "$KEY=$(read_var "$KEY")"
+done
+
+# Sem `if`, um `[ -n "$VALOR" ]` falso derrubaria o script inteiro por causa do
+# `set -e` la em cima, e as variaveis seguintes sumiriam sem uma linha de aviso.
+for KEY in $OPCIONAIS; do
+  VALOR=$(read_var "$KEY" || true)
+  if [ -n "$VALOR" ]; then
+    export "$KEY=$VALOR"
+  fi
 done
 
 HOST=$(printf '%s' "$NEXT_PUBLIC_SUPABASE_URL" | sed -E 's#^https?://##; s#/.*##')
