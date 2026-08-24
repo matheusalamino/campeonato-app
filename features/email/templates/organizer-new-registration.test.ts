@@ -156,12 +156,20 @@ describe("organizerNewRegistrationEmail", () => {
     ];
 
     for (const caso of casos) {
-      for (const corpo of corpos(organizerNewRegistrationEmail(caso))) {
+      const m = organizerNewRegistrationEmail(caso);
+      for (const corpo of corpos(m)) {
         expect(corpo).not.toContain("{{");
         expect(corpo).not.toContain("}}");
         expect(corpo).not.toContain("undefined");
         expect(corpo).not.toContain("[nome]");
       }
+      // O espaco duplo entra AQUI, e nao so no teste do nome faltando: la o
+      // `championshipName` nunca e nulo, entao um `${data.championshipName ?? ""}`
+      // no meio de uma frase escapava. MEDIDO: passava 817/817. E a mesma metade
+      // que ficou para tras no comprovante e foi consertada em e349127 -- aqui
+      // ela ficou por mais uma rodada.
+      expect(m.subject, `assunto com espaco duplo em ${JSON.stringify(caso)}`).not.toMatch(/ {2}/);
+      expect(m.text, `texto com espaco duplo em ${JSON.stringify(caso)}`).not.toMatch(/ {2}/);
     }
   });
 

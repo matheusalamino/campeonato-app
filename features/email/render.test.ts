@@ -139,6 +139,43 @@ describe("renderEmail", () => {
     expect(m?.text).not.toMatch(/\bGOL\b/);
   });
 
+  it("poe cada campo do resumo no campo certo dos DOIS templates", () => {
+    // ── A JUNTA QUE ESTA ASSERTIVA EXISTE PARA PRENDER ──
+    //
+    // `renderEmail` copia o resumo para os dados do template campo a campo, e
+    // `playerName` e `championshipName` sao os dois `string | null`. Trocar um
+    // pelo outro NAO tem sintoma de tipo: MEDIDO, os quatro portoes ficavam
+    // verdes nos DOIS templates, e o comprovante passava a cumprimentar a
+    // pessoa pelo nome do campeonato -- "Olá, Copa Alamino 2026!" -- e a por o
+    // nome dela no assunto como se fosse o campeonato.
+    //
+    // As assertivas dos templates nao alcancam isto: elas recebem os dados ja
+    // montados e nao tem como saber de onde cada um veio. A prova precisa de
+    // valores DISTINTOS e reconheciveis, e de olhar o lugar onde cada um
+    // aparece.
+    const resumo = {
+      ...RESUMO,
+      playerName: "NomeDoJogador",
+      championshipName: "NomeDoCampeonato",
+      preferredPosition: "ZAG",
+    };
+
+    const comprovante = renderEmail(entrada("registration_committed", { summary: resumo }));
+    // A saudacao leva a PESSOA; o assunto leva o CAMPEONATO depois do travessao.
+    expect(comprovante?.text).toContain("Olá, NomeDoJogador!");
+    expect(comprovante?.subject).toContain("— NomeDoCampeonato");
+    expect(comprovante?.text).not.toContain("Olá, NomeDoCampeonato");
+
+    const aviso = renderEmail(entrada("organizer_new_registration", { summary: resumo }));
+    // Quem "acabou de se inscrever" e a PESSOA, nunca o campeonato.
+    expect(aviso?.text).toContain("NomeDoJogador acabou de se inscrever.");
+    expect(aviso?.subject).toContain("Nova inscrição: NomeDoJogador");
+    expect(aviso?.subject).toContain("— NomeDoCampeonato");
+    expect(aviso?.text).not.toContain("NomeDoCampeonato acabou de se inscrever");
+    // E a posicao vem do campo da posicao, e nao de outro `string | null`.
+    expect(aviso?.text).toContain("Zagueiro");
+  });
+
   it("o comprovante repassa a lista de espera do resumo", () => {
     // Mesmo motivo do de cima: o template ja tem as duas variantes provadas, e
     // o que falta e a garantia de que o dreno passa o campo CERTO.
