@@ -120,6 +120,17 @@ $$;
 REVOKE ALL ON FUNCTION public.verify_registration_email(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.verify_registration_email(text) FROM anon, authenticated;
 
+-- O GRANT e EXPLICITO, e as funcoes irmas deste repo nao o tem. O motivo e
+-- MEDIDO, nao preferencia: as default privileges do Supabase dao EXECUTE a
+-- `service_role` no momento do CREATE, e `CREATE OR REPLACE` NAO as reaplica.
+-- Numa base onde alguem tenha revogado o privilegio -- por engano, por
+-- endurecimento, por depuracao --, rodar esta migration de novo deixaria a
+-- funcao existindo e inalcancavel, e a tela de verificacao responderia `error`
+-- a todo mundo. Comprovado nesta maquina: depois de
+-- `REVOKE ... FROM service_role`, reaplicar o arquivo INTEIRO nao devolvia o
+-- EXECUTE, e o link vivo passou a mostrar "Nao conseguimos confirmar agora".
+GRANT EXECUTE ON FUNCTION public.verify_registration_email(text) TO service_role;
+
 COMMENT ON FUNCTION public.verify_registration_email(text) IS
 'Resolve a volta do clique no link de verificacao, na MESMA transacao: carimba
 championship_registrations.email_verified_at e propaga contact_email para
