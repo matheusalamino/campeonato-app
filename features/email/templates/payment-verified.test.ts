@@ -129,11 +129,26 @@ describe("paymentVerifiedEmail", () => {
     // recebe EXATAMENTE este texto. "Vaga garantida", "voce esta confirmado no
     // campeonato", "nos vemos em campo" sao todas falsas para ela, e nenhum
     // tipo deste repo acusaria a troca.
+    // ── POR QUE A PROIBICAO E DA PALAVRA "VAGA", E NAO DE UMA FRASE ──
+    //
+    // MEDIDO: a primeira versao desta assertiva proibia
+    // `/vaga (garantida|confirmada|assegurada)/i`, com as duas palavras
+    // GRUDADAS. A mutacao "sua vaga está garantida" -- exatamente a promessa
+    // falsa que a assertiva existe para barrar -- passou VERDE, porque um
+    // "está" no meio ja despregava o padrao. Assertiva que so pega uma redacao
+    // da promessa nao pega a promessa.
+    //
+    // Entao o que se proibe e a PALAVRA. Este e-mail nao tem como falar de vaga
+    // com verdade: ele nao recebe `isWaitlist` e vai para os dois publicos.
+    // Quem precisar mesmo escrever "vaga" aqui tem de passar por esta linha, e
+    // e essa parada obrigatoria que a assertiva compra -- ler o docblock de
+    // payment-verified.ts antes de afrouxa-la.
     const m = paymentVerifiedEmail(DADOS);
 
     for (const corpo of corpos(m)) {
-      expect(corpo).not.toMatch(/vaga (garantida|confirmada|assegurada)/i);
-      expect(corpo).not.toMatch(/confirmad[oa] no campeonato/i);
+      expect(corpo).not.toMatch(/\bvagas?\b/i);
+      expect(corpo).not.toMatch(/\bgarantid[oa]\b|\bassegurad[oa]\b/i);
+      expect(corpo).not.toMatch(/confirmad[oa]\s+(n[oe]ste?|no)\s+campeonato/i);
       expect(corpo).not.toMatch(/nos vemos|te esperamos em campo|bom jogo/i);
     }
   });

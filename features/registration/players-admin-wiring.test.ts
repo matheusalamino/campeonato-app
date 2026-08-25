@@ -46,6 +46,23 @@ const RAIZ = join(process.cwd(), "app", "(protected)", "championship", "players"
 const secao = semComentario(readFileSync(join(RAIZ, "PlayersSection.tsx"), "utf8"));
 const pagina = semComentario(readFileSync(join(RAIZ, "page.tsx"), "utf8"));
 
+/**
+ * SO a string de `select()`, e nao a pagina inteira.
+ *
+ * ── POR QUE ESTE RECORTE EXISTE, MEDIDO ──
+ *
+ * A primeira versao desta suite asseverava `expect(pagina).toMatch(/payment_verified/)`
+ * sobre o arquivo TODO. MUTACAO que a atravessou: tirar `payment_verified` de
+ * dentro do `select()` deixava a assertiva VERDE, porque o nome continua
+ * escrito em outros TRES lugares do mesmo arquivo -- os dois `type` e o
+ * `payment_verified: item.payment_verified` do `map`.
+ *
+ * Ou seja: a assertiva media a presenca da PALAVRA no arquivo, e o defeito
+ * mora na presenca da COLUNA no PEDIDO. Sao coisas diferentes, e so o recorte
+ * separa as duas.
+ */
+const selectDaPagina = pagina.match(/\.select\(\s*`([\s\S]*?)`/)?.[1] ?? "";
+
 describe("app/(protected)/championship/players/page.tsx", () => {
   it("pede payment_verified no select", () => {
     // ── A ARMADILHA DA ALLOWLIST, DO LADO DA LEITURA ──
@@ -59,7 +76,12 @@ describe("app/(protected)/championship/players/page.tsx", () => {
     //
     // E a mesma armadilha do `toRow` do admin de campeonatos, e do `select` do
     // dreno em services/email-outbox.ts. Esta e a rede dela aqui.
-    expect(pagina).toMatch(/payment_verified/);
+    //
+    // O controle vem primeiro: sem ele, um `select()` que deixasse de ser
+    // template literal faria o recorte devolver "" e a assertiva de baixo
+    // ficaria vermelha com a mensagem errada.
+    expect(selectDaPagina, "nao achei a string de select() em page.tsx").not.toBe("");
+    expect(selectDaPagina).toMatch(/\bpayment_verified\b/);
   });
 
   it("leva o campo adiante ate o componente", () => {
