@@ -21,8 +21,12 @@ import type { Plugin } from "vite";
  * depende deste `include`. Esta linha ja atribuiu a ele a afirmacao geral.)
  *
  * Um arquivo que abre
- * conexao com o Postgres dentro dos 830 quebraria o portao principal em toda
- * maquina sem `supabase start`, e o vermelho apontaria para o lugar errado.
+ * conexao com o Postgres dentro da suite PRINCIPAL quebraria o portao de todo
+ * dia em toda maquina sem `supabase start`, e o vermelho apontaria para o lugar
+ * errado. (Esta frase dizia "dentro dos 830", e o numero apodreceu duas vezes
+ * antes de alguem reparar -- a suite tinha 948 quando a T9 comecou e 1002
+ * quando ela acabou. Contagem de suite em prosa e uma data de validade que
+ * ninguem le: a afirmacao nao precisava do numero.)
  *
  * Entao sao duas suites com dois contratos diferentes de ambiente:
  *

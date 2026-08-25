@@ -50,9 +50,12 @@ import type { VerifiableRegistrationRow } from "@/features/email/verification";
  *
  *     npx vitest run --config vitest.contract.config.ts
  *
- * O que continua sem portao neste arquivo e `runOutboxDrain`, que monta o
- * cliente la dentro com `createAdminClient()` e le o ambiente. Leia com isso em
- * mente.
+ * O que continua sem teste de comportamento neste arquivo e `runOutboxDrain`,
+ * que monta o cliente la dentro com `createAdminClient()` e le o ambiente. Leia
+ * com isso em mente. O que existe em volta dela, desde a T9, e rede de FIACAO:
+ * `features/email/drain-wiring.test.ts` le os tres sitios que a chamam --
+ * a rota, o servico da inscricao e a tela do admin -- e recusa que a regra
+ * volte a ser escrita neles.
  */
 
 export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore {
@@ -333,8 +336,20 @@ export type RunDrainOptions = {
  * sabado toda reserva e todo commit devolvem `sabbath` e a suite fica
  * inutilizavel. Um portao cego 24 horas por semana.
  *
- * Na data deste arquivo ninguem chama esta funcao: nao ha rota de cron. Ela e o
- * ponto de entrada que essa rota vai usar.
+ * ── QUEM CHAMA ──
+ *
+ * Esta frase dizia "ninguem chama esta funcao: nao ha rota de cron". Ha, e sao
+ * TRES chamadores, todos passando o instante:
+ *
+ *   app/api/email/drain/route.ts        -- o cron da Vercel (diario) e o admin
+ *   services/public-registration.ts     -- logo depois do submit
+ *   (a tela do admin chega pela rota, nao por aqui)
+ *
+ * Os dois pos-acao passam por `drainWithinBudget`
+ * (features/email/post-action-drain.ts), que poe teto de tempo e impede a
+ * excecao de subir. Chamar esta funcao CRUA de um caminho que ja gravou algo e
+ * o defeito que aquele modulo existe para tornar visivel: ha assertiva negativa
+ * sobre isso em `features/email/drain-wiring.test.ts`.
  */
 export async function runOutboxDrain(options: RunDrainOptions): Promise<DrainReport> {
   const apiKey = process.env.BREVO_API_KEY;
