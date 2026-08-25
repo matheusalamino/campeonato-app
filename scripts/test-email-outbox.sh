@@ -1001,9 +1001,9 @@ checar "e a linha da fila e a MESMA de antes, nao uma nova" "$pv_id_antes" \
 #
 # Defesa em profundidade, e NAO a trava que faz o gatilho funcionar -- a
 # distincao foi medida: com o EXECUTE revogado de `authenticated`, o UPDATE
-# daquela sessao ainda dispara o gatilho. O PostgreSQL cobra EXECUTE de quem
-# CRIA o gatilho, e nao de quem o faz disparar. As duas metades da assertiva
-# importam: so "o service_role consegue" passaria identico com a funcao aberta.
+# daquela sessao ainda dispara o gatilho -- disparar um gatilho nao consulta o
+# EXECUTE de quem disparou. As duas metades da assertiva importam: so "o
+# service_role consegue" passaria identico com a funcao aberta.
 checar "o gatilho do pagamento nao e executavel por anon nem authenticated" "true|false|false" \
   "$($DB -c "SELECT has_function_privilege('service_role','public.enqueue_payment_verified_email()','EXECUTE')::text
              || '|' || has_function_privilege('anon','public.enqueue_payment_verified_email()','EXECUTE')::text

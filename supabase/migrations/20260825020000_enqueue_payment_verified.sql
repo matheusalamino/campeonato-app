@@ -3,11 +3,14 @@
 --
 -- `championship_registrations.payment_verified` existe desde a migration
 -- 20260803000000, com `boolean NOT NULL DEFAULT false`. Ate a data desta
--- migration nenhuma linha do aplicativo escrevia nessa coluna -- medido por
--- varredura de `payment_verified` em `*.ts`, `*.tsx` e `*.sql`: as unicas
--- ocorrencias eram a declaracao do tipo em `types/registration.ts`, o
--- vocabulario de `features/email/kinds.ts` e a propria 20260803000000. A tela
--- do admin nao mencionava pagamento.
+-- migration nenhuma linha do aplicativo GRAVAVA nessa coluna.
+--
+-- Medido por varredura de `payment_verified` em `*.ts`, `*.tsx` e `*.sql`: 11
+-- ocorrencias em 7 arquivos, e nenhuma delas uma escrita -- a declaracao do
+-- tipo (`types/registration.ts`), o vocabulario de e-mail e seus testes
+-- (`features/email/kinds.ts`, `kinds.test.ts`, `render.ts`, `render.test.ts`,
+-- `outbox.test.ts`) e o `ADD COLUMN` da propria 20260803000000. A tela do
+-- admin nao mencionava pagamento em lugar nenhum.
 --
 -- Esta migration cria SOMENTE o gatilho. O controle que passou a escrever a
 -- coluna e o check do admin em
@@ -99,8 +102,8 @@ CREATE TRIGGER trg_enqueue_payment_verified
 -- Aqui isto e defesa em profundidade, e nao a trava que faz o gatilho
 -- funcionar -- e a distincao foi MEDIDA, nao suposta: com o EXECUTE revogado
 -- de `authenticated` (`has_function_privilege` = false), o UPDATE daquela
--- sessao ainda dispara o gatilho e enfileira a linha. O PostgreSQL cobra
--- EXECUTE de quem cria o gatilho, e nao de quem o faz disparar.
+-- sessao ainda dispara o gatilho e enfileira a linha -- disparar um gatilho
+-- nao consulta o EXECUTE de quem disparou.
 --
 -- Por isso tambem NAO ha `GRANT EXECUTE ... TO service_role` nesta migration:
 -- num gatilho nao existe chamador a quem conceder, e um GRANT escrito aqui
