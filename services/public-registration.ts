@@ -12,6 +12,12 @@ import { fieldErrorsFrom } from "@/features/registration/field-errors";
 import { reservationFromRpc, type SlotReservation } from "@/features/registration/slot";
 import { commitRefusal } from "@/features/registration/commit-refusal";
 import type { SabbathWindow } from "@/features/registration/sabbath";
+import {
+  drainWithinBudget,
+  POST_ACTION_DRAIN_BATCH_SIZE,
+  SUBMIT_DRAIN_BUDGET_MS,
+} from "@/features/email/post-action-drain";
+import { runOutboxDrain } from "@/services/email-outbox";
 import type { GroupOption } from "@/types/championship";
 
 export type PlayerPrefill = {
@@ -452,6 +458,37 @@ export async function submitRegistration(
   // literal virar `"sabath"`, e os tres portoes passavam verdes. La o `tsc`
   // recusa as duas coisas, e o teste le as frases.
   if (!result.success) return { ok: false, ...commitRefusal(result.reason) };
+
+  // ── O COMPROVANTE SAI AQUI, E ESTA CHAMADA TEM DUAS TRAVAS ──
+  //
+  // `commit_registration` acabou de disparar `trg_enqueue_registration_emails`,
+  // que poe DUAS linhas em `email_outbox` -- comprovante e aviso ao organizador
+  // -- na mesma transacao. O cron so passa uma vez por dia (limite do plano
+  // Hobby, ver vercel.json), e esperar ate um dia pelo comprovante que a pessoa
+  // esta olhando a tela para receber nao serve.
+  //
+  // As duas travas moram em `drainWithinBudget`, com teste, e nao aqui:
+  //
+  //   1. TETO DE TEMPO. Uma chamada pendurada ao provedor nao pode segurar a
+  //      inscricao de ninguem. Estourar nao perde nada -- a fila e duravel, e
+  //      `claim_email_outbox_batch` recolhe o que ficou em 'sending'.
+  //   2. A EXCECAO NAO SOBE. A inscricao JA esta gravada nesta linha. Falhar a
+  //      resposta por causa do e-mail trocaria um problema pequeno por um
+  //      grande: a pessoa leria "nao foi possivel concluir a inscricao" para
+  //      uma inscricao que existe, e tentaria de novo.
+  //
+  // O desfecho e descartado de proposito: nao ha nada que a tela de sucesso
+  // devesse dizer diferente por causa dele. O que se ve do dreno se ve pela
+  // rota (`/api/email/drain`), que devolve o relatorio.
+  //
+  // `await`, e nao promessa solta: numa funcao serverless a instancia pode ser
+  // congelada assim que a resposta sai, e promessa solta nao tem garantia de
+  // rodar. O primitivo para isso seria `waitUntil` de `@vercel/functions`, que
+  // NAO esta instalado.
+  await drainWithinBudget(
+    () => runOutboxDrain({ now: new Date(), batchSize: POST_ACTION_DRAIN_BATCH_SIZE }),
+    SUBMIT_DRAIN_BUDGET_MS,
+  );
 
   return { ok: true, registrationId: result.registration_id!, isWaitlist: !!result.is_waitlist };
 }

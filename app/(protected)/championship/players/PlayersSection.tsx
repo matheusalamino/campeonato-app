@@ -13,6 +13,7 @@ import {
   paymentCheckView,
   PAYMENT_CHECK_CONFIRM,
 } from "@/features/registration/payment-check";
+import { requestDrain } from "@/features/email/post-action-drain";
 import { RegistrationWithPlayer } from "@/types/registration";
 import { Player } from "@/types/player";
 
@@ -187,6 +188,18 @@ export default function PlayersSection({
     }
 
     toast.success("Pagamento marcado como conferido");
+
+    // O UPDATE acima disparou `trg_enqueue_payment_verified`, que enfileirou o
+    // aviso. O cron passa uma vez por dia (limite do plano Hobby, ver
+    // vercel.json), e quem acabou de ter o pagamento conferido nao deve esperar
+    // ate um dia para saber. Entao a tela pede o dreno pela segunda porta da
+    // rota -- a sessao de admin, so no POST.
+    //
+    // DEPOIS do toast de proposito: a marcacao ja terminou, e o sucesso e dela,
+    // nao do e-mail. `requestDrain` nunca levanta e tem teto proprio (ha teste
+    // para as duas coisas em features/email/post-action-drain.test.ts), entao o
+    // dreno fora do ar nao muda nada desta funcao.
+    await requestDrain();
 
     setConfirmPayment(null);
 
