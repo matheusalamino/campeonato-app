@@ -10,7 +10,7 @@ import type { RegistrationSummary } from "./outbox";
  * antes -- quem le a linha e monta o objeto ficou sem prova.
  *
  * Isso nao e teoria. MEDIDO nesta branch, com o mapeamento ainda no servico,
- * duas mutacoes passaram pelos QUATRO portoes inteiros (806 testes, `tsc` em
+ * duas mutacoes passaram por todos os portoes de entao (806 testes, `tsc` em
  * zero, os dois scripts de banco):
  *
  *  - `isWaitlist: !linha.is_waitlist` -- manda "Inscrição confirmada" para
@@ -51,6 +51,13 @@ export type RegistrationSummaryRow = {
  * e sem nenhuma assertiva de la perceber: os dois campos sao `string | null` e
  * o `tsc` fica limpo.
  */
+/*
+ * Exportada de proposito, e o principio esta escrito em
+ * `features/email/templates/body.ts` (onde `escapeHtml` foi DES-exportado pelo
+ * mesmo criterio): exporte a unidade que o chamador nao-testavel invoca; nao
+ * exporte um passo que um chamador testavel ja exercita. Aqui o chamador e
+ * `services/email-outbox.ts`, que a suite principal nao alcanca.
+ */
 export function summaryFromRow(linha: RegistrationSummaryRow): RegistrationSummary {
   return {
     contactEmail: linha.contact_email ?? null,
@@ -74,7 +81,7 @@ export function summaryFromRow(linha: RegistrationSummaryRow): RegistrationSumma
  *
  * Porque a chave errada nao tem sintoma de tipo. MEDIDO com este laco ainda no
  * servico: trocar `mapa.set(linha.id, ...)` por `mapa.set(registrationIds[0], ...)`
- * passava os QUATRO portoes. Num lote com duas inscricoes, TODO MUNDO recebia o
+ * passava todos os portoes de entao. Num lote com duas inscricoes, TODO MUNDO recebia o
  * resumo da primeira -- nome, campeonato e situacao de outra pessoa, num envio
  * bem-sucedido.
  *

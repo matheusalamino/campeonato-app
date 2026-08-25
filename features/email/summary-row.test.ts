@@ -6,12 +6,13 @@ import { summariesById, summaryFromRow, type RegistrationSummaryRow } from "./su
  *
  * Ela morava em `services/email-outbox.ts`, e `vitest.config.ts` nao coleta
  * `services/**`. MEDIDO com o codigo la: `isWaitlist: !linha.is_waitlist` e a
- * troca de `contactEmail` por `playerEmail` passavam pelos QUATRO portoes --
+ * troca de `contactEmail` por `playerEmail` passavam por todos os portoes
+ * de entao --
  * 806 testes verdes, `tsc` em zero, os dois scripts de banco verdes.
  *
  * As duas redes que a T5 ja tinha nao alcancavam isto, e vale saber por que:
- * elas provam a STRING do `select` (que as seis colunas sao pedidas, e que
- * voltam preenchidas do banco). Coluna pedida e coluna lida sao coisas
+ * elas provam a STRING do `select` (que as sete colunas sao pedidas -- `id`,
+ * a chave, mais as seis do resumo -- e que voltam preenchidas do banco). Coluna pedida e coluna lida sao coisas
  * diferentes -- entre uma e outra ha esta funcao.
  */
 
@@ -125,7 +126,7 @@ describe("summariesById", () => {
   it("indexa cada resumo pelo id da SUA inscricao", () => {
     // DUAS linhas, e com conteudo distinto: com uma so, `mapa.set(ids[0], ...)`
     // e indistinguivel de `mapa.set(linha.id, ...)`. MEDIDO -- essa troca
-    // passava os quatro portoes, e mandava a todo mundo o resumo da primeira
+    // passava todos os portoes de entao, e mandava a todo mundo o resumo da primeira
     // inscricao do lote.
     const mapa = summariesById([LINHA, outra]);
 

@@ -34,7 +34,7 @@ const AGORA = new Date("2026-08-24T12:00:00.000Z");
 describe("outboxRowFrom", () => {
   it("nao troca o id da linha pela chave de deduplicacao", () => {
     // Os dois sao `string` e o `tsc` nao ve diferenca. MEDIDO com o mapeamento
-    // no servico: a troca passava os quatro portoes.
+    // no servico: a troca passava todos os portoes de entao.
     //
     // O dano: `row.id` e o que volta em markSent/requeue/defer. Uma dedupe_key
     // no lugar dele faz o UPDATE nao casar linha nenhuma -- e um UPDATE que nao
@@ -107,7 +107,7 @@ describe("as colunas de cada gravacao", () => {
     // de espera um e-mail que so precisava do proximo disparo do cron.
     //
     // MEDIDO com este objeto no servico: acrescentar `attempts` a ele passava os
-    // quatro portoes.
+    // portoes de entao.
     const cols = deferColumns();
 
     expect(cols.status).toBe("pending");

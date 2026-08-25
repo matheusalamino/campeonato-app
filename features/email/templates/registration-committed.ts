@@ -21,7 +21,11 @@ import { assuntoCom, corpoDe, saudacao, type EmailBody, type Paragrafo } from ".
  *
  * ── O TEXTO NAO E DECISAO DESTE ARQUIVO ──
  *
- * As frases abaixo sao PROPOSTA, e vao ser lidas por 64 pessoas. Elas foram
+ * As frases abaixo sao PROPOSTA: elas vao para a caixa de entrada de todo
+ * mundo que se inscrever, e nenhum portao deste repo revisa texto. (Uma versao
+ * anterior dizia "64 pessoas"; o numero nao tinha ancora nenhuma no repo -- o
+ * unico 64 e a contagem de inscricoes do seed local, que muda na proxima
+ * inscricao.) Elas foram
  * escritas com duas restricoes que nao sao estilo:
  *
  *  1. A variante de espera NAO promete ordem de fila. A regra do goleiro do

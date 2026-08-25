@@ -144,7 +144,7 @@ describe("renderEmail", () => {
     //
     // `renderEmail` copia o resumo para os dados do template campo a campo, e
     // `playerName` e `championshipName` sao os dois `string | null`. Trocar um
-    // pelo outro NAO tem sintoma de tipo: MEDIDO, os quatro portoes ficavam
+    // pelo outro NAO tem sintoma de tipo: MEDIDO, todos os portoes ficavam
     // verdes nos DOIS templates, e o comprovante passava a cumprimentar a
     // pessoa pelo nome do campeonato -- "Olá, Copa Alamino 2026!" -- e a por o
     // nome dela no assunto como se fosse o campeonato.

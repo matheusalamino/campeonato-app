@@ -35,12 +35,26 @@ export type Paragrafo = { texto: string; link?: string };
  * Os cinco de sempre. `'` sai como `&#39;` e nao `&apos;` porque `&apos;` nao
  * existe em HTML4 e clientes de e-mail antigos o renderizam cru.
  *
- * NAO e exportado, e isso e deliberado: fora deste arquivo ninguem escapa nada
- * -- quem monta HTML de e-mail e `corpoDe`, aqui embaixo, e so ele. Exportar
- * daria a esta funcao um leitor que nao existe, e o unico que ela chegou a ter
- * era o proprio teste. Teste que chama a peca interna tambem para de provar a
- * peca PUBLICA: MEDIDO -- com o teste batendo direto aqui, tirar o
- * `escapeHtml(p.link)` de `corpoDe` ficava VERDE nos quatro portoes.
+ * NAO e exportado, e isso e deliberado.
+ *
+ * ── O PRINCIPIO, QUE VALE PARA O REPO INTEIRO E NAO SO PARA ESTA FUNCAO ──
+ *
+ * Exporte a unidade que o chamador NAO-TESTAVEL invoca. Nao exporte um passo
+ * que um chamador TESTAVEL ja exercita.
+ *
+ * Aqui o chamador e `corpoDe`, no mesmo arquivo, e ele tem teste. Entao esta
+ * funcao e passo interno: exportar so serviria para o teste furar para dentro,
+ * e teste que fura para dentro para de provar a montagem. MEDIDO -- com o teste
+ * batendo direto aqui, tirar o `escapeHtml(p.link)` de `corpoDe` ficava VERDE
+ * em todos os portoes; batendo em `corpoDe`, fica vermelho.
+ *
+ * O contraste, e ele parece incoerente ate a regra ficar clara:
+ * `summaryFromRow` e `outboxRowFrom` (features/email/summary-row.ts e
+ * outbox-columns.ts) SAO exportadas na mesma forma. La o chamador e
+ * `services/email-outbox.ts`, que a suite principal nao alcanca -- entao a
+ * funcao exportada e o ponto mais externo que um teste consegue tocar, e nao um
+ * atalho para dentro. Mesma regra, respostas opostas, porque o que muda e se o
+ * chamador tem portao.
  */
 function escapeHtml(valor: string): string {
   return valor

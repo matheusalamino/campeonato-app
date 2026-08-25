@@ -43,7 +43,9 @@ const servico = semComentario(readFileSync(SERVICO, "utf8"));
 const script = readFileSync(SCRIPT, "utf8");
 
 /**
- * As seis colunas mais os dois embeds, POR EXTENSO.
+ * As SETE colunas que o `select` pede, POR EXTENSO: `id` -- a chave por onde
+ * `summariesById` indexa, e que nao e campo do resumo -- mais as seis que viram
+ * `RegistrationSummary`, duas delas dentro de embeds.
  *
  * Declarado aqui, e nao derivado de nenhum dos dois arquivos, de proposito: uma
  * lista derivada concordaria com qualquer mudanca e nao provaria nada. Assim,
@@ -80,7 +82,7 @@ function blocoLoadSummaries(): string {
 }
 
 describe("o select do resumo, nos dois lugares onde ele existe", () => {
-  it("o servico pede exatamente as seis colunas declaradas", () => {
+  it("o servico pede exatamente as sete colunas declaradas", () => {
     const bloco = blocoLoadSummaries();
     const achado = /\.select\(\s*"([^"]+)"/.exec(bloco);
 
@@ -127,11 +129,14 @@ describe("o select do resumo, nos dois lugares onde ele existe", () => {
    * de que a delegacao existe, e nao a prova de que ela esta certa.
    */
   it("as traducoes do store sao delegadas, e nao refeitas aqui", () => {
-    // As seis juntas que a varredura desta rodada achou NUAS eram exatamente os
-    // seis metodos deste store: `services/**` nao e coletado pelo vitest, entao
-    // toda traducao escrita aqui nasce sem portao. As dezesseis juntas de
-    // `features/**` e `lib/**` estavam todas presas -- a fronteira da nudez era
-    // a fronteira do `include`.
+    // Seis das oito juntas NUAS da varredura estavam em seis dos OITO metodos
+    // que `OutboxStore` declara -- os seis que carregam traducao. `services/**`
+    // nao e coletado pelo vitest, entao traducao escrita la nasce sem portao.
+    //
+    // O que NAO se conclui dai: que o `include` seja a causa. A T5b mediu
+    // `lib/email/brevo.ts` -- dentro do include, com teste proprio -- e achou
+    // duas juntas nuas la. O que separa preso de nu e haver assertiva sobre a
+    // junta.
     for (const chamada of [
       /outboxRowsFrom\(/,
       /summariesById\(/,
@@ -157,7 +162,7 @@ describe("o select do resumo, nos dois lugares onde ele existe", () => {
     // Ela NAO e guarda de CORRETUDE, e por uma rodada inteira foi lida como se
     // fosse. MEDIDO: uma SEGUNDA gravacao a mao dentro de `defer` --
     // `atualizar(supabase, id, { attempts: 0, sent_at: null })` -- passava os
-    // quatro portoes e violava justamente o invariante que `deferColumns`
+    // portoes de entao e violava justamente o invariante que `deferColumns`
     // existe para proteger (adiar nao gasta degrau da escada). Passava porque
     // `attempts:` e `sent_at:` nao estao na lista. Denylist so pega o que esta
     // na lista, e o que nao esta e infinito.
@@ -201,8 +206,8 @@ describe("o select do resumo, nos dois lugares onde ele existe", () => {
         `services/email-outbox.ts voltou a escrever \`${literal}\` a mao. As ` +
           "traducoes moram em features/email/summary-row.ts e " +
           "features/email/outbox-columns.ts, onde ha teste de comportamento: " +
-          "`services/**` nao e coletado pelo vitest, e as SEIS juntas nuas da " +
-          "varredura desta rodada eram exatamente os seis metodos deste store.",
+          "`services/**` nao e coletado pelo vitest, e seis das oito juntas " +
+          "nuas da varredura estavam em seis dos OITO metodos deste store.",
       ).not.toContain(literal);
     }
   });

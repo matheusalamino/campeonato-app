@@ -20,8 +20,20 @@ import { assuntoCom, corpoDe, type EmailBody } from "./body";
  * ("Goleiro", "Atacante") -- o defeito daqui e o inverso, imprimir o codigo, e
  * ela fica verde em cima dele. E `features/players/position-display.test.ts`
  * nomeia cinco arquivos de `app/**` e `components/**`, um por um, sem varrer
- * nada. A unica rede sobre esta linha e a assertiva de
- * organizer-new-registration.test.ts.
+ * nada.
+ *
+ * As redes que SOBRAM sao TRES, em dois arquivos -- MEDIDO plantando o codigo
+ * cru no lugar de `positionLabel`, que acende exatamente estas:
+ *
+ *   organizer-new-registration.test.ts  "exibe a posicao pelo ROTULO, nunca
+ *                                        pelo codigo cru"
+ *   render.test.ts                      "o aviso da organizacao leva a posicao
+ *                                        pelo rotulo"
+ *   render.test.ts                      "poe cada campo do resumo no campo
+ *                                        certo dos DOIS templates"
+ *
+ * A primeira versao deste docblock dizia "a unica rede", e era falso: contava
+ * so o teste vizinho e esquecia as duas do render.
  *
  * ── POR QUE NAO HA LINK PARA O ADMIN ──
  *

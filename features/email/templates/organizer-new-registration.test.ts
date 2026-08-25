@@ -26,7 +26,12 @@ import {
  * test.ts` nomeia cinco arquivos de `app/**` e `components/**`, um por um, e
  * nao varre nada.
  *
- * Ou seja: para `features/email/` a unica rede e esta.
+ * Ou seja: para `features/email/` a rede sobre a posicao e SO a das assertivas
+ * deste bloco -- nao a varredura. Sao TRES, em dois arquivos, e MEDIDO plantando
+ * o codigo cru: a daqui ("exibe a posicao pelo ROTULO") e duas de
+ * `render.test.ts` ("o aviso da organizacao leva a posicao pelo rotulo" e "poe
+ * cada campo do resumo no campo certo dos DOIS templates"). Este comentario ja
+ * disse "a unica rede e esta", e era falso.
  */
 
 const BASE: OrganizerNewRegistrationData = {

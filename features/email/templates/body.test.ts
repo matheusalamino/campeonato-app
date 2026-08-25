@@ -11,7 +11,7 @@ import { assuntoCom, corpoDe, saudacao } from "./body";
 describe("o escape de HTML, pela superficie que o usa", () => {
   // As assertivas batem em `corpoDe`, e nao no `escapeHtml` direto, DE
   // PROPOSITO. MEDIDO: com o teste chamando a peca interna, tirar o
-  // `escapeHtml(p.link)` de `corpoDe` ficava verde nos quatro portoes -- a peca
+  // `escapeHtml(p.link)` de `corpoDe` ficava verde em todos os portoes -- a peca
   // continuava certa e ninguem a chamava para o link. Teste que fura para a
   // peca interna deixa de provar a montagem.
   const html = (texto: string) => corpoDe([{ texto }]).html;

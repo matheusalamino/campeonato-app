@@ -11,23 +11,39 @@ export default defineConfig({
     // `import "server-only"`. MEDIDO: com ele resolvido para um modulo vazio e
     // `services/**` nesta linha, um teste escrito la roda.
     //
-    // O que segura e o resto: QUASE toda funcao exportada do servico monta o
-    // cliente do Supabase la dentro (`createAdminClient()`, `createClient()`),
-    // entao a primeira assertiva de verdade comecaria dublando o banco.
-    // "Quase", e nao "toda": esta frase dizia "toda" ate a T5b e ENGANAVA, e o
-    // contraexemplo e justamente a porta que o contrato de banco usa —
-    // `createSupabaseOutboxStore(supabase)` RECEBE o cliente por argumento.
+    // O que segura e o resto: quase nenhuma funcao exportada do servico aceita
+    // um cliente de fora, entao a primeira assertiva de verdade comecaria
+    // dublando o banco. CONTADO em `services/*.ts`, 15 funcoes exportadas:
+    //
+    //   9  montam o cliente DENTRO da funcao (`createAdminClient()`,
+    //      `createClient()`) — public-registration (7), championship-capacity,
+    //      runOutboxDrain;
+    //   5  usam um cliente de NIVEL DE MODULO, montado no import — pior para
+    //      teste, porque nem chamar a funcao e preciso (match-events, players,
+    //      registrations);
+    //   1  RECEBE o cliente por argumento: `createSupabaseOutboxStore(supabase)`.
+    //
+    // Essa ultima e a porta por onde o contrato de banco entra. Esta frase ja
+    // disse "toda" (falso, ha o contraexemplo) e depois "QUASE toda" (tambem
+    // falso: 9 de 15 nao e "quase toda"). O numero esta acima para nao precisar
+    // de adverbio.
     //
     // A obra grande — destravar `services/**` inteiro — continua adiada de
     // proposito, e o desvio desta feature e este: regra vai para `features/**`,
     // onde tem teste de verdade, e a FIACAO que sobra no servico e lida como
-    // texto em features/registration/service-wiring.test.ts.
+    // texto. Cada feature tem o seu leitor, e eles leem servicos DIFERENTES:
+    // `features/email/service-wiring.test.ts` le `services/email-outbox.ts`, e
+    // `features/registration/service-wiring.test.ts` le
+    // `services/public-registration.ts`. Esta linha nomeava so o segundo,
+    // inclusive no paragrafo sobre a feature de e-mail.
     //
     // E EXISTE UMA SEGUNDA SUITE. `vitest.contract.config.ts` exercita
     // `services/email-outbox.ts` contra o Postgres local, pelo contraexemplo
     // acima e sem dublar nada. Ela e separada porque ESTA suite nao pode
-    // precisar de banco — e disso que o docblock de `features/email/outbox.ts`
-    // se apoia para afirmar que nenhum teste daqui toca a rede. O `include`
+    // precisar de banco. (`features/email/outbox.ts` afirma que a suite DAQUELE
+    // ARQUIVO nao toca a rede, e o veneno do `fetch` de la e escopo de arquivo:
+    // ele nao promete nada sobre a suite inteira, e nao se apoia neste
+    // `include`. Esta linha ja generalizou a frase dele.) O `include`
     // dela e `services/**/*.contract.ts`, que nao cruza com o desta linha por
     // construcao: nenhum glob de `*.test.ts` alcanca `*.contract.ts`. Rode-a a
     // mao, com o stack local de pe:

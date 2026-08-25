@@ -51,7 +51,7 @@ describe("createBrevoSender", () => {
     // nao muda tipo nenhum e nao acende `tsc`. MEDIDO: com so tres asseveradas,
     // `htmlContent: msg.html` -> `msg.text` (o corpo HTML de todo e-mail virando
     // texto puro) e `subject: msg.subject` -> `msg.text` (o assunto virando o
-    // corpo) passavam os quatro portoes inteiros.
+    // corpo) passavam todos os portoes de entao.
     //
     // E por isso que os tres campos de `MSG` sao deliberadamente DIFERENTES
     // entre si: se `text` e `html` tivessem o mesmo valor, a troca entre eles

@@ -11,10 +11,16 @@ import type { Plugin } from "vite";
  *
  * ── POR QUE UMA SEGUNDA CONFIG, E NAO MAIS UMA LINHA NO `include` DA PRIMEIRA ──
  *
- * Porque a suite principal NAO PODE precisar de banco. Ela roda em qualquer
- * maquina, sem stack local, e o docblock de `features/email/outbox.ts` se apoia
- * nisso para afirmar que nenhum teste daquele conjunto toca a rede -- e por isso
- * que ele pode envenenar o `fetch` global e continuar verde. Um arquivo que abre
+ * Porque a suite principal NAO PODE precisar de banco: ela roda em qualquer
+ * maquina, sem stack local.
+ *
+ * (O docblock de `features/email/outbox.ts` afirma que a suite DAQUELE ARQUIVO
+ * nao toca a rede, e e por isso que ELE pode envenenar o `fetch` global e
+ * continuar verde. O veneno e escopo de arquivo -- `beforeAll`/`afterAll` do
+ * proprio outbox.test.ts --, entao aquela frase nao fala da suite inteira nem
+ * depende deste `include`. Esta linha ja atribuiu a ele a afirmacao geral.)
+ *
+ * Um arquivo que abre
  * conexao com o Postgres dentro dos 830 quebraria o portao principal em toda
  * maquina sem `supabase start`, e o vermelho apontaria para o lugar errado.
  *

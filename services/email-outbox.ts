@@ -108,11 +108,12 @@ export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore
      * E a mesma armadilha da allowlist do `toRow` no admin, e a rede contra ela nao
      * mora aqui. Sao TRES -- a terceira chegou na T5b --, e nenhuma sozinha bastava:
      *
-     *  1. `scripts/test-email-outbox.sh`, cenario "as seis colunas do resumo voltam
+     *  1. `scripts/test-email-outbox.sh`, cenario "as sete colunas do resumo voltam
      *     preenchidas pelo PostgREST": faz esta MESMA leitura contra o banco de
      *     verdade -- PostgREST, chave do service_role, o mesmo embed aninhado -- e
-     *     confere que as seis voltam. MEDIDO: tirando `is_waitlist` de la, o
-     *     cenario fica vermelho (`sim|nao|sim|sim|sim|sim`).
+     *     confere que as sete voltam (`id` mais as seis do resumo). MEDIDO: tirando `is_waitlist` de la, o
+     *     cenario fica vermelho (`sim|nao|sim|sim|sim|sim|sim`). Ele ja asseverou
+     *     SEIS trechos e deixou `players.name` nu -- ver o commit 5972c7a.
      *  2. `features/email/service-wiring.test.ts`: le ESTE arquivo e AQUELE script
      *     como texto e confere que os dois pedem a mesma lista. Sem ela, o `select`
      *     do script era uma COPIA que ninguem conferia -- coluna acrescentada so
@@ -121,7 +122,7 @@ export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore
      *     fica em ZERO e a suite inteira acende UMA assertiva, a dela.
      *  3. `services/email-outbox.contract.ts` ("da a cada inscricao o resumo da
      *     SUA inscricao"): faz esta leitura pelo cliente de verdade e confere os
-     *     seis CAMPOS ja traduzidos, em DUAS inscricoes. E a unica das tres que
+     *     seis CAMPOS do resumo ja traduzidos, em DUAS inscricoes. E a unica das tres que
      *     passa pelo caminho inteiro -- select, embed do PostgREST e
      *     `summariesById` --; as outras duas veem cada uma so um pedaco.
      *
@@ -133,10 +134,12 @@ export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore
      *
      * MEDIDO, com as traducoes neste arquivo: `isWaitlist: !linha.is_waitlist`,
      * a troca de `contactEmail` por `playerEmail` e a chave fixa
-     * (`mapa.set(registrationIds[0], ...)`) passavam pelos quatro portoes
-     * inteiros. A varredura de juntas da terceira rodada achou OITO juntas nuas
-     * no caminho `linha do banco -> e-mail enviado`, e SEIS eram os seis metodos
-     * deste store; as dezesseis de `features/**` e `lib/**` estavam presas.
+     * (`mapa.set(registrationIds[0], ...)`) passavam por todos os portoes de
+     * entao. A varredura da terceira rodada achou OITO juntas nuas no caminho
+     * `linha do banco -> e-mail enviado`, e seis delas estavam em seis dos OITO
+     * metodos deste store -- os seis que carregam traducao. O detalhe das tres
+     * mutacoes esta em `features/email/summary-row.ts`, que e onde elas se
+     * aplicam; aqui fica so o ponteiro.
      */
     async loadSummaries(registrationIds) {
       if (registrationIds.length === 0) return new Map();

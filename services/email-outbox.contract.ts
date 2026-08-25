@@ -17,7 +17,7 @@ import type { OutboxStore } from "@/features/email/outbox";
  *
  * ── O QUE ESTE ARQUIVO PROVA, E QUE NADA MAIS PROVAVA ──
  *
- * A FIACAO de `services/email-outbox.ts`: os seis metodos que `OutboxStore`
+ * A FIACAO de `services/email-outbox.ts`: os OITO metodos que `OutboxStore`
  * promete, montados sobre o cliente do Supabase. Ate aqui esse arquivo era o
  * unico trecho do caminho `linha do banco -> e-mail enviado` sem portao nenhum,
  * e a prosa dele mesmo dizia: `services/**` nao e coletado pelo vitest, um
@@ -39,12 +39,18 @@ import type { OutboxStore } from "@/features/email/outbox";
  *    NAO DA ──
  *
  * Porque o obstaculo que aquele comentario nomeia nao vale para ESTE ponto de
- * entrada. Ele diz que o que segura e "toda funcao exportada do servico montar o
- * cliente do Supabase la dentro (`createAdminClient()`)". `createSupabaseOutboxStore`
- * e a excecao: ela RECEBE o cliente por argumento. Entao o contrato passa um
- * cliente `service_role` de verdade, apontado para o Postgres local, e nao dubla
- * nada. (A frase daquele arquivo foi corrigida junto deste commit; ela tinha
- * contraexemplo.)
+ * entrada. Ele diz que quase nenhuma funcao exportada do servico aceita cliente
+ * de fora -- e conta: das 15 exportadas em `services/*.ts`, 9 montam o cliente
+ * dentro, 5 usam um cliente de nivel de modulo, e UMA recebe por argumento.
+ *
+ * Essa uma e `createSupabaseOutboxStore`, e e por ela que o contrato entra:
+ * passa um cliente `service_role` de verdade, apontado para o Postgres local, e
+ * nao dubla nada.
+ *
+ * (Aquela frase ja disse "toda funcao exportada monta o cliente la dentro", que
+ * tinha contraexemplo, e depois "QUASE toda", que a contagem tambem desmente.
+ * Se ela mudar de novo, esta citacao aqui envelhece junto -- por isso o que
+ * importa esta dito pelo numero, e nao pela citacao.)
  *
  * `import "server-only"` nunca foi o obstaculo -- ver o plugin de modulo vazio em
  * `vitest.contract.config.ts`.
@@ -473,7 +479,7 @@ describe("countSentSince", () => {
   it("conta so o que foi ENVIADO, e so a partir do instante pedido", async () => {
     // A cota de 300/dia do plano gratuito e o recurso escasso do bloco. Contar a
     // coluna errada -- 'pending' no lugar de 'sent' -- nao muda tipo nenhum e
-    // deixa os quatro portoes verdes.
+    // deixa todos os outros portoes verdes.
     //
     // A medida e o DELTA, e nao o absoluto: a fila do banco local tem linhas de
     // verdade, e um numero fixo aqui viraria vermelho toda vez que alguem se
@@ -666,7 +672,7 @@ describe("defer", () => {
     //
     // MEDIDO: uma segunda gravacao a mao dentro de `defer` --
     // `atualizar(supabase, id, { attempts: 0, sent_at: null })` -- passava os
-    // QUATRO portoes, porque a defesa era uma lista de literais proibidos em
+    // portoes de entao, porque a defesa era uma lista de literais proibidos em
     // service-wiring.test.ts e nem `attempts:` nem `sent_at:` estavam nela.
     // Denylist so pega o que esta na lista; um invariante sobre a LINHA nao tem
     // lista de onde escapar.

@@ -9,9 +9,16 @@ import { registrationCommittedEmail } from "./templates/registration-committed";
  *
  * ── POR QUE ARQUIVO PROPRIO, E NAO MAIS UM PEDACO DE outbox.ts ──
  *
- * Porque `outbox.ts` ja passava de 400 linhas com cinco responsabilidades, e a
- * costura foi a coisa apontada na revisao da T4. `RenderInput` e
- * `EmailRenderer` MORAVAM la e vieram para ca junto com quem os implementa.
+ * Por COESAO, e nao por alivio de tamanho -- e a diferenca importa, porque a
+ * primeira versao deste docblock alegava o alivio e ele nao aconteceu. MEDIDO:
+ * `outbox.ts` tinha 417 linhas antes do commit que extraiu este arquivo e ficou
+ * com 437 DEPOIS dele; segue com 437. A extracao levou embora `RenderInput`,
+ * `EmailRenderer` e o `stubRenderer`, e trouxe de volta mais comentario do que
+ * tirou de codigo.
+ *
+ * O que ela de fato resolveu foi a costura apontada na revisao da T4: quem
+ * decide `kind -> template` agora mora junto de quem implementa os templates,
+ * e nao no meio do dreno.
  *
  * Os dois arquivos se importam, e nao ha ciclo em tempo de execucao: daqui para
  * `outbox.ts` sao so TIPOS, e de la para ca so o tipo `EmailRenderer`. `import

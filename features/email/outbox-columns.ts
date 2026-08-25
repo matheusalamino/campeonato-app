@@ -8,9 +8,17 @@ import type { OutboxRow } from "./outbox";
  *
  * Porque la nao ha rede, e a varredura de juntas desta rodada mostrou que isso
  * nao era um buraco pontual: das oito juntas NUAS achadas no caminho `linha do
- * banco -> e-mail enviado`, SEIS eram os seis metodos do store, e todas as
- * dezesseis juntas de `features/**` e `lib/**` estavam presas. A fronteira da
- * nudez era exatamente a fronteira do `include` do `vitest.config.ts`.
+ * banco -> e-mail enviado`, SEIS estavam em seis dos OITO metodos que
+ * `OutboxStore` declara -- os seis que carregam TRADUCAO. (Os outros dois,
+ * `isSabbath` e `countSentSince`, nao traduzem campo nenhum; a T5b mediu que
+ * eles tambem estavam nus, por outro motivo, e o contrato de banco os cobre.)
+ *
+ * Na mesma varredura, as dezesseis juntas de `features/**` e `lib/**` estavam
+ * presas. NAO conclua dai que o `include` do vitest e a causa: a T5b falsificou
+ * isso medindo `lib/email/brevo.ts`, que esta DENTRO do include e tem teste, e
+ * mesmo assim tinha duas juntas nuas. O que separa preso de nu e haver
+ * assertiva cobrindo a junta -- `services/**` tinha 100% de nudez por nao ter
+ * assertiva nenhuma, e nao por causa do glob.
  *
  * Consertar caso a caso garantiria uma proxima rodada com o proximo caso. O que
  * fecha a familia e a traducao morar onde ha teste -- que e a regra que o
