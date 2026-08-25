@@ -68,9 +68,12 @@ describe("isOrganizerKind", () => {
 describe("os dois kinds que a inscricao enfileira hoje", () => {
   it("estao declarados", () => {
     // Prende os dois nomes ao gatilho `enqueue_registration_emails`, na
-    // migration 20260823030000. Sao os UNICOS `kind` que alguem escreve na fila
-    // na data deste arquivo -- os outros cinco sao vocabulario declarado antes
-    // de existir quem os produza, e nenhum codigo deste repo os enfileira.
+    // migration 20260823030000. Sao os dois que a INSCRICAO enfileira -- nao os
+    // unicos da fila: `payment_verified` tem gatilho proprio (migration
+    // 20260825020000) e `waitlist_promoted` tem `enqueueWaitlistPromotedEmail`
+    // (ainda sem chamador). Os TRES lembretes e que seguem sem produtor.
+    // (Este comentario dizia "os UNICOS" e "os outros cinco" depois de o
+    // gatilho do pagamento ja existir; ver o docblock de kinds.ts.)
     //
     // Renomear um dos dois de um lado so nao quebra nada visivel: o dreno
     // recusaria a linha por `kind` desconhecido e o e-mail simplesmente nao

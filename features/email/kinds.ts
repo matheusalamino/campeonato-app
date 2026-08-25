@@ -14,11 +14,22 @@
  *
  * ── O que existe hoje, e o que so esta declarado ─────────────────────────────
  *
- * Na data deste arquivo o UNICO produtor da fila e o gatilho
- * `enqueue_registration_emails` (migration 20260823030000), e ele escreve dois
- * `kind`: `registration_committed` e `organizer_new_registration`. Os outros
- * cinco nomes sao vocabulario declarado adiante do uso -- nenhum codigo deste
- * repo os enfileira, e nenhum e-mail desses ja saiu.
+ * Sao TRES os produtores da fila, e QUATRO dos sete `kind` tem quem os escreva:
+ *
+ *  - `enqueue_registration_emails` (gatilho, migration 20260823030000) escreve
+ *    `registration_committed` e `organizer_new_registration`;
+ *  - `enqueue_payment_verified_email` (gatilho, migration 20260825020000)
+ *    escreve `payment_verified`;
+ *  - `enqueueWaitlistPromotedEmail` (services/email-outbox.ts) escreve
+ *    `waitlist_promoted` -- e este ainda NAO tem chamador: quem promove nasce
+ *    no bloco A6b, e ate la a funcao existe sem que nada a invoque.
+ *
+ * Os TRES lembretes seguem sendo vocabulario declarado adiante do uso: nenhum
+ * codigo deste repo os enfileira.
+ *
+ * (Esta lista ja esteve errada. Ela dizia "o UNICO produtor da fila" e "os
+ * outros cinco -- nenhum codigo deste repo os enfileira" depois de o gatilho do
+ * pagamento ja existir. Quem acrescentar produtor atualiza aqui.)
  *
  * Eles estao aqui, e nao adiante, porque a lista tem de fechar para o `switch`
  * ser exaustivo: e o `never` do fim que transforma "esqueci de classificar" em
