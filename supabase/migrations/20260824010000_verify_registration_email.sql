@@ -3,7 +3,15 @@
 --
 -- A migration 20260823020000 criou as tres colunas (`contact_email`,
 -- `email_verification_token_hash`, `email_verified_at`) e disse, com todas as
--- letras, que ninguem escrevia nelas ainda. Esta e a que escreve.
+-- letras, que ninguem escrevia nelas ainda. As tres passaram a ter dono, e esta
+-- migration e o ULTIMO dos tres, nao os tres:
+--
+--   `contact_email`                  -- `commit_registration` (20260823030000)
+--   `email_verification_token_hash`  -- o store, ao montar o comprovante
+--                                       (`issueVerificationToken`)
+--   `email_verified_at`              -- ESTA funcao, na volta do clique
+--
+-- Alem dela, esta funcao escreve uma coluna de OUTRA tabela: `players.email`.
 --
 -- ── Por que uma FUNCAO, e nao dois updates do cliente ────────────────────────
 --
@@ -120,15 +128,17 @@ $$;
 REVOKE ALL ON FUNCTION public.verify_registration_email(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.verify_registration_email(text) FROM anon, authenticated;
 
--- O GRANT e EXPLICITO, e as funcoes irmas deste repo nao o tem. O motivo e
--- MEDIDO, nao preferencia: as default privileges do Supabase dao EXECUTE a
--- `service_role` no momento do CREATE, e `CREATE OR REPLACE` NAO as reaplica.
--- Numa base onde alguem tenha revogado o privilegio -- por engano, por
--- endurecimento, por depuracao --, rodar esta migration de novo deixaria a
--- funcao existindo e inalcancavel, e a tela de verificacao responderia `error`
--- a todo mundo. Comprovado nesta maquina: depois de
--- `REVOKE ... FROM service_role`, reaplicar o arquivo INTEIRO nao devolvia o
--- EXECUTE, e o link vivo passou a mostrar "Nao conseguimos confirmar agora".
+-- O GRANT abaixo e EXPLICITO, e as funcoes irmas deste repo nao o tem. O
+-- motivo: as default privileges do Supabase dao EXECUTE a `service_role` no
+-- momento do CREATE, e `CREATE OR REPLACE` NAO as reaplica. Sem esta linha,
+-- numa base onde alguem tivesse revogado o privilegio -- por engano, por
+-- endurecimento, por depuracao --, rodar a migration de novo deixaria a funcao
+-- existindo e inalcancavel, e a tela responderia `error` a todo mundo.
+--
+-- Com a linha, roda-la de novo devolve o EXECUTE. As duas metades foram
+-- medidas no stack local antes desta migration ir para qualquer lugar: sem o
+-- GRANT, reaplicar o arquivo NAO devolvia o privilegio e o link vivo passou a
+-- mostrar "Nao conseguimos confirmar agora"; com ele, volta.
 GRANT EXECUTE ON FUNCTION public.verify_registration_email(text) TO service_role;
 
 COMMENT ON FUNCTION public.verify_registration_email(text) IS
