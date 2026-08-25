@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseOutboxStore } from "@/services/email-outbox";
 import type { OutboxStore } from "@/features/email/outbox";
+import { hashToken } from "@/features/email/verification-token";
 
 /**
  * O CONTRATO do store contra o Postgres de verdade.
@@ -17,7 +18,7 @@ import type { OutboxStore } from "@/features/email/outbox";
  *
  * ── O QUE ESTE ARQUIVO PROVA, E QUE NADA MAIS PROVAVA ──
  *
- * A FIACAO de `services/email-outbox.ts`: os OITO metodos que `OutboxStore`
+ * A FIACAO de `services/email-outbox.ts`: os NOVE metodos que `OutboxStore`
  * promete, montados sobre o cliente do Supabase. Ate aqui esse arquivo era o
  * unico trecho do caminho `linha do banco -> e-mail enviado` sem portao nenhum,
  * e a prosa dele mesmo dizia: `services/**` nao e coletado pelo vitest, um
@@ -166,6 +167,30 @@ const CPF_B = "99700000402";
 const CHAMP_NOME = "Contrato do store C1";
 
 /**
+ * As fixturas da verificacao de e-mail, em campeonato PROPRIO.
+ *
+ * Nao reaproveitam `CHAMP`: aquele e criado DENTRO do cenario de `loadSummaries`,
+ * e depender disso amarraria estes cenarios a ORDEM de execucao do arquivo --
+ * rodar so este `describe` (`-t`) deixaria tudo vermelho por falta de fixtura, e
+ * o vermelho apontaria para o lugar errado. Aqui as fixturas nascem no
+ * `beforeAll` do proprio bloco.
+ *
+ * Ids e CPFs continuam FIXOS e listados na limpeza, pelo mesmo motivo daqueles:
+ * as linhas que o gatilho da inscricao enfileira tem `kind` DE VERDADE, e so a
+ * `dedupe_key` (que e o id da inscricao) as distingue de uma fila real.
+ */
+const CHAMP_VERIF = "aaaaaaaa-0000-4000-8000-0000000ec402";
+const REG_PENDENTE = "bbbbbbbb-0000-4000-8000-0000000ec403";
+const REG_VERIFICADA = "bbbbbbbb-0000-4000-8000-0000000ec404";
+const REG_SEM_EMAIL = "bbbbbbbb-0000-4000-8000-0000000ec405";
+const CPF_C = "99700000403";
+const CPF_D = "99700000404";
+const CPF_E = "99700000405";
+const CPFS = [CPF_A, CPF_B, CPF_C, CPF_D, CPF_E];
+const REGS = [REG_A, REG_B, REG_PENDENTE, REG_VERIFICADA, REG_SEM_EMAIL];
+const CHAMPS = [CHAMP, CHAMP_VERIF];
+
+/**
  * As epocas dos cenarios de claim ficam em 1990 e 2000, e isso e load-bearing.
  *
  * `claim_email_outbox_batch` NAO filtra por kind -- ela pega o proximo lote da
@@ -272,10 +297,10 @@ function instante(valor: unknown): string | null {
 async function limpar(): Promise<void> {
   const passos: Array<[string, PromiseLike<{ error: { message: string } | null }>]> = [
     ["fila por kind", db.from("email_outbox").delete().in("kind", KINDS)],
-    ["fila do gatilho", db.from("email_outbox").delete().in("dedupe_key", [REG_A, REG_B])],
-    ["inscricoes", db.from("championship_registrations").delete().eq("championship_id", CHAMP)],
-    ["jogadores", db.from("players").delete().in("cpf", [CPF_A, CPF_B])],
-    ["campeonato", db.from("championships").delete().eq("id", CHAMP)],
+    ["fila do gatilho", db.from("email_outbox").delete().in("dedupe_key", REGS)],
+    ["inscricoes", db.from("championship_registrations").delete().in("championship_id", CHAMPS)],
+    ["jogadores", db.from("players").delete().in("cpf", CPFS)],
+    ["campeonatos", db.from("championships").delete().in("id", CHAMPS)],
   ];
   for (const [nome, passo] of passos) {
     const { error } = await passo;
@@ -735,6 +760,276 @@ describe("markFailedPermanent", () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// O nono metodo: a emissao do token de verificacao
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Este bloco e a UNICA rede possivel para `issueVerificationToken`.
+ *
+ * Ele nao tem traducao para extrair para `features/**` que o cobrisse: as
+ * regras que dava para tirar de la ja sairam (`canIssueVerificationToken`,
+ * `verificationTokenColumns`, `createVerificationToken`, todas com teste na
+ * suite principal). O que resta no servico e a ORDEM -- ler a inscricao,
+ * decidir, sortear, gravar -- e uma ordem so se prova contra o banco.
+ *
+ * Os quatro cenarios abaixo cobrem exatamente os quatro caminhos daquele
+ * metodo, e o segundo (`emitir duas vezes troca o hash`) e o que transforma a
+ * consequencia mais cara em coisa PROVADA em vez de suposta.
+ */
+describe("issueVerificationToken", () => {
+  /** A linha da inscricao, crua. `select("*")` de proposito: o que estes
+   *  cenarios afirmam e o estado das TRES colunas da verificacao, e pedir so
+   *  duas esconderia uma gravacao a mais na terceira. */
+  async function lerInscricao(id: string): Promise<Record<string, unknown>> {
+    const { data, error } = await db
+      .from("championship_registrations")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw new Error(`leitura da inscricao ${id} falhou: ${error.message}`);
+    if (!data) throw new Error(`a inscricao ${id} sumiu no meio do cenario`);
+    return data as Record<string, unknown>;
+  }
+
+  beforeAll(async () => {
+    const { error: erroChamp } = await db.from("championships").insert({
+      id: CHAMP_VERIF,
+      name: "Contrato da verificacao C1",
+      slug: "contrato-verificacao-c1",
+      status: "subscribing",
+    });
+    if (erroChamp) throw new Error(`fixtura do campeonato falhou: ${erroChamp.message}`);
+
+    const { data: jogadores, error: erroPlayers } = await db
+      .from("players")
+      .insert([
+        { cpf: CPF_C, name: "Verif Pendente", email: "cadastro-c@teste.local" },
+        { cpf: CPF_D, name: "Verif Ja Feita", email: "cadastro-d@teste.local" },
+        { cpf: CPF_E, name: "Verif Sem Email", email: "cadastro-e@teste.local" },
+      ])
+      .select("id,cpf");
+    if (erroPlayers) throw new Error(`fixtura dos jogadores falhou: ${erroPlayers.message}`);
+    const porCpf = new Map(
+      (jogadores as Array<{ id: string; cpf: string }>).map((j) => [j.cpf, j.id]),
+    );
+
+    const { error: erroRegs } = await db.from("championship_registrations").insert([
+      {
+        id: REG_PENDENTE,
+        championship_id: CHAMP_VERIF,
+        player_id: porCpf.get(CPF_C),
+        is_waitlist: false,
+        contact_email: "digitado-c@teste.local",
+      },
+      {
+        id: REG_VERIFICADA,
+        championship_id: CHAMP_VERIF,
+        player_id: porCpf.get(CPF_D),
+        is_waitlist: false,
+        contact_email: "digitado-d@teste.local",
+        email_verified_at: "2026-08-23T10:00:00Z",
+      },
+      {
+        // Inscricao criada pelo admin: `contact_email` so e preenchida pelo
+        // caminho publico (`commit_registration`, migration 20260823030000).
+        id: REG_SEM_EMAIL,
+        championship_id: CHAMP_VERIF,
+        player_id: porCpf.get(CPF_E),
+        is_waitlist: false,
+        contact_email: null,
+      },
+    ]);
+    if (erroRegs) throw new Error(`fixtura das inscricoes falhou: ${erroRegs.message}`);
+  });
+
+  it("grava o hash do claro que devolveu, e nao qualquer hash", async () => {
+    const claro = await store.issueVerificationToken(REG_PENDENTE);
+
+    expect(claro, "nao emitiu para inscricao com endereco e sem verificacao").not.toBeNull();
+    const linha = await lerInscricao(REG_PENDENTE);
+    expect(linha.email_verification_token_hash).not.toBeNull();
+    // A junta que importa: o que ficou no banco tem de ser o hash DESTE claro.
+    // Gravar o hash de outro sorteio -- ou o proprio claro -- passa por
+    // "gravou alguma coisa" e produz um link que nunca casa com a linha dele.
+    expect(linha.email_verification_token_hash).toBe(hashToken(claro as string));
+    // E emitir NAO verifica: o carimbo continua nulo.
+    expect(linha.email_verified_at).toBeNull();
+    // Nem toca o endereco da inscricao.
+    expect(linha.contact_email).toBe("digitado-c@teste.local");
+  });
+
+  it("emitir DE NOVO troca o hash, e mata o claro anterior", async () => {
+    // ── A CONSEQUENCIA MAIS CARA DESTA TASK, PROVADA ──
+    //
+    // O banco guarda so o hash, entao o claro de um token antigo e
+    // IRRECUPERAVEL. Reenviar o comprovante obriga a emitir de novo, e o link do
+    // e-mail velho passa a responder "este link nao vale mais".
+    //
+    // Isso e comportamento, e nao defeito -- um endereco tem um link valido por
+    // vez. Mas so vira comportamento SABIDO se estiver provado: sem este
+    // cenario, a proxima pessoa a ver um link velho falhando abre chamado.
+    const primeiro = await store.issueVerificationToken(REG_PENDENTE);
+    const hashDoPrimeiro = (await lerInscricao(REG_PENDENTE)).email_verification_token_hash;
+
+    const segundo = await store.issueVerificationToken(REG_PENDENTE);
+    const hashDoSegundo = (await lerInscricao(REG_PENDENTE)).email_verification_token_hash;
+
+    expect(primeiro).not.toBe(segundo);
+    expect(hashDoPrimeiro).not.toBe(hashDoSegundo);
+    expect(hashDoSegundo).toBe(hashToken(segundo as string));
+    // E o hash do PRIMEIRO nao esta mais em lugar nenhum: o link antigo nao tem
+    // como casar.
+    expect(hashDoSegundo).not.toBe(hashToken(primeiro as string));
+  });
+
+  it("inscricao JA verificada devolve null e nao mexe no hash", async () => {
+    const antes = await lerInscricao(REG_VERIFICADA);
+
+    const claro = await store.issueVerificationToken(REG_VERIFICADA);
+
+    expect(claro).toBeNull();
+    const depois = await lerInscricao(REG_VERIFICADA);
+    // As tres colunas intactas. `toEqual` sobre as tres, e nao so sobre o hash:
+    // um metodo que devolvesse null DEPOIS de gravar passaria numa assertiva
+    // sobre o retorno sozinho.
+    expect(depois.email_verification_token_hash).toBe(antes.email_verification_token_hash);
+    expect(depois.email_verification_token_hash).toBeNull();
+    expect(instante(depois.email_verified_at)).toBe(instante(antes.email_verified_at));
+    expect(depois.contact_email).toBe(antes.contact_email);
+  });
+
+  it("inscricao sem contact_email devolve null e nao grava nada", async () => {
+    const claro = await store.issueVerificationToken(REG_SEM_EMAIL);
+
+    expect(claro).toBeNull();
+    const linha = await lerInscricao(REG_SEM_EMAIL);
+    expect(linha.email_verification_token_hash).toBeNull();
+    expect(linha.email_verified_at).toBeNull();
+  });
+
+  it("inscricao que nao existe devolve null, e nao estoura", async () => {
+    // `maybeSingle()` e nao `single()`: linha apagada depois de a fila enche-la
+    // e caso real (nao ha FK entre `email_outbox` e `championship_registrations`),
+    // e estourar aqui derrubaria o lote inteiro por uma linha orfa.
+    const claro = await store.issueVerificationToken("bbbbbbbb-0000-4000-8000-00000000dead");
+    expect(claro).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A funcao do banco que fecha o ciclo
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * `verify_registration_email` (migration 20260824010000), chamada direto.
+ *
+ * Ela nao e metodo do store -- quem a chama e
+ * `app/(public)/verify-email/[token]/actions.ts` --, e esta e a unica suite
+ * deste repo que fala com o Postgres local. Sem estes cenarios, a propriedade
+ * central da funcao (as duas gravacoes caem JUNTAS) nao teria prova nenhuma:
+ * `app/**` esta fora de todo `include`.
+ */
+describe("verify_registration_email", () => {
+  async function verificar(hash: string | null): Promise<string> {
+    const { data, error } = await db.rpc("verify_registration_email", { p_token_hash: hash });
+    if (error) throw new Error(`verify_registration_email falhou: ${error.message}`);
+    return String(data);
+  }
+
+  async function emailDoCadastro(cpf: string): Promise<string | null> {
+    const { data, error } = await db.from("players").select("email").eq("cpf", cpf).maybeSingle();
+    if (error) throw new Error(`leitura do cadastro ${cpf} falhou: ${error.message}`);
+    return (data as { email: string | null } | null)?.email ?? null;
+  }
+
+  it("carimba a inscricao E propaga o endereco para o cadastro", async () => {
+    // A propagacao acontece SO aqui, e essa e a razao de o clique existir: o
+    // formulario publico descarta o e-mail digitado para CPF ja cadastrado
+    // (`shouldPersistPlayerIdentity`), e e o clique que prova que a caixa e da
+    // pessoa. Sem esta assertiva, "verificar" viraria carimbo decorativo.
+    expect(await emailDoCadastro(CPF_C)).toBe("cadastro-c@teste.local");
+
+    const claro = await store.issueVerificationToken(REG_PENDENTE);
+    expect(await verificar(hashToken(claro as string))).toBe("verified");
+
+    const { data, error } = await db
+      .from("championship_registrations")
+      .select("email_verified_at")
+      .eq("id", REG_PENDENTE)
+      .maybeSingle();
+    if (error) throw new Error(`leitura do carimbo falhou: ${error.message}`);
+    expect((data as { email_verified_at: string | null }).email_verified_at).not.toBeNull();
+
+    // O endereco DIGITADO venceu o do cadastro, e so depois do clique.
+    expect(await emailDoCadastro(CPF_C)).toBe("digitado-c@teste.local");
+  });
+
+  it("o SEGUNDO clique no mesmo link diz 'already', e nao 'unknown'", async () => {
+    // O hash NAO e apagado na verificacao, e e isso que faz o segundo clique
+    // encontrar a linha. Apagando-o, esta chamada responderia 'unknown' e a
+    // tela diria "este link nao vale mais" para quem so clicou duas vezes --
+    // o comportamento mais comum que existe.
+    //
+    // Depende do cenario acima ter rodado: a inscricao ja esta verificada aqui.
+    const { data, error } = await db
+      .from("championship_registrations")
+      .select("email_verification_token_hash")
+      .eq("id", REG_PENDENTE)
+      .maybeSingle();
+    if (error) throw new Error(`leitura do hash falhou: ${error.message}`);
+    const hash = (data as { email_verification_token_hash: string | null })
+      .email_verification_token_hash;
+    expect(hash, "a verificacao apagou o hash").not.toBeNull();
+
+    expect(await verificar(hash)).toBe("already");
+  });
+
+  it("hash que nao casa com nada devolve 'unknown'", async () => {
+    expect(await verificar(hashToken("um token que nunca foi emitido"))).toBe("unknown");
+  });
+
+  it("hash nulo ou vazio NUNCA casa com uma linha de hash nulo", async () => {
+    // `REG_SEM_EMAIL` tem `email_verification_token_hash` nulo, e e a forma mais
+    // comum de linha nesta tabela. Em SQL, `coluna = NULL` nunca e verdadeiro --
+    // mas a funcao nao se apoia nisso: ela recusa o hash ausente ANTES da
+    // consulta. As duas chamadas abaixo provam o resultado, que e o que importa.
+    expect(await verificar(null)).toBe("unknown");
+    expect(await verificar("")).toBe("unknown");
+    expect(await verificar("   ")).toBe("unknown");
+
+    // E a linha de hash nulo continua intacta -- nao foi carimbada por nenhuma
+    // das tres.
+    const { data, error } = await db
+      .from("championship_registrations")
+      .select("email_verified_at")
+      .eq("id", REG_SEM_EMAIL)
+      .maybeSingle();
+    if (error) throw new Error(`leitura de ${REG_SEM_EMAIL} falhou: ${error.message}`);
+    expect((data as { email_verified_at: string | null }).email_verified_at).toBeNull();
+  });
+
+  it("inscricao sem jogador verifica assim mesmo, sem cadastro para atualizar", async () => {
+    // `player_id` e NULLABLE. Sem jogador nao ha `players.email` para gravar, e
+    // a verificacao da INSCRICAO continua valendo: o que ela afirma e que alguem
+    // abriu o link enviado, e isso segue verdade.
+    const { error: erroReg } = await db
+      .from("championship_registrations")
+      .update({ player_id: null, email_verified_at: null, email_verification_token_hash: null })
+      .eq("id", REG_SEM_EMAIL);
+    if (erroReg) throw new Error(`ajuste da fixtura falhou: ${erroReg.message}`);
+    const { error: erroEmail } = await db
+      .from("championship_registrations")
+      .update({ contact_email: "orfa@teste.local" })
+      .eq("id", REG_SEM_EMAIL);
+    if (erroEmail) throw new Error(`ajuste do endereco falhou: ${erroEmail.message}`);
+
+    const claro = await store.issueVerificationToken(REG_SEM_EMAIL);
+    expect(claro).not.toBeNull();
+    expect(await verificar(hashToken(claro as string))).toBe("verified");
+  });
+});
+
 // Ultimo do arquivo, e tem de continuar sendo: o vitest roda os cenarios na
 // ordem em que estao escritos, e este e o que AFIRMA que a limpeza aconteceu. O
 // gancho `afterAll` e backstop, nao prova -- no script irmao um trap com
@@ -750,12 +1045,12 @@ describe("a limpeza", () => {
     // diferente, sem dizer quem sobrou. Sao as unicas linhas deste arquivo que,
     // esquecidas, ficariam numa fila de e-mail real esperando um dreno.
     expect(
-      await contarPorDedupe([REG_A, REG_B]),
+      await contarPorDedupe(REGS),
       "sobrou linha do GATILHO na fila -- kind de verdade, dedupe_key de teste",
     ).toBe(0);
-    expect(await contarTabela("championship_registrations", "id", [REG_A, REG_B])).toBe(0);
-    expect(await contarTabela("players", "cpf", [CPF_A, CPF_B])).toBe(0);
-    expect(await contarTabela("championships", "id", [CHAMP])).toBe(0);
+    expect(await contarTabela("championship_registrations", "id", REGS)).toBe(0);
+    expect(await contarTabela("players", "cpf", CPFS)).toBe(0);
+    expect(await contarTabela("championships", "id", CHAMPS)).toBe(0);
     // A ultima rede: o TOTAL. Ela pega o que as de cima nao enumeram -- uma
     // linha escrita por um cenario com kind que ninguem listou aqui.
     expect(await totalDaFila(), "a fila nao voltou ao tamanho de antes").toBe(filaAntes);
