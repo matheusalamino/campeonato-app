@@ -950,6 +950,47 @@ describe("drainOutbox", () => {
     );
   });
 
+  it("da a cada inscricao o link da SUA inscricao", async () => {
+    // ── O TOKEN DO VIZINHO, E POR QUE ESTE CENARIO PRECISOU EXISTIR ──
+    //
+    // MEDIDO nesta branch: emitir o token da PRIMEIRA inscricao do lote para
+    // TODAS passava 873/873 e `tsc` em zero. Em producao isso e o jogador B
+    // recebendo um link que verifica a inscricao de A -- grava o `contact_email`
+    // de A no cadastro de A -- enquanto o e-mail de B nunca verifica.
+    //
+    // E a MESMA familia que mordeu na T5 ("o e-mail de A com os dados de B"),
+    // consertada no mesmo arquivo pela suite `da a cada linha o resumo da SUA
+    // inscricao`. A junta nova nao herdou o padrao, e a causa foi de FIXTURA:
+    // todo cenario que afirmava `tokensPedidos` usava um lote de UMA inscricao
+    // so, e o de duas linhas compartilhava o mesmo `dedupeKey`. Com um lote
+    // homogeneo, "o token de todos" e "o token de cada um" sao indistinguiveis.
+    //
+    // Por isso aqui sao DUAS inscricoes distintas, com resumos distintos e
+    // tokens distintos -- e a assertiva olha o par, e nao a lista.
+    const a = linha({ id: "a", dedupeKey: "reg-1", payload: { registration_id: "reg-1" } });
+    const b = linha({ id: "b", dedupeKey: "reg-2", payload: { registration_id: "reg-2" } });
+    const { store, registro } = fakeStore([a, b], {
+      resumos: {
+        "reg-1": { ...resumo, contactEmail: "a@exemplo.test", playerName: "Pessoa A" },
+        "reg-2": { ...resumo, contactEmail: "b@exemplo.test", playerName: "Pessoa B" },
+      },
+      tokens: { "reg-1": "TOKEN-DE-A", "reg-2": "TOKEN-DE-B" },
+    });
+    await drainOutbox(deps(store, registro));
+
+    expect(registro.tokensPedidos).toEqual(["reg-1", "reg-2"]);
+    // O PAR destinatario/link, junto: e a unica forma que distingue "cada um
+    // recebeu um link" de "cada um recebeu O SEU".
+    expect(
+      registro.renderizados.map((i) => [i.recipient.email, i.verificationLink]),
+    ).toEqual([
+      ["a@exemplo.test", "https://campeonato.exemplo/verify-email/TOKEN-DE-A"],
+      ["b@exemplo.test", "https://campeonato.exemplo/verify-email/TOKEN-DE-B"],
+    ]);
+    // E dita ao contrario tambem: o link de B nao pode carregar o token de A.
+    expect(registro.renderizados[1].verificationLink).not.toContain("TOKEN-DE-A");
+  });
+
   it("SO o comprovante pede token; o aviso da organizacao nao", async () => {
     // Um token gasto pelo aviso interno nao e desperdicio: ele MATA o link que
     // o jogador acabou de receber, porque o banco guarda um hash por inscricao.
