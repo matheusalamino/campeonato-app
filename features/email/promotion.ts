@@ -31,8 +31,9 @@ import type { EmailKind } from "./kinds";
  *     alguem for promovido, voltar para a espera e ser promovido de novo, o
  *     segundo aviso NAO SAI -- a linha antiga ainda esta la e o `DO NOTHING` a
  *     preserva. Hoje isso e inalcancavel: nao ha desistencia neste repo
- *     (`championship_registrations` nao tem `deleted_at`, nem status, nem
- *     `withdrawn_at` -- so `is_waitlist`), e nada chama esta funcao. Esta
+ *     (conferido em `information_schema.columns`: das 20 colunas de
+ *     `championship_registrations`, nenhuma registra saida -- nao ha
+ *     `deleted_at`, `status` nem `withdrawn_at`), e nada chama esta funcao. Esta
  *     escrito JUSTAMENTE porque e inalcancavel: quem construir o A6b decide se
  *     aceita esse preco, e nao vai descobri-lo pela reclamacao de alguem que
  *     nao recebeu o segundo aviso.
@@ -52,10 +53,19 @@ export type OutboxInsert = {
  * O ALVO do `ON CONFLICT`, e as duas colunas sao load-bearing.
  *
  * Escrito aqui, e nao no servico, porque a versao errada dele e silenciosa e
- * catastrofica: com o alvo em `dedupe_key` sozinho, o aviso de promocao
- * conflitaria com o COMPROVANTE da mesma inscricao -- que ja usa aquela chave
- * -- e o `DO NOTHING` engoliria o INSERT sem erro nenhum. A pessoa seria
- * promovida e nunca saberia, e a chamada devolveria sucesso.
+ * catastrofica -- mas NAO silenciosa, e a diferenca foi medida. O alvo do `ON
+ * CONFLICT` precisa casar um indice unico existente, e nao ha indice em
+ * `dedupe_key` sozinho: o unico e `email_outbox_kind_dedupe (kind,
+ * dedupe_key)`. MEDIDO na T8, com o alvo trocado para `dedupe_key`, o Postgres
+ * recusa o INSERT com `42P10` -- "there is no unique or exclusion constraint
+ * matching the ON CONFLICT specification" --, esta funcao estoura e o quinto
+ * portao fica VERMELHO.
+ *
+ * Ou seja: a colisao com o COMPROVANTE (que usa a mesma `dedupe_key`) e
+ * INALCANCAVEL hoje, e e o proprio Postgres que a barra, alto. A constante
+ * existe para que o alvo continue sendo uma edicao consciente -- o dia em que
+ * alguem criar um indice unico em `dedupe_key` sozinho, o `42P10` para de
+ * tocar e a colisao passa a ser possivel, ai sim em silencio.
  *
  * Nao ha typecheck sobre esta string: e opcao de cliente do Supabase, `string`.
  * Quem a prende e `promotion.test.ts`, e a prova contra o banco de verdade e o

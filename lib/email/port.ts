@@ -6,8 +6,9 @@
  * 1. Trocar Brevo por outro provedor vira UM arquivo. A decisao de 2026-08-23
  *    foi remetente unico sem dominio, e essa escolha se troca por variavel de
  *    ambiente quando existir um dominio -- desde que nada mais conheca o Brevo.
- * 2. Nenhum teste precisa de rede. O dreno, quando existir, vai receber um
- *    `EmailSender` e nao vai saber quem esta do outro lado.
+ * 2. Nenhum teste precisa de rede. O dreno (`drainOutbox`,
+ *    features/email/outbox.ts) recebe um `EmailSender` e nao sabe quem esta do
+ *    outro lado. Esta frase dizia "quando existir"; ele existe.
  */
 export type EmailMessage = {
   to: string;

@@ -251,8 +251,10 @@ let dbUrl = "";
  * perguntas que nenhum cenario de COMPORTAMENTO alcanca -- se a funcao tem
  * `SET search_path`, se e `SECURITY DEFINER`, e quem tem EXECUTE.
  *
- * MEDIDO: removendo `SET search_path = public` da funcao, os 21 cenarios de
- * comportamento ficavam VERDES. O codigo estava certo e nada o prendia.
+ * MEDIDO: removendo `SET search_path = public` da funcao, os cenarios de
+ * comportamento ficavam VERDES -- eram 21 na medicao, e sao 23 hoje (os 26
+ * `it()` do arquivo menos os 3 deste bloco). O codigo estava certo e nada o
+ * prendia.
  *
  * Usa a MESMA `DB_URL` de `supabase status -o env`, com trava de loopback
  * propria -- ver `LOOPBACK_DB`.
@@ -1040,8 +1042,8 @@ describe("verify_registration_email", () => {
     //
     // A assertiva de cima prova que o cadastro CERTO mudou. Nao prova que so ele
     // mudou. MEDIDO nesta branch: alargando o `WHERE id = v_player_id` do
-    // `UPDATE public.players` para `WHERE id IS NOT NULL`, os 21 cenarios
-    // ficavam VERDES -- e o banco local terminava com 64 de 64 jogadores
+    // `UPDATE public.players` para `WHERE id IS NOT NULL`, os cenarios de
+    // comportamento ficavam VERDES (21 na medicao, 23 hoje) -- e o banco local terminava com 64 de 64 jogadores
     // carregando o e-mail de UMA pessoa so. Nenhum cenario olhava para fora da
     // propria fixtura.
     //
@@ -1141,7 +1143,7 @@ describe("verify_registration_email", () => {
  *
  * Nenhuma delas tem sintoma no caminho feliz -- e por isso que precisam de
  * assertiva propria. MEDIDO: removendo `SET search_path = public` da funcao, os
- * 21 cenarios de comportamento ficavam VERDES.
+ * cenarios de comportamento ficavam VERDES -- 21 na medicao, 23 hoje.
  */
 describe("verify_registration_email, pelo catalogo", () => {
   const REGPROC = "'public.verify_registration_email(text)'::regprocedure";

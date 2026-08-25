@@ -30,7 +30,7 @@ import { assuntoCom, corpoDe, type EmailBody } from "./body";
  *   render.test.ts                      "o aviso da organizacao leva a posicao
  *                                        pelo rotulo"
  *   render.test.ts                      "poe cada campo do resumo no campo
- *                                        certo dos DOIS templates"
+ *                                        certo dos QUATRO templates"
  *
  * A primeira versao deste docblock dizia "a unica rede", e era falso: contava
  * so o teste vizinho e esquecia as duas do render.

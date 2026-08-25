@@ -26,7 +26,7 @@ export default defineConfig({
     //
     // Essas duas sao a porta por onde o contrato de banco entra. Esta frase ja
     // disse "toda" (falso, ha o contraexemplo) e depois "QUASE toda" (tambem
-    // falso: 9 de 15 nao e "quase toda"). O numero esta acima para nao precisar
+    // falso: 9 de 16 nao e "quase toda"). O numero esta acima para nao precisar
     // de adverbio.
     //
     // A obra grande — destravar `services/**` inteiro — continua adiada de

@@ -17,18 +17,22 @@ import { semComentario } from "@/features/testing/sem-comentario";
  * `vitest.config.ts` -- um `services/*.test.ts` afirmando `expect(1).toBe(2)`
  * deixa a suite verde. E a mesma armadilha da allowlist do `toRow` no admin.
  *
- * A prova contra o BANCO vive em `scripts/test-email-outbox.sh` ("as seis
+ * A prova contra o BANCO vive em `scripts/test-email-outbox.sh` ("as sete
  * colunas do resumo voltam preenchidas pelo PostgREST"): ela faz a leitura pelo
  * caminho de verdade -- PostgREST, chave do service_role, o mesmo embed
- * aninhado -- e confere que as seis voltam. MEDIDO: tirando `is_waitlist` de la,
- * aquele cenario fica VERMELHO (`sim|nao|sim|sim|sim|sim`).
+ * aninhado -- e confere que as sete voltam. MEDIDO: tirando `is_waitlist` de la,
+ * aquele cenario fica VERMELHO (`sim|nao|sim|sim|sim|sim|sim`).
+ *
+ * (Esta citacao ficou congelada em SEIS depois de o cenario virar SETE --
+ * `players.name` estava sem prova, e o conserto renomeou o cenario. A versao
+ * certa ja estava em services/email-outbox.ts; esta era a copia esquecida.)
  *
  * ── MAS AQUELA PROVA TINHA UM BURACO, E E ELE QUE ESTE ARQUIVO FECHA ──
  *
  * O `select` do script e uma COPIA do `select` do servico, e nada ligava as
  * duas. Quem acrescentasse uma coluna ao servico sem acrescenta-la ao script
  * teria a coluna nova SEM prova nenhuma -- e o script continuaria verde,
- * provando as seis velhas com ar de que provava tudo. Copia que ninguem
+ * provando as velhas com ar de que provava tudo. Copia que ninguem
  * confere e a forma mais barata de uma rede encolher em silencio.
  *
  * Entao a assertiva de baixo compara as duas strings. Espaco nao conta: o
@@ -231,7 +235,9 @@ describe("o select do resumo, nos dois lugares onde ele existe", () => {
       //
       // `dedupe_key:` e a mais cara das tres: escrita a mao com o valor errado
       // -- o id do campeonato, por exemplo -- ela colidiria com a linha de
-      // outra pessoa e o `DO NOTHING` engoliria o INSERT sem erro nenhum.
+      // outra pessoa. MEDIDO: hoje o Postgres barra isso alto (`42P10`, sem
+      // indice unico em `dedupe_key` sozinho) -- o que esta lista guarda e a
+      // ARQUITETURA, para a linha nao voltar a ser montada aqui.
       "kind:",
       "dedupe_key:",
       "payload:",

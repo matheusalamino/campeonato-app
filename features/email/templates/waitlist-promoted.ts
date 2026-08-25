@@ -22,10 +22,15 @@ import { assuntoCom, corpoDe, saudacao, type EmailBody, type Paragrafo } from ".
  * esta certa LA: aquele aviso nao recebe `isWaitlist` e vai igual para quem
  * ainda espera. Aqui e o contrario -- a vaga e a unica noticia que este e-mail
  * carrega, e cala-la o esvaziaria. As duas redes nao se cruzam: a denylist de
- * `payment-verified.test.ts` so exercita `paymentVerifiedEmail`, e nenhuma
- * assertiva deste repo le os templates como texto (conferido por varredura de
- * `templates/` em features/, lib/ e scripts/ -- os tres arquivos que citam a
- * pasta sao render.ts, render.test.ts e summary-row.ts, e nenhum le arquivo).
+ * `payment-verified.test.ts` so exercita `paymentVerifiedEmail`, e nao le
+ * arquivo nenhum.
+ *
+ * ⚠️ MAS UMA VARREDURA LE ESTE ARQUIVO COMO TEXTO, e a T8 afirmou o contrario.
+ * `features/players/vocabulary-sweep.test.ts` desce com `readdirSync` por
+ * `app`, `components`, `features`, `lib` e `services`, e le TODO `.ts`/`.tsx`
+ * -- este inclusive. Ela nao olha promessa nenhuma: o que ela proibe e o
+ * VOCABULARIO DE POSICAO por extenso (goleiro, zagueiro...). Entao escrever
+ * "goleiro" no texto deste e-mail acende aquela suite, e nao esta.
  *
  * ── O TEXTO NAO E DECISAO DESTE ARQUIVO ──
  *

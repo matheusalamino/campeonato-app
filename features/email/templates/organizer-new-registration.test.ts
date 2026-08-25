@@ -30,7 +30,7 @@ import {
  * deste bloco -- nao a varredura. Sao TRES, em dois arquivos, e MEDIDO plantando
  * o codigo cru: a daqui ("exibe a posicao pelo ROTULO") e duas de
  * `render.test.ts` ("o aviso da organizacao leva a posicao pelo rotulo" e "poe
- * cada campo do resumo no campo certo dos DOIS templates"). Este comentario ja
+ * cada campo do resumo no campo certo dos QUATRO templates"). Este comentario ja
  * disse "a unica rede e esta", e era falso.
  */
 

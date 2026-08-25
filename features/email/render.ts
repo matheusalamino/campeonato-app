@@ -14,7 +14,7 @@ import { waitlistPromotedEmail } from "./templates/waitlist-promoted";
  * Por COESAO, e nao por alivio de tamanho -- e a diferenca importa, porque a
  * primeira versao deste docblock alegava o alivio e ele nao aconteceu. MEDIDO:
  * `outbox.ts` tinha 417 linhas antes do commit que extraiu este arquivo e ficou
- * com 437 DEPOIS dele; segue com 437. A extracao levou embora `RenderInput`,
+ * com 437 DEPOIS dele (e 517 na data da T8 -- o numero so subiu). A extracao levou embora `RenderInput`,
  * `EmailRenderer` e o `stubRenderer`, e trouxe de volta mais comentario do que
  * tirou de codigo.
  *

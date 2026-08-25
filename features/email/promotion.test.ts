@@ -82,9 +82,12 @@ describe("OUTBOX_DEDUPE_TARGET", () => {
     // O indice e `email_outbox_kind_dedupe ON (kind, dedupe_key)`. Com o alvo
     // do `ON CONFLICT` em `dedupe_key` sozinho, o aviso de promocao passaria a
     // conflitar com o COMPROVANTE da mesma inscricao -- que ja usa aquela
-    // chave -- e o `DO NOTHING` engoliria o INSERT sem erro nenhum: a pessoa
-    // seria promovida e nunca receberia o aviso, com a chamada devolvendo
-    // sucesso.
+    // chave. MEDIDO: nao e silencioso -- nao ha indice unico em `dedupe_key`
+    // sozinho, entao o Postgres recusa o INSERT com `42P10` ("there is no
+    // unique or exclusion constraint matching the ON CONFLICT specification") e
+    // o quinto portao fica vermelho. A colisao com o comprovante e o proprio
+    // Postgres que barra; esta assertiva e o portao BARATO, que acende sem
+    // precisar de banco.
     //
     // Nao ha typecheck sobre esta string; ela e opcao de cliente do Supabase.
     const colunas = OUTBOX_DEDUPE_TARGET.split(",").map((c) => c.trim());

@@ -1049,8 +1049,8 @@ describe("drainOutbox", () => {
     // A quarta -- `no_body`, template faltando -- fica de fora por construcao, e
     // nao por esquecimento: ela so e descoberta DEPOIS do render, e o render so
     // roda depois da emissao. Quer dizer que `no_body` adia uma linha cujo token
-    // JA foi gasto. Nao ha defeito nisso hoje (os dois kinds enfileirados tem
-    // template), mas o dia em que houver, a linha volta para a fila com o link
+    // JA foi gasto. Nao ha defeito nisso hoje (os QUATRO kinds com produtor tem
+    // template -- ver o docblock de features/email/kinds.ts), mas o dia em que houver, a linha volta para a fila com o link
     // anterior ja morto -- e o proximo disparo emite outro.
     for (const [nome, over] of [
       ["sabado", {}],
