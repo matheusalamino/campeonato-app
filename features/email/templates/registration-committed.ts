@@ -13,11 +13,16 @@ import { assuntoCom, corpoDe, saudacao, type EmailBody, type Paragrafo } from ".
  *
  * ── POR QUE O LINK DE VERIFICACAO E NULAVEL ──
  *
- * Porque na data deste arquivo ele nao existe: o token de verificacao nasce na
- * T6, e `features/email/render.ts` passa `null`. O bloco inteiro fica de fora
- * quando nao ha link -- nao sai href vazio, nao sai convite a clicar em nada.
- * Ha assertiva sobre isso nos DOIS lugares: aqui (`sem link, nao sobra bloco
- * orfao`) e em render.test.ts, que declara que HOJE o comprovante sai sem link.
+ * Porque ha tres situacoes em que ele nao existe, e nenhuma e defeito:
+ * inscricao ja verificada, inscricao sem `contact_email` (as criadas pelo admin
+ * nascem assim), e linha sem `registration_id` no payload. Nas tres o
+ * comprovante sai INTEIRO, so sem o bloco do convite -- nao sai href vazio, nao
+ * sai convite a clicar em nada.
+ *
+ * Quem decide as duas primeiras e `canIssueVerificationToken`
+ * (features/email/verification.ts); quem grava o token e o store, antes de esta
+ * funcao rodar. Ha assertiva sobre o bloco nos DOIS lugares: aqui (`sem link,
+ * nao sobra bloco orfao`) e em render.test.ts, sobre o repasse.
  *
  * ── O TEXTO NAO E DECISAO DESTE ARQUIVO ──
  *

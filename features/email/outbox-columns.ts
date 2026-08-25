@@ -8,8 +8,9 @@ import type { OutboxRow } from "./outbox";
  *
  * Porque la nao ha rede, e a varredura de juntas desta rodada mostrou que isso
  * nao era um buraco pontual: das oito juntas NUAS achadas no caminho `linha do
- * banco -> e-mail enviado`, SEIS estavam em seis dos OITO metodos que
- * `OutboxStore` declara -- os seis que carregam TRADUCAO. (Os outros dois,
+ * banco -> e-mail enviado`, SEIS estavam em seis dos OITO metodos que o
+ * store TINHA ENTAO (hoje sao nove, com `issueVerificationToken`) -- os seis
+ * que carregam TRADUCAO. (Os outros dois,
  * `isSabbath` e `countSentSince`, nao traduzem campo nenhum; a T5b mediu que
  * eles tambem estavam nus, por outro motivo, e o contrato de banco os cobre.)
  *

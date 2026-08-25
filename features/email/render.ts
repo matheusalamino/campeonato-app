@@ -47,6 +47,20 @@ export type RenderInput = {
    * dois devolvem null -- que ADIA a linha em vez de mata-la.
    */
   summary: RegistrationSummary | null;
+  /**
+   * O link de verificacao ja MONTADO, ou nulo quando nao ha o que verificar.
+   *
+   * Chega pronto porque o token nao pode nascer aqui: `renderEmail` e funcao
+   * pura, e o hash precisa estar GRAVADO antes de o link ir no corpo. Quem
+   * emite e `store.issueVerificationToken`, chamado pelo dreno depois de as
+   * guardas dizerem que envia -- ver `emitirLinkDeVerificacao` em outbox.ts.
+   *
+   * Nulo em tres situacoes, e nenhuma e defeito: `kind` que nao pede link (todos
+   * menos `registration_committed`), inscricao ja verificada, e inscricao sem
+   * `contact_email`. Nos tres o comprovante sai inteiro, so sem o bloco do
+   * convite.
+   */
+  verificationLink: string | null;
 };
 
 /** Monta o corpo, ou devolve null quando nao ha corpo a montar para esta linha. */
@@ -63,7 +77,7 @@ function para(recipient: Recipient, corpo: Omit<EmailMessage, "to" | "toName">):
   };
 }
 
-export const renderEmail: EmailRenderer = ({ kind, recipient, summary }) => {
+export const renderEmail: EmailRenderer = ({ kind, recipient, summary, verificationLink }) => {
   switch (kind) {
     case "registration_committed": {
       // Sem resumo nao ha comprovante possivel: o corpo inteiro e nome,
@@ -76,12 +90,13 @@ export const renderEmail: EmailRenderer = ({ kind, recipient, summary }) => {
           playerName: summary.playerName,
           championshipName: summary.championshipName,
           isWaitlist: summary.isWaitlist,
-          // NULO ATE A T6. O token de verificacao nasce la, e e la que esta
-          // linha vira o link de verdade (`linkTo(siteUrl, "verify-email?...")`,
-          // com `siteUrl` que ja chega neste input). Ha assertiva em
-          // render.test.ts declarando que HOJE o comprovante sai sem link --
-          // ela fica vermelha quando a T6 entrar, de proposito.
-          verificationLink: null,
+          // O link chega PRONTO no input, e nao e montado aqui: o token e
+          // gravado pelo store antes desta funcao rodar (ver `verificationLink`
+          // em `RenderInput`). Repassar `null` no lugar dele nao acusa em tipo
+          // nenhum -- os dois lados sao `string | null` --, e produziria todo
+          // comprovante sem convite, com o token ja gasto no banco. Ha assertiva
+          // sobre o repasse em render.test.ts.
+          verificationLink,
         }),
       );
     }

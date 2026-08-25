@@ -37,9 +37,20 @@ function entrada(kind: EmailKind, over: Partial<RenderInput> = {}): RenderInput 
     recipient: DESTINO,
     siteUrl: "https://campeonato.exemplo",
     summary: RESUMO,
+    verificationLink: null,
     ...over,
   };
 }
+
+/**
+ * Um link RECONHECIVEL, e nao um derivado de `siteUrl`.
+ *
+ * Se ele fosse `https://campeonato.exemplo/verify-email/...`, a assertiva do
+ * repasse ficaria verde com o campo errado: `renderEmail` recebe `siteUrl` no
+ * mesmo input, e os dois sao `string`. O host diferente e o que separa "passou o
+ * link" de "passou qualquer coisa que comeca com https".
+ */
+const LINK = "https://outro-host.exemplo/verify-email/" + "f".repeat(64);
 
 describe("renderEmail", () => {
   it("devolve mensagem ou null para TODO kind declarado, e nunca string", () => {
@@ -90,21 +101,54 @@ describe("renderEmail", () => {
     expect(renderEmail(entrada("organizer_new_registration", { summary: null }))).toBeNull();
   });
 
-  it("HOJE o comprovante sai SEM link de verificacao", () => {
-    // O token nasce na T6. Ate la `render.ts` passa `verificationLink: null`, e
-    // esta assertiva DECLARA isso em vez de deixar implicito.
+  it("o comprovante leva o link de verificacao que RECEBEU", () => {
+    // ── ESTA ASSERTIVA SUBSTITUI A DA T5, E O PORQUE IMPORTA ──
     //
-    // Ela fica vermelha no dia em que a T6 entrar -- de proposito. Quem
-    // escrever a T6 troca esta assertiva pela inversa (o corpo PRECISA levar o
-    // link), e ai o par de assertivas do template
-    // (`registration-committed.test.ts`, casos com e sem link) ja garante os
-    // dois lados.
-    const m = renderEmail(entrada("registration_committed"));
+    // Ate a T5b nao havia token, e aqui morava a declaracao inversa: "HOJE o
+    // comprovante sai SEM link", com o aviso de que ficaria vermelha quando a T6
+    // entrasse. Entrou, e ficou. Ela nao foi apagada -- foi TROCADA pelo par de
+    // hoje: este caso e o de baixo.
+    //
+    // O que ela prende e o REPASSE, e nao o texto: `renderEmail` copia
+    // `verificationLink` do input para os dados do template, e trocar o campo
+    // por `null` -- ou por `siteUrl`, que esta no mesmo input e tambem e string
+    // -- nao tem sintoma de tipo nenhum. As assertivas de
+    // `registration-committed.test.ts` nao alcancam isso: elas recebem os dados
+    // ja montados e nao sabem de onde vieram.
+    const m = renderEmail(entrada("registration_committed", { verificationLink: LINK }));
+
+    expect(m).not.toBeNull();
+    // Nos DOIS corpos: quem le em cliente sem HTML tambem precisa do link, e por
+    // isso ele sai por extenso (ver `Paragrafo` em templates/body.ts).
+    expect(m?.html).toContain(`href="${LINK}"`);
+    expect(m?.text).toContain(LINK);
+    // E o link tem de ser O QUE VEIO, e nao a base do site: `siteUrl` chega no
+    // mesmo input, com o mesmo tipo.
+    expect(m?.html).not.toContain('href="https://campeonato.exemplo"');
+  });
+
+  it("sem link, o comprovante sai inteiro e sem convite orfao", () => {
+    // Os tres casos em que o link e nulo -- ja verificada, sem `contact_email`,
+    // linha sem `registration_id` -- chegam aqui iguais. O comprovante continua
+    // valendo; o que nao pode e sobrar um convite a clicar em nada.
+    const m = renderEmail(entrada("registration_committed", { verificationLink: null }));
 
     expect(m).not.toBeNull();
     expect(m?.html).not.toMatch(/verify-email/);
     expect(m?.text).not.toMatch(/verify-email/);
     expect(m?.html).not.toMatch(/href=/i);
+  });
+
+  it("o aviso da organizacao NAO leva link, nem quando recebe um", () => {
+    // O aviso vai para a caixa da ORGANIZACAO. Um link de verificacao ali
+    // provaria a posse da caixa errada -- e o token gasto seria o do jogador.
+    // A guarda de verdade e `kindNeedsVerificationLink`, no dreno; esta e a
+    // rede do outro lado, para o template nunca aprender a usar o campo.
+    const m = renderEmail(entrada("organizer_new_registration", { verificationLink: LINK }));
+
+    expect(m).not.toBeNull();
+    expect(m?.html).not.toContain(LINK);
+    expect(m?.text).not.toContain(LINK);
   });
 
   it("leva o nome do destinatario adiante, e nao o inventa", () => {

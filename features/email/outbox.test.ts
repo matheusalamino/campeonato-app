@@ -455,7 +455,15 @@ type Registro = {
   // chamada real deixava os 806 testes verdes e o `tsc` em zero -- e em
   // producao todo e-mail cairia em `no_body`, adiado para sempre, calado.
   renderizados: RenderInput[];
+  /** Para QUAIS inscricoes o dreno pediu token, e quantas vezes. Emitir mata o
+   *  link anterior de forma irreversivel, entao um pedido a mais nao e
+   *  desperdicio: e um link valido apagado da caixa de alguem. */
+  tokensPedidos: string[];
 };
+
+/** O claro que o store falso devolve. Reconhecivel de proposito: ele tem de
+ *  aparecer DENTRO do link que chega ao render. */
+const TOKEN_PADRAO = "t0ken-em-claro";
 
 function fakeStore(
   rows: OutboxRow[],
@@ -463,6 +471,9 @@ function fakeStore(
     sabbath?: boolean;
     sentToday?: number;
     resumos?: Record<string, RegistrationSummary>;
+    /** `null` para a inscricao que nao tem o que verificar (ja verificada, ou
+     *  sem `contact_email`). */
+    tokens?: Record<string, string | null>;
   } = {},
 ): { store: OutboxStore; registro: Registro } {
   const registro: Registro = {
@@ -476,6 +487,7 @@ function fakeStore(
     dead: [],
     enviados: [],
     renderizados: [],
+    tokensPedidos: [],
   };
   const store: OutboxStore = {
     async claimBatch(limit, now) {
@@ -518,6 +530,20 @@ function fakeStore(
       // recebeu um terceiro argumento que ninguem lia, e o `tsc` nao acusou --
       // funcao com menos parametros e atribuivel a um tipo com mais.
       registro.dead.push({ id, lastError, extras: resto.length });
+    },
+    async issueVerificationToken(registrationId) {
+      // Anota a CHAMADA, e nao so devolve: emitir tem efeito colateral
+      // irreversivel no banco de verdade (mata o link anterior), entao "quantas
+      // vezes e para qual inscricao" e justamente o que precisa ser observavel.
+      registro.tokensPedidos.push(registrationId);
+      // `in`, e nao `?? TOKEN_PADRAO`: o valor configurado pode ser `null` de
+      // proposito (inscricao sem o que verificar), e `??` engoliria justamente
+      // esse caso, devolvendo o token padrao para quem nao deveria receber
+      // nenhum.
+      const configurados = opts.tokens;
+      return configurados && registrationId in configurados
+        ? configurados[registrationId]
+        : TOKEN_PADRAO;
     },
   };
   return { store, registro };
@@ -902,6 +928,109 @@ describe("drainOutbox", () => {
     const { store, registro } = fakeStore([ruim, boa], { resumos: { "reg-1": resumo } });
     await drainOutbox(deps(store, registro));
     expect(registro.sent.map((s) => s.id)).toEqual(["b"]);
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // O link de verificacao
+  // ───────────────────────────────────────────────────────────────────────────
+
+  it("monta o link com o token emitido, na base de link do envio", async () => {
+    // A fiacao inteira, de uma vez: pede o token PARA A INSCRICAO DA LINHA,
+    // monta o caminho `/verify-email/<claro>` sobre a base que a decisao de
+    // envio devolveu, e entrega isso ao render.
+    //
+    // Trocar `decision.siteUrl` por outra string aqui manda todo mundo para o
+    // ambiente errado, e o `tsc` nao ve: sao duas strings.
+    const { store, registro } = fakeStore([linha()], { resumos: { "reg-1": resumo } });
+    await drainOutbox(deps(store, registro));
+
+    expect(registro.tokensPedidos).toEqual(["reg-1"]);
+    expect(registro.renderizados[0].verificationLink).toBe(
+      `https://campeonato.exemplo/verify-email/${TOKEN_PADRAO}`,
+    );
+  });
+
+  it("SO o comprovante pede token; o aviso da organizacao nao", async () => {
+    // Um token gasto pelo aviso interno nao e desperdicio: ele MATA o link que
+    // o jogador acabou de receber, porque o banco guarda um hash por inscricao.
+    const comprovante = linha({ id: "a", kind: "registration_committed", dedupeKey: "reg-1" });
+    const aviso = linha({ id: "b", kind: "organizer_new_registration", dedupeKey: "reg-1" });
+    const { store, registro } = fakeStore([comprovante, aviso], {
+      resumos: { "reg-1": resumo },
+    });
+    await drainOutbox(deps(store, registro));
+
+    expect(registro.sent.map((s) => s.id)).toEqual(["a", "b"]);
+    // UMA emissao para as DUAS linhas, e ela e a do comprovante.
+    expect(registro.tokensPedidos).toEqual(["reg-1"]);
+    const links = registro.renderizados.map((i) => i.verificationLink);
+    expect(links).toEqual([`https://campeonato.exemplo/verify-email/${TOKEN_PADRAO}`, null]);
+  });
+
+  it("inscricao sem o que verificar sai com o comprovante e sem link", async () => {
+    // `issueVerificationToken` devolve null nos dois casos declarados -- ja
+    // verificada, e sem `contact_email`. O comprovante continua saindo: o que
+    // nao sai e o bloco do convite.
+    const { store, registro } = fakeStore([linha()], {
+      resumos: { "reg-1": resumo },
+      tokens: { "reg-1": null },
+    });
+    await drainOutbox(deps(store, registro));
+
+    expect(registro.tokensPedidos).toEqual(["reg-1"]);
+    expect(registro.renderizados[0].verificationLink).toBeNull();
+    expect(registro.sent).toHaveLength(1);
+  });
+
+  it("linha ADIADA nao gasta token", async () => {
+    // ── A ORDEM ENTRE AS GUARDAS E A EMISSAO, PROVADA ──
+    //
+    // Emitir e IRREVERSIVEL: o banco so guarda o hash, entao o claro do token
+    // anterior nao existe mais em lugar nenhum. Emitindo ANTES das guardas, uma
+    // noite de sabado -- ou uma cota estourada, ou uma base de link faltando --
+    // apagaria o link que ja estava valendo na caixa da pessoa E nao mandaria
+    // nada no lugar. O e-mail antigo passaria a levar a "este link nao vale
+    // mais", sem que ninguem tivesse feito nada.
+    //
+    // As tres condicoes de ADIAR, uma a uma: elas fazem a linha voltar para a
+    // fila sem chamar o render, e portanto sem emitir.
+    for (const [nome, over] of [
+      ["sabado", {}],
+      ["cota", {}],
+      ["base de link", { siteUrl: null }],
+    ] as const) {
+      const { store, registro } = fakeStore([linha()], {
+        resumos: { "reg-1": resumo },
+        sabbath: nome === "sabado",
+        sentToday: nome === "cota" ? 300 : 0,
+      });
+      await drainOutbox(deps(store, registro, over));
+
+      expect(registro.deferred, `${nome}: a linha deveria ter sido adiada`).toEqual(["row-1"]);
+      expect(registro.tokensPedidos, `${nome}: gastou token numa linha adiada`).toEqual([]);
+    }
+  });
+
+  it("linha MORTA por descadastro nao gasta token", async () => {
+    // A quarta guarda mata em vez de adiar, e o efeito sobre o token e o mesmo:
+    // e-mail que nao vai sair nao pode invalidar o link de um que ja saiu.
+    const lembrete = linha({ id: "a", kind: "reminder_waitlist", dedupeKey: "reg-1" });
+    const { store, registro } = fakeStore([lembrete], { resumos: { "reg-1": resumo } });
+    await drainOutbox(deps(store, registro, { isOptedOut: async () => true }));
+
+    expect(registro.dead.map((d) => d.id)).toEqual(["a"]);
+    expect(registro.tokensPedidos).toEqual([]);
+  });
+
+  it("linha sem inscricao no payload nao pede token", async () => {
+    // Sem `registration_id` nao ha inscricao para verificar. Pedir com string
+    // vazia -- ou com `undefined` virando "undefined" -- viraria consulta que
+    // nao acha nada, e um `null` devolvido pelo motivo errado.
+    const semId = linha({ payload: {} });
+    const { store, registro } = fakeStore([semId]);
+    await drainOutbox(deps(store, registro));
+
+    expect(registro.tokensPedidos).toEqual([]);
   });
 });
 

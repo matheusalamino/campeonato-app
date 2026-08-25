@@ -7,6 +7,7 @@ import { isBulkKind, isEmailKind, isOrganizerKind, type EmailKind } from "./kind
 // outro, a saida e mover os tipos partilhados para `features/email/types.ts`,
 // e nao forcar.
 import type { EmailRenderer } from "./render";
+import { kindNeedsVerificationLink, verificationLinkFor } from "./verification";
 
 /**
  * O DRENO da caixa de saida: quem tira as linhas de `email_outbox` e as
@@ -288,6 +289,39 @@ export type OutboxStore = {
    * assim que `at` ficou aqui morto por uma rodada inteira.
    */
   markFailedPermanent(id: string, lastError: string): Promise<void>;
+  /**
+   * Emite um token NOVO para esta inscricao, grava o hash e devolve o valor em
+   * claro para o link. `null` quando nao ha o que verificar.
+   *
+   * ── TRES CONSEQUENCIAS, E NENHUMA E DETALHE ──
+   *
+   * 1. **Emitir SEMPRE mata o link anterior.** O banco guarda so o hash
+   *    (migration 20260823020000), entao o valor em claro de um token antigo e
+   *    IRRECUPERAVEL: reenviar o comprovante obriga a emitir de novo, e o link
+   *    do e-mail velho passa a responder "este link nao vale mais". E o
+   *    comportamento certo -- um endereco tem um link valido por vez --, mas
+   *    quem nao souber disso vai abrir chamado achando que e defeito.
+   *
+   * 2. **Ja verificada devolve `null`.** Nao ha o que pedir a quem ja provou a
+   *    posse da caixa, e o comprovante sai sem o bloco do link -- a T5 ja abriu
+   *    essa porta com `verificationLink: string | null`.
+   *
+   * 3. **Sem `contact_email` devolve `null`.** Inscricao criada pelo admin nao
+   *    tem endereco nesta edicao: a coluna so e preenchida pelo caminho publico
+   *    (`commit_registration`, migration 20260823030000).
+   *
+   * A regra dos dois `null` mora em `canIssueVerificationToken`
+   * (features/email/verification.ts), onde ha teste; aqui fica so a assinatura.
+   *
+   * ── QUANDO O DRENO CHAMA, E POR QUE NAO ANTES ──
+   *
+   * Depois de `decideSend` dizer que ENVIA, e nao antes. A chamada tem efeito
+   * colateral irreversivel (consequencia 1), e as guardas adiam linha: emitir
+   * antes delas faria um sabado, uma cota estourada ou uma base de link
+   * faltando MATAREM o link que ja estava valendo na caixa da pessoa, sem
+   * mandar nenhum e-mail novo no lugar.
+   */
+  issueVerificationToken(registrationId: string): Promise<string | null>;
 };
 
 export type DrainDeps = {
@@ -317,6 +351,22 @@ export type DrainReport = {
 
 function conta(report: DrainReport, reason: DrainSkipReason): void {
   report.reasons[reason] = (report.reasons[reason] ?? 0) + 1;
+}
+
+/**
+ * Emite o token e devolve o LINK, ou `null` quando nao ha o que verificar.
+ *
+ * A montagem do link mora em `verificationLinkFor`, e nao aqui, porque o
+ * caminho da rota (`verify-email`) tem de existir num lugar so -- ele tambem e
+ * o nome de uma pasta em `app/`, e nada no TypeScript liga os dois.
+ */
+async function emitirLinkDeVerificacao(
+  store: OutboxStore,
+  registrationId: string,
+  siteUrl: string,
+): Promise<string | null> {
+  const plain = await store.issueVerificationToken(registrationId);
+  return plain ? verificationLinkFor(siteUrl, plain) : null;
 }
 
 export async function drainOutbox(deps: DrainDeps): Promise<DrainReport> {
@@ -383,6 +433,27 @@ export async function drainOutbox(deps: DrainDeps): Promise<DrainReport> {
       continue;
     }
 
+    // ── O TOKEN NASCE AQUI, E A POSICAO DESTA LINHA E LOAD-BEARING ──
+    //
+    // Depois das guardas, e antes do corpo.
+    //
+    // Depois das guardas porque emitir MATA o link anterior de forma
+    // irreversivel (o banco so guarda o hash). Emitindo antes, um sabado, uma
+    // cota estourada ou uma base de link faltando -- que apenas ADIAM a linha --
+    // apagariam o link que ja estava valendo na caixa da pessoa sem mandar
+    // nenhum e-mail novo no lugar.
+    //
+    // Antes do corpo porque `renderEmail` e funcao PURA: ela nao escreve no
+    // banco, e o hash precisa estar gravado antes de o link ir no texto.
+    //
+    // `regId` nulo (payload sem `registration_id`) nao emite nada: nao ha
+    // inscricao para verificar. A linha ainda sai, sem o bloco do link -- e sem
+    // resumo ela nem chega a ter corpo, e cai em `no_body`.
+    const verificationLink =
+      kindNeedsVerificationLink(kind) && regId
+        ? await emitirLinkDeVerificacao(store, regId, decision.siteUrl)
+        : null;
+
     // `recipient` e nao-nulo aqui porque `decision.recipient` so existe depois
     // da guarda `no_recipient`; o `??` e para o TypeScript, nao para o caso.
     const message = deps.render({
@@ -391,6 +462,7 @@ export async function drainOutbox(deps: DrainDeps): Promise<DrainReport> {
       recipient: recipient ?? { email: decision.recipient, name: null },
       siteUrl: decision.siteUrl,
       summary,
+      verificationLink,
     });
 
     // Template que falta e buraco de implantacao, nao dado ruim: matar a linha

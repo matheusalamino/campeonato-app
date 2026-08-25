@@ -130,8 +130,10 @@ describe("o select do resumo, nos dois lugares onde ele existe", () => {
    */
   it("as traducoes do store sao delegadas, e nao refeitas aqui", () => {
     // Seis das oito juntas NUAS da varredura estavam em seis dos OITO metodos
-    // que `OutboxStore` declara -- os seis que carregam traducao. `services/**`
-    // nao e coletado pelo vitest, entao traducao escrita la nasce sem portao.
+    // que `OutboxStore` declarava ENTAO -- os seis que carregam traducao. Hoje
+    // sao nove, e o nono (`issueVerificationToken`) tambem delega: a lista
+    // abaixo cobre as duas traducoes dele. `services/**` nao e coletado pelo
+    // vitest, entao traducao escrita la nasce sem portao.
     //
     // O que NAO se conclui dai: que o `include` seja a causa. A T5b mediu
     // `lib/email/brevo.ts` -- dentro do include, com teste proprio -- e achou
@@ -144,6 +146,12 @@ describe("o select do resumo, nos dois lugares onde ele existe", () => {
       /requeueColumns\(/,
       /deferColumns\(/,
       /failedPermanentColumns\(/,
+      // As tres do nono metodo. `createVerificationToken` e a que mais custa se
+      // voltar para o servico: reinlinada com `randomBytes(4)`, ela nao tem
+      // portao nenhum la, e o token cai de 256 para 32 bits sem nada acender.
+      /createVerificationToken\(/,
+      /canIssueVerificationToken\(/,
+      /verificationTokenColumns\(/,
     ]) {
       expect(servico, `a delegacao ${chamada} sumiu de services/email-outbox.ts`).toMatch(chamada);
     }
@@ -198,6 +206,14 @@ describe("o select do resumo, nos dois lugares onde ele existe", () => {
       "isWaitlist:",
       "preferredPosition:",
       "dedupeKey:",
+      // As duas colunas da verificacao. `email_verified_at:` e a mais cara: um
+      // objeto de gravacao que a carregasse marcaria como PROVADO todo endereco
+      // que recebesse um comprovante -- sem clique nenhum, e sem nada acender.
+      // Quem grava aquele carimbo e a funcao do banco, na volta do clique.
+      // (Ela aparece SEM dois-pontos na string do `select` desta leitura, que e
+      // leitura e nao gravacao -- por isso o literal proibido tem o `:`.)
+      "email_verification_token_hash:",
+      "email_verified_at:",
     ];
 
     for (const literal of proibidos) {
@@ -207,7 +223,8 @@ describe("o select do resumo, nos dois lugares onde ele existe", () => {
           "traducoes moram em features/email/summary-row.ts e " +
           "features/email/outbox-columns.ts, onde ha teste de comportamento: " +
           "`services/**` nao e coletado pelo vitest, e seis das oito juntas " +
-          "nuas da varredura estavam em seis dos OITO metodos deste store.",
+          "nuas da varredura estavam em seis dos OITO metodos que este store " +
+          "declarava entao.",
       ).not.toContain(literal);
     }
   });

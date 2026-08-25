@@ -20,6 +20,12 @@ import {
   sentColumns,
 } from "@/features/email/outbox-columns";
 import type { ClaimedOutboxRow } from "@/features/email/outbox-columns";
+import { createVerificationToken } from "@/features/email/verification-token";
+import {
+  canIssueVerificationToken,
+  verificationTokenColumns,
+} from "@/features/email/verification";
+import type { VerifiableRegistrationRow } from "@/features/email/verification";
 
 /**
  * A FIACAO do dreno: o cliente do Supabase, as variaveis de ambiente e o
@@ -33,7 +39,7 @@ import type { ClaimedOutboxRow } from "@/features/email/outbox-columns";
  *
  * ── MAS O STORE NAO ESTA MAIS NU (T5b) ──
  *
- * `services/email-outbox.contract.ts` exercita os OITO metodos de
+ * `services/email-outbox.contract.ts` exercita os NOVE metodos de
  * `createSupabaseOutboxStore` contra o Postgres local, sem dublar nada -- ela e
  * a unica funcao exportada daqui que RECEBE o cliente do Supabase por
  * argumento, e e por essa porta que o contrato entra. Ele mora numa segunda
@@ -137,7 +143,8 @@ export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore
      * (`mapa.set(registrationIds[0], ...)`) passavam por todos os portoes de
      * entao. A varredura da terceira rodada achou OITO juntas nuas no caminho
      * `linha do banco -> e-mail enviado`, e seis delas estavam em seis dos OITO
-     * metodos deste store -- os seis que carregam traducao. O detalhe das tres
+     * metodos que este store TINHA ENTAO (hoje sao nove, com
+     * `issueVerificationToken`) -- os seis que carregam traducao. O detalhe das tres
      * mutacoes esta em `features/email/summary-row.ts`, que e onde elas se
      * aplicam; aqui fica so o ponteiro.
      */
@@ -167,6 +174,68 @@ export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore
 
     async markFailedPermanent(id, lastError) {
       await atualizar(supabase, id, failedPermanentColumns(lastError));
+    },
+
+    /**
+     * Emite o token de verificacao desta inscricao e grava o hash.
+     *
+     * ── DUAS CHAMADAS, E NAO UMA: LEITURA E DEPOIS GRAVACAO ──
+     *
+     * Nao ha corrida perigosa entre elas. As duas condicoes que a leitura apura
+     * so andam num sentido: `contact_email` e escrita uma vez, no commit da
+     * inscricao, e `email_verified_at` so vai de nulo para carimbado. O pior
+     * desencontro possivel e alguem verificar o e-mail no intervalo entre as
+     * duas chamadas -- e ai grava-se um hash de token que ninguem vai usar,
+     * numa linha ja verificada. Barulho, nao dano: a funcao do banco responde
+     * 'already' a esse link, porque decide pelo CARIMBO e nao pelo hash.
+     *
+     * ── O QUE ACONTECE SE UMA DELAS FALHAR ──
+     *
+     * Estoura, como as outras gravacoes deste arquivo. A linha fica em
+     * 'sending' e o recolhimento de `claim_email_outbox_batch` a repesca depois
+     * de 30 minutos. Engolir a falha e mandar o comprovante sem link seria a
+     * outra escolha defensavel -- e ela vira dano silencioso na hora em que a
+     * gravacao do hash for a que falha: o e-mail sairia com um link que nao casa
+     * com linha nenhuma, e a pessoa clicaria nele para ler "este link nao vale
+     * mais".
+     *
+     * ── A DECISAO NAO MORA AQUI ──
+     *
+     * `canIssueVerificationToken` e `verificationTokenColumns` estao em
+     * `features/email/verification.ts`, e `createVerificationToken` em
+     * `features/email/verification-token.ts`. Motivo de sempre: `services/**`
+     * nao e coletado pelo `vitest.config.ts`. O que este metodo faz e a ORDEM --
+     * ler, decidir, sortear, gravar --, e a prova dela e
+     * `services/email-outbox.contract.ts`, contra o Postgres local.
+     */
+    async issueVerificationToken(registrationId) {
+      const { data, error } = await supabase
+        .from("championship_registrations")
+        .select("contact_email, email_verified_at")
+        .eq("id", registrationId)
+        .maybeSingle();
+      if (error) {
+        throw new Error(`leitura da verificacao de ${registrationId} falhou: ${error.message}`);
+      }
+
+      const linha = data as VerifiableRegistrationRow | null;
+      if (!canIssueVerificationToken(linha)) return null;
+
+      const { plain, hash } = createVerificationToken();
+      const { error: erroGravacao } = await supabase
+        .from("championship_registrations")
+        .update(verificationTokenColumns(hash))
+        .eq("id", registrationId);
+      if (erroGravacao) {
+        throw new Error(
+          `gravacao do token de ${registrationId} falhou: ${erroGravacao.message}`,
+        );
+      }
+
+      // O claro sai daqui e nao volta: o banco tem so o hash. Emitir de novo
+      // para a mesma inscricao torna ESTE valor inutil -- e a consequencia 1 do
+      // docblock de `issueVerificationToken` em features/email/outbox.ts.
+      return plain;
     },
   };
 }
