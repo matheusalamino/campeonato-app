@@ -70,12 +70,18 @@ describe("renderEmail", () => {
     }
   });
 
-  it("monta corpo para EXATAMENTE estes dois kinds", () => {
-    // POR EXTENSO, e nao derivado de nada. E a assertiva que se paga: quando a
-    // T7 acrescentar `payment_verified`, ela fica VERMELHA e obriga quem
-    // escrever a T7 a atualizar esta declaracao CONSCIENTEMENTE. Isso e o
+  it("monta corpo para EXATAMENTE estes tres kinds", () => {
+    // POR EXTENSO, e nao derivado de nada. E a assertiva que se paga, e ela JA
+    // SE PAGOU UMA VEZ: escrita na T5 declarando DOIS, ela ficou vermelha na T7
+    // no instante em que `payment_verified` ganhou template, e obrigou quem
+    // escreveu a T7 a vir aqui atualizar a lista CONSCIENTEMENTE. Isso e o
     // desenho, e nao um incomodo -- template novo que ninguem declarou aqui e
     // template que passou sem revisao de texto.
+    //
+    // Quem chegar com o quarto: acrescente o nome ABAIXO e conte a mesma
+    // historia neste comentario. Nao troque a lista literal por algo derivado
+    // de `EMAIL_KINDS` nem por uma contagem -- derivar e o que faz a assertiva
+    // parar de perguntar alguma coisa.
     //
     // ── POR QUE `typeof === "object"`, E NAO `!== null` ──
     //
@@ -90,7 +96,11 @@ describe("renderEmail", () => {
       return typeof m === "object" && m !== null;
     });
 
-    expect(comCorpo).toEqual(["registration_committed", "organizer_new_registration"]);
+    expect(comCorpo).toEqual([
+      "registration_committed",
+      "organizer_new_registration",
+      "payment_verified",
+    ]);
   });
 
   it("adia o comprovante quando nao sabe de quem e a inscricao", () => {
@@ -99,6 +109,7 @@ describe("renderEmail", () => {
     // crescendo e visivel -- um comprovante generico nao seria.
     expect(renderEmail(entrada("registration_committed", { summary: null }))).toBeNull();
     expect(renderEmail(entrada("organizer_new_registration", { summary: null }))).toBeNull();
+    expect(renderEmail(entrada("payment_verified", { summary: null }))).toBeNull();
   });
 
   it("o comprovante leva o link de verificacao que RECEBEU", () => {
@@ -183,7 +194,7 @@ describe("renderEmail", () => {
     expect(m?.text).not.toMatch(/\bGOL\b/);
   });
 
-  it("poe cada campo do resumo no campo certo dos DOIS templates", () => {
+  it("poe cada campo do resumo no campo certo dos TRES templates", () => {
     // ── A JUNTA QUE ESTA ASSERTIVA EXISTE PARA PRENDER ──
     //
     // `renderEmail` copia o resumo para os dados do template campo a campo, e
@@ -218,6 +229,17 @@ describe("renderEmail", () => {
     expect(aviso?.text).not.toContain("NomeDoCampeonato acabou de se inscrever");
     // E a posicao vem do campo da posicao, e nao de outro `string | null`.
     expect(aviso?.text).toContain("Zagueiro");
+
+    // O terceiro template corre EXATAMENTE o mesmo risco, e por isso entrou
+    // nesta assertiva em vez de ganhar uma propria: `paymentVerifiedEmail`
+    // recebe os mesmos dois `string | null`, e troca-los tambem nao tem sintoma
+    // de tipo -- o aviso passaria a cumprimentar a pessoa pelo nome do
+    // campeonato.
+    const conferido = renderEmail(entrada("payment_verified", { summary: resumo }));
+    expect(conferido?.text).toContain("Olá, NomeDoJogador!");
+    expect(conferido?.subject).toContain("— NomeDoCampeonato");
+    expect(conferido?.text).not.toContain("Olá, NomeDoCampeonato");
+    expect(conferido?.subject).not.toContain("— NomeDoJogador");
   });
 
   it("o comprovante repassa a lista de espera do resumo", () => {

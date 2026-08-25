@@ -2,6 +2,7 @@ import type { EmailMessage } from "@/lib/email/port";
 import type { EmailKind } from "./kinds";
 import type { OutboxRow, Recipient, RegistrationSummary } from "./outbox";
 import { organizerNewRegistrationEmail } from "./templates/organizer-new-registration";
+import { paymentVerifiedEmail } from "./templates/payment-verified";
 import { registrationCommittedEmail } from "./templates/registration-committed";
 
 /**
@@ -43,8 +44,10 @@ export type RenderInput = {
    * (nao ha FK entre `email_outbox` e `championship_registrations`; ver
    * scripts/test-email-outbox.sh).
    *
-   * O template decide se ainda tem o que dizer sem ela. Hoje nenhum tem, e os
-   * dois devolvem null -- que ADIA a linha em vez de mata-la.
+   * O template decide se ainda tem o que dizer sem ela. Nenhum dos TRES que
+   * tem corpo tem, e os tres devolvem null -- que ADIA a linha em vez de
+   * mata-la. (A contagem esta declarada por extenso em render.test.ts, e e la
+   * que ela acende quando um template novo entra.)
    */
   summary: RegistrationSummary | null;
   /**
@@ -117,11 +120,28 @@ export const renderEmail: EmailRenderer = ({ kind, recipient, summary, verificat
       );
     }
 
-    // Os cinco declarados adiante do uso. Nenhum produtor deste repo os
-    // enfileira (o unico e o gatilho `enqueue_registration_emails`, que escreve
-    // os dois de cima), entao nenhum destes chega aqui hoje. Devolver null e o
-    // que faz a linha ser ADIADA se um dia chegar antes do template.
-    case "payment_verified":
+    case "payment_verified": {
+      // Mesmo motivo do comprovante: sem resumo nao ha aviso possivel, porque
+      // nome e campeonato sao o corpo inteiro. Null ADIA, e adiar deixa a fila
+      // crescer -- que e visivel.
+      if (!summary) return null;
+      return para(
+        recipient,
+        paymentVerifiedEmail({
+          playerName: summary.playerName,
+          championshipName: summary.championshipName,
+        }),
+      );
+      // `isWaitlist` NAO e repassado, e isso e deliberado: o template nao tem
+      // ramo de lista de espera, e o texto dele foi escrito para valer nos dois
+      // casos. Ver o docblock de templates/payment-verified.ts antes de
+      // acrescentar o campo -- o que muda nao e a assinatura, e o que as frases
+      // podem prometer.
+    }
+
+    // Os quatro declarados adiante do uso. Nenhum produtor deste repo os
+    // enfileira, entao nenhum destes chega aqui. Devolver null e o que faz a
+    // linha ser ADIADA se um dia chegar antes do template.
     case "waitlist_promoted":
     case "reminder_payment_pending":
     case "reminder_waitlist":
