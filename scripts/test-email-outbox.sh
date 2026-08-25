@@ -693,7 +693,7 @@ checar "o contact_email do jsonb chegou na coluna" "digitado" \
 checar "e a inscricao vinda da RPC tambem enfileirou as duas" "2" \
   "$($DB -c "SELECT count(*) FROM email_outbox WHERE dedupe_key='$reg_rpc';")"
 
-echo "== o dreno le as SEIS colunas do resumo pelo caminho do PostgREST =="
+echo "== o dreno le as SETE colunas do resumo pelo caminho do PostgREST =="
 # A rede contra a armadilha do `select` de services/email-outbox.ts.
 #
 # Ela existe porque NENHUM teste do vitest pega uma coluna faltando la, e isso
@@ -708,8 +708,25 @@ echo "== o dreno le as SEIS colunas do resumo pelo caminho do PostgREST =="
 # no admin, e o antidoto e o mesmo: ler pelo caminho DE VERDADE -- PostgREST,
 # chave do service_role, o mesmo embed aninhado, a mesma lista de colunas.
 #
-# A MUTACAO que a prende: tire uma coluna do `select` daqui, e o cenario tem de
-# ficar VERMELHO. Se ficar verde sem a coluna, a prova nao e prova.
+# ── SETE, E NAO SEIS: A CONTA QUE ESTE COMENTARIO JA ERROU ──
+#
+# O `select` pede SETE colunas: `id` -- que nao e campo do resumo, e sim a
+# CHAVE por onde `summariesById` indexa -- mais as seis que viram
+# `RegistrationSummary`.
+#
+# A versao anterior deste cenario asseverava seis trechos e um deles era o
+# `id`, entao SOBRAVA uma coluna sem prova: `players.name`, o nome que vira
+# "Olá, {nome}!" em TODO comprovante. O `"name":"Teste fila C1"` que parecia
+# cobri-lo casa o nome do CAMPEONATO, que vem do outro embed.
+#
+# MEDIDO no dia em que isso foi consertado: tirando `name` de
+# `players(email,name,preferred_position)`, o cenario ficava VERDE -- 43 ok,
+# exit 0, "TODOS OS CENARIOS PASSARAM". O comentario que estava aqui mandava a
+# proxima pessoa validar por uma mutacao que nao acendia.
+#
+# A MUTACAO que a prende: tire QUALQUER UMA das sete colunas do `select` daqui,
+# e o cenario tem de ficar VERMELHO. Se ficar verde sem a coluna, a prova nao e
+# prova -- e foi exatamente o que aconteceu com `players.name`.
 #
 # As duas gravacoes abaixo existem porque as fixturas nascem com
 # `preferred_position` nulo e `is_waitlist` falso -- e valor AUSENTE nao
@@ -751,11 +768,14 @@ tem() {
   esac
 }
 
-checar "as seis colunas do resumo voltam preenchidas pelo PostgREST" \
-  "sim|sim|sim|sim|sim|sim" \
-  "$(tem "\"id\":\"$reg_rpc\"" "$compacto")|$(tem '"is_waitlist":true' "$compacto")|$(tem "\"contact_email\":\"$EMAIL_T\"" "$compacto")|$(tem '"name":"Teste fila C1"' "$compacto")|$(tem "\"email\":\"$EMAIL_CADASTRO\"" "$compacto")|$(tem '"preferred_position":"ATA"' "$compacto")"
+# O nome do JOGADOR e o do CAMPEONATO sao procurados separados, e por isso as
+# fixturas tem nomes distintos (`Fila C1 dois` e `Teste fila C1`): com o mesmo
+# texto nos dois, um trecho so casaria os dois embeds e a falta de um passaria.
+checar "as sete colunas do resumo voltam preenchidas pelo PostgREST" \
+  "sim|sim|sim|sim|sim|sim|sim" \
+  "$(tem "\"id\":\"$reg_rpc\"" "$compacto")|$(tem '"is_waitlist":true' "$compacto")|$(tem "\"contact_email\":\"$EMAIL_T\"" "$compacto")|$(tem '"name":"Teste fila C1"' "$compacto")|$(tem "\"email\":\"$EMAIL_CADASTRO\"" "$compacto")|$(tem '"name":"Fila C1 dois"' "$compacto")|$(tem '"preferred_position":"ATA"' "$compacto")"
 
-# O controle da assertiva de cima: sem ele, "sim" seis vezes tambem sairia de
+# O controle da assertiva de cima: sem ele, "sim" sete vezes tambem sairia de
 # uma resposta que o `tem` estivesse lendo errado. Este par prova que o `tem`
 # DISTINGUE -- procurando um valor que o banco nao tem, ele responde "nao".
 checar "e a leitura distingue: o que nao esta la volta como ausente" "nao|nao" \
