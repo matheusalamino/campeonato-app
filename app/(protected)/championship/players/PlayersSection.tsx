@@ -8,12 +8,19 @@ import PlayerRadarModal from "../../players/components/PlayerRadarModal";
 import { toast } from "sonner";
 import { useLoading } from "@/components/ui/loading-provider";
 import { positionLabel } from "@/lib/public/types";
+import {
+  markPaymentVerifiedPatch,
+  paymentCheckView,
+  PAYMENT_CHECK_CONFIRM,
+} from "@/features/registration/payment-check";
+import { requestDrain } from "@/features/email/post-action-drain";
 import { RegistrationWithPlayer } from "@/types/registration";
 import { Player } from "@/types/player";
 
 type ChampionshipPlayer = {
   id: string;
   final_overall: number | null;
+  payment_verified: boolean | null;
   player: Player;
 };
 
@@ -42,6 +49,12 @@ export default function PlayersSection({
   const [confirmRemove, setConfirmRemove] = useState<ChampionshipPlayer | null>(
     null,
   );
+
+  // O check de pagamento passa por confirmacao pelo mesmo motivo da remocao, e
+  // por um a mais: o clique manda um e-mail que NAO volta atras. Ver
+  // features/registration/payment-check.ts.
+  const [confirmPayment, setConfirmPayment] =
+    useState<ChampionshipPlayer | null>(null);
 
   const [evaluatedRegistrations, setEvaluatedRegistrations] = useState<
     string[]
@@ -133,6 +146,62 @@ export default function PlayersSection({
     toast.success("Jogador removido");
 
     setConfirmRemove(null);
+
+    router.refresh();
+
+    stopLoading();
+  }
+
+  // Mesmo padrao de removePlayer: mutacao pelo cliente do navegador, sessao
+  // `authenticated`. Quem autoriza NAO e esta funcao nem o `role` do props --
+  // e a RLS de championship_registrations (`creg admin write`, com is_admin()
+  // em USING e WITH CHECK). O `.eq("id", registrationId)` e o que mantem o
+  // UPDATE numa linha so.
+  //
+  // O risco aqui e o WHERE ERRADO, e nao o WHERE AUSENTE. Um `.eq` mais largo
+  // (`championship_id`, por exemplo) carimba o campeonato inteiro, porque o
+  // admin tem permissao sobre todas -- MEDIDO: um PATCH com `id=in.(a,b)`
+  // carimba 2 inscricoes e enfileira 2 avisos. Ja sem `.eq` nenhum, o
+  // `pg_safeupdate` recusa com `400 / 21000 UPDATE requires a WHERE clause` e
+  // zero linha e tocada; ele e carregado pelo papel `authenticator`, entao vale
+  // sim neste caminho -- so nao protege contra o filtro errado.
+  //
+  // A variavel esta presa por assertiva em
+  // features/registration/players-admin-wiring.test.ts: trocar
+  // `registrationId` por `championshipId` casa ZERO linha, o PostgREST nao
+  // devolve erro, e o toast de sucesso aparece sem nada ter sido marcado.
+  async function markPaymentVerified(registrationId: string) {
+    startLoading();
+
+    const { error } = await supabase
+      .from("championship_registrations")
+      .update(markPaymentVerifiedPatch())
+      .eq("id", registrationId);
+
+    if (error) {
+      // Um erro aqui tambem quer dizer que o pagamento NAO foi marcado: o
+      // gatilho que enfileira o e-mail roda na mesma transacao, e falha de
+      // gatilho aborta o UPDATE inteiro.
+      toast.error("Erro ao marcar pagamento como conferido");
+      stopLoading();
+      return;
+    }
+
+    toast.success("Pagamento marcado como conferido");
+
+    // O UPDATE acima disparou `trg_enqueue_payment_verified`, que enfileirou o
+    // aviso. O cron passa uma vez por dia (limite do plano Hobby, ver
+    // vercel.json), e quem acabou de ter o pagamento conferido nao deve esperar
+    // ate um dia para saber. Entao a tela pede o dreno pela segunda porta da
+    // rota -- a sessao de admin, so no POST.
+    //
+    // DEPOIS do toast de proposito: a marcacao ja terminou, e o sucesso e dela,
+    // nao do e-mail. `requestDrain` nunca levanta e tem teto proprio (ha teste
+    // para as duas coisas em features/email/post-action-drain.test.ts), entao o
+    // dreno fora do ar nao muda nada desta funcao.
+    await requestDrain();
+
+    setConfirmPayment(null);
 
     router.refresh();
 
@@ -260,6 +329,11 @@ export default function PlayersSection({
         {paginatedRegistrations.map((reg) => {
           const player = reg.player;
 
+          // O estado e o rotulo saem de features/, nao daqui.
+          const pagamento = paymentCheckView({
+            paymentVerified: reg.payment_verified,
+          });
+
           return (
             <div
               key={reg.id}
@@ -291,6 +365,23 @@ export default function PlayersSection({
                     Avaliar
                   </button>
                 )}
+
+                {role === "admin" &&
+                  (pagamento.canMark ? (
+                    <button
+                      onClick={() => setConfirmPayment(reg)}
+                      className="bg-amber-600 hover:bg-amber-400 cursor-pointer px-4 py-1.5 rounded-lg text-sm"
+                    >
+                      {pagamento.label}
+                    </button>
+                  ) : (
+                    <span
+                      className="bg-emerald-900/60 border border-emerald-600 text-emerald-300 px-4 py-1.5 rounded-lg text-sm"
+                      title="O aviso por e-mail já foi enfileirado para este jogador."
+                    >
+                      {pagamento.label}
+                    </span>
+                  ))}
 
                 {role === "admin" && (
                   <button
@@ -328,6 +419,41 @@ export default function PlayersSection({
           >
             →
           </button>
+        </div>
+      )}
+
+      {/* PAYMENT CHECK MODAL */}
+      {confirmPayment && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 rounded-2xl p-6 w-full max-w-md mx-4 space-y-4">
+            <h3 className="text-lg font-semibold">
+              {PAYMENT_CHECK_CONFIRM.title}
+            </h3>
+
+            <p className="text-sm text-zinc-400">
+              {confirmPayment.player.name}
+            </p>
+
+            <p className="text-sm text-amber-300">
+              {PAYMENT_CHECK_CONFIRM.body}
+            </p>
+
+            <div className="flex flex-col md:flex-row justify-end gap-3">
+              <button
+                onClick={() => setConfirmPayment(null)}
+                className="bg-zinc-700 hover:bg-zinc-400 cursor-pointer px-4 py-2 rounded-lg text-sm w-full md:w-auto"
+              >
+                {PAYMENT_CHECK_CONFIRM.cancelLabel}
+              </button>
+
+              <button
+                onClick={() => markPaymentVerified(confirmPayment.id)}
+                className="bg-amber-600 hover:bg-amber-400 cursor-pointer px-4 py-2 rounded-lg text-sm w-full md:w-auto"
+              >
+                {PAYMENT_CHECK_CONFIRM.confirmLabel}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
