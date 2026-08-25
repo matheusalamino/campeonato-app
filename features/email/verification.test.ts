@@ -65,8 +65,14 @@ describe("verificationOutcome", () => {
 
   it("os tres status declarados sao exatamente os que a traducao aceita", () => {
     // Prende a lista contra o `isVerificationStatus`: um status acrescentado a
-    // constante sem `case` no switch deixa `tsc --noEmit` vermelho (o `never`),
-    // e um `case` sem entrada na constante cai aqui.
+    // constante sem `case` no switch deixa `tsc --noEmit` vermelho (o `never`).
+    //
+    // O caminho inverso -- um `case` sem entrada na constante -- NAO cai aqui, e
+    // esta frase ja afirmou que caia: `isVerificationStatus` recusa o status
+    // antes do switch, entao o `case` orfao fica inalcancavel e nenhuma
+    // assertiva o exercita. Quem o pega e o `tsc`, porque `result.status` ja
+    // esta estreitado para `VerificationStatus` e um `case` fora da uniao nao e
+    // comparavel. O que ESTA assertiva pega e a lista mudando de conteudo.
     expect([...VERIFICATION_STATUSES]).toEqual(["verified", "already", "unknown"]);
     for (const s of VERIFICATION_STATUSES) {
       expect(isVerificationStatus(s)).toBe(true);
@@ -203,6 +209,38 @@ describe("verificationCopy", () => {
         expect(tudo, `${state} ameacou a inscricao com "${frase}"`).not.toContain(frase);
       }
     }
+  });
+
+  it("nenhum estado afirma o que o codigo nao garante", () => {
+    // ── AS DUAS FRASES QUE JA NASCERAM FALSAS, PRESAS PARA NAO VOLTAREM ──
+    //
+    // 1. `verified` dizia "seu cadastro passou a usar este endereco". A funcao
+    //    do banco so grava `players.email` quando a inscricao TEM jogador --
+    //    `player_id` e NULLABLE, e ela devolve 'verified' assim mesmo. Ha
+    //    cenario no contrato que cria exatamente esse caso. Afirmar a
+    //    propagacao e afirmar o que nem sempre aconteceu.
+    //
+    // 2. `unknown` dizia "e este e um dos antigos", afirmando a causa. Ela tem
+    //    tres: token reemitido, link malformado e inscricao apagada. So a
+    //    primeira sustenta a frase.
+    //
+    // A denylist e assumida: ela pega a formulacao que ja esteve escrita, e nao
+    // fecha a familia. O que fecha e ninguem ter como saber, na hora de montar
+    // o texto, se houve jogador -- `verificationCopy` recebe so o veredito.
+    const confirmado = verificationCopy({ state: "verified" }).paragrafos.join(" ");
+    for (const frase of ["cadastro", "seu perfil", "seus dados"]) {
+      expect(
+        confirmado.toLowerCase(),
+        `"verified" voltou a afirmar mudanca de ${frase}, que so acontece quando ` +
+          "a inscricao tem jogador -- e ela devolve `verified` mesmo quando nao tem.",
+      ).not.toContain(frase);
+    }
+
+    const velho = verificationCopy({ state: "unknown" }).paragrafos.join(" ").toLowerCase();
+    expect(
+      velho,
+      '"unknown" voltou a AFIRMAR a causa. Ela tem tres, e so uma sustenta a frase.',
+    ).toMatch(/pode ter sido|talvez|provavelmente/);
   });
 
   it("os dois estados que nao confirmam nada dizem que a inscricao segue", () => {

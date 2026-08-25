@@ -77,9 +77,16 @@ export function isVerificationStatus(raw: unknown): raw is VerificationStatus {
  * O que a consulta devolveu, cru.
  *
  * `status` e `string` e nao `VerificationStatus` de proposito: quem responde e
- * o Postgres, e o cliente do Supabase entrega `unknown`. Fingir aqui o tipo
- * estreito seria a mesma mentira do `as unknown as` do `select` do servico --
- * imposicao sem conferencia.
+ * o Postgres, e o `.rpc()` do cliente entrega `any` -- nao `unknown`. MEDIDO:
+ * `createAdminClient()` devolve `SupabaseClient` sem generico, e com isso
+ * `const n: number = data` compila calado, tanto quanto `const s: string =
+ * data`.
+ *
+ * A diferenca importa para quem for mexer aqui: `unknown` OBRIGA a checar antes
+ * de usar, e `any` nao obriga nada. E por isso que a checagem de `typeof` da
+ * rota nao e zelo -- ela e a unica conferencia que existe nesse caminho.
+ * Estreitar com `as string` seria a mesma mentira do `as unknown as` do
+ * `select` do servico: imposicao sem conferencia.
  */
 export type VerificationQueryResult =
   | { ok: true; status: string }
@@ -214,10 +221,26 @@ export type VerificationCopy = {
  *
  * ── ELE E PROPOSTA, E PRECISA DE REVISAO DE GENTE ──
  *
- * Nenhum portao deste repo revisa texto. As assertivas de
- * `verification.test.ts` prendem as PROPRIEDADES que nao sao estilo -- que
- * `already` nao soe como erro, que `unknown` ofereca saida, que `error` nao
- * culpe a pessoa --, e nao as frases.
+ * Nenhum portao deste repo revisa texto, e as assertivas de
+ * `verification.test.ts` nao consertam isso -- elas so estreitam o espaco do
+ * erro. Duas das tres que "prendem propriedade" sao DENYLIST de palavra
+ * (`already` sem "erro"/"falha"/"invalido"; `error` sem "voce errou"), e
+ * denylist so pega o que esta na lista: um texto que soe como falha sem usar
+ * nenhuma daquelas palavras passa. A terceira e mais forte por ser positiva --
+ * `unknown` PRECISA oferecer saida.
+ *
+ * O que nenhuma delas cobre e se a frase e VERDADE. Duas ja nasceram falsas e
+ * foram consertadas aqui:
+ *
+ *  - `verified` dizia "seu cadastro passou a usar este endereco", e o cadastro
+ *    NAO e tocado quando a inscricao nao tem jogador (`player_id` e NULLABLE, e
+ *    a funcao do banco devolve 'verified' assim mesmo -- ha cenario no contrato
+ *    que cria esse caso). A frase agora fala do que sempre vale: para onde os
+ *    avisos vao.
+ *  - `unknown` dizia "e este e um dos antigos", afirmando a causa. Ela tem tres
+ *    -- token reemitido, link malformado, inscricao apagada --, e so a primeira
+ *    justifica a frase. Agora ela hedges ("pode ter sido substituido"), que e o
+ *    que o codigo de fato sabe.
  *
  * As restricoes que as frases respeitam, e que nao sao gosto:
  *
@@ -242,7 +265,7 @@ export function verificationCopy(outcome: VerificationOutcome): VerificationCopy
         titulo: "E-mail confirmado",
         paragrafos: [
           "Pronto! Confirmamos que este endereço é seu.",
-          "Os avisos da sua inscrição vêm para cá, e seu cadastro passou a usar este endereço.",
+          "É para cá que a organização manda os avisos da sua inscrição.",
           "Pode fechar esta página.",
         ],
       };
@@ -263,8 +286,8 @@ export function verificationCopy(outcome: VerificationOutcome): VerificationCopy
         emoji: "🔗",
         titulo: "Este link não vale mais",
         paragrafos: [
-          "Sempre que a organização reenvia o comprovante, o link anterior deixa de valer — e este é um dos antigos.",
-          "Procure na sua caixa de entrada o comprovante mais recente: o link dele está valendo.",
+          "Ele pode ter sido substituído: sempre que a organização reenvia o comprovante, o link anterior deixa de valer.",
+          "Procure na sua caixa de entrada o comprovante mais recente — o link dele está valendo.",
           "Sua inscrição continua do jeito que estava. Confirmar o e-mail não é condição para ela valer.",
         ],
       };
