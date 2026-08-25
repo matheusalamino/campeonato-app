@@ -250,6 +250,31 @@ describe("o select do resumo, nos dois lugares onde ele existe", () => {
     }
   });
 
+  it("o enfileiramento da promocao e DO NOTHING, e nao DO UPDATE", () => {
+    // ── UM TETO MEDIDO, E O UNICO PORTAO QUE O FECHA ──
+    //
+    // `ignoreDuplicates: true` e o que vira `ON CONFLICT (kind, dedupe_key) DO
+    // NOTHING`. MEDIDO na T8: trocando por `false`, o quinto portao fica
+    // VERDE -- 26 cenarios passando. Passa porque o PostgREST monta um `DO
+    // UPDATE SET` apenas com as colunas que o corpo traz (kind, dedupe_key,
+    // payload), e nenhuma delas muda de valor num reenfileiramento: `status`,
+    // `attempts` e `sent_at` ficam intactos, a contagem continua 1, e nenhum
+    // e-mail sai duas vezes.
+    //
+    // Ou seja: HOJE os dois se comportam igual, e por isso nenhuma assertiva
+    // de COMPORTAMENTO consegue separa-los. O que separa e o dia em que a
+    // linha ganhar uma coluna -- ai o `DO UPDATE` passa a reescreve-la, e uma
+    // linha ja enviada pode voltar a ser enviavel.
+    //
+    // Sao duas redes para o mesmo risco, e nenhuma sozinha basta:
+    //  - esta, que prende a opcao (uma opcao nao volta sozinha);
+    //  - `promotion.test.ts` > "nao inventa status, tentativa nem instante",
+    //    que prende a linha em TRES chaves exatas (a coluna nova nao entra
+    //    calada).
+    expect(servico).toMatch(/ignoreDuplicates:\s*true/);
+    expect(servico).not.toMatch(/ignoreDuplicates:\s*false/);
+  });
+
   it("o dreno usa o render de verdade, e o stub nao voltou", () => {
     // `render: options.render ?? renderEmail`. Trocar o padrao de volta por um
     // que devolvesse null faria a fila crescer sem nenhum e-mail sair, e nenhum
