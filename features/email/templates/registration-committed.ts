@@ -13,11 +13,17 @@ import { assuntoCom, corpoDe, saudacao, type EmailBody, type Paragrafo } from ".
  *
  * ── POR QUE O LINK DE VERIFICACAO E NULAVEL ──
  *
- * Porque ha tres situacoes em que ele nao existe, e nenhuma e defeito:
- * inscricao ja verificada, inscricao sem `contact_email` (as criadas pelo admin
- * nascem assim), e linha sem `registration_id` no payload. Nas tres o
- * comprovante sai INTEIRO, so sem o bloco do convite -- nao sai href vazio, nao
- * sai convite a clicar em nada.
+ * Porque ha situacoes em que ele nao existe, e nenhuma e defeito. As que
+ * ALCANCAM esta funcao sao duas: inscricao ja verificada, e inscricao sem
+ * `contact_email` (as criadas pelo admin nascem assim). Nas duas o comprovante
+ * sai INTEIRO, so sem o bloco do convite -- nao sai href vazio, nao sai convite
+ * a clicar em nada.
+ *
+ * A lista COMPLETA dos casos de link nulo esta em `RenderInput.verificationLink`
+ * (features/email/render.ts), e e maior -- mas os demais (payload sem
+ * `registration_id`, inscricao que sumiu da tabela) deixam `summary` nulo, e ai
+ * `renderEmail` devolve null ANTES de chamar esta funcao. Nao repita a contagem
+ * daquela lista aqui: ela ja divergiu uma vez.
  *
  * Quem decide as duas primeiras e `canIssueVerificationToken`
  * (features/email/verification.ts); quem grava o token e o store, antes de esta

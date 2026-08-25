@@ -223,9 +223,11 @@ describe("cada kind monta o SEU template", () => {
   });
 
   it("sem link, o comprovante sai inteiro e sem convite orfao", () => {
-    // Os tres casos em que o link e nulo -- ja verificada, sem `contact_email`,
-    // linha sem `registration_id` -- chegam aqui iguais. O comprovante continua
-    // valendo; o que nao pode e sobrar um convite a clicar em nada.
+    // Os casos que ALCANCAM o template -- ja verificada, e sem `contact_email`
+    // -- chegam aqui iguais. (Os outros da lista de `RenderInput` deixam
+    // `summary` nulo, e ai `renderEmail` devolve null antes do template.) O
+    // comprovante continua valendo; o que nao pode e sobrar convite a clicar em
+    // nada.
     const m = renderEmail(entrada("registration_committed", { verificationLink: null }));
 
     expect(m).not.toBeNull();
