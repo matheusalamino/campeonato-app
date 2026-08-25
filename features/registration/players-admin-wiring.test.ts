@@ -161,6 +161,42 @@ describe("app/(protected)/championship/players/PlayersSection.tsx", () => {
     );
   });
 
+  it("o DELETE fica numa inscricao SO", () => {
+    // ── A COSTURA IRMA DA DE CIMA, UMA FUNCAO ACIMA NO MESMO ARQUIVO ──
+    //
+    // Achada na revisao da T7, fora do escopo dela, e fechada na T8.
+    // `removePlayer` faz `.delete().eq("id", registrationId)` -- o codigo esta
+    // CERTO; o que nao existia era a rede. Ele so aparecia em
+    // features/registration/players-admin-wiring.test.ts como CITACAO num nome
+    // de teste ("continua mutando pelo cliente do navegador, como
+    // removePlayer"), e citacao nao prende nada.
+    //
+    // ── POR QUE E PIOR QUE A DO UPDATE ──
+    //
+    // A RLS (`creg admin write`) autoriza o admin sobre TODAS as inscricoes.
+    // No UPDATE, a variavel errada (`championshipId`) casa ZERO linha e o dano
+    // e o toast de sucesso mentindo. Aqui a MESMA troca apaga por um valor que
+    // nao e id de inscricao -- e a familia de defeitos inclui um `.eq` mais
+    // largo (`championship_id`), que apagaria o campeonato inteiro de uma vez,
+    // sem desfazer.
+    //
+    // `pg_safeupdate` nao e rede: medido em 2026-08-25, ele e carregado pelo
+    // `session_preload_libraries` do papel `authenticator` e vale sim neste
+    // caminho, mas so contra o `WHERE` AUSENTE. Contra o `WHERE` errado nao faz
+    // nada.
+    //
+    // ── A VARIAVEL, E NAO SO A COLUNA ──
+    //
+    // Mesmo padrao da assertiva do UPDATE, pelo mesmo motivo medido la: parar
+    // em `.eq("id",` deixaria passar `.eq("id", championshipId)` -- coluna
+    // certa, variavel errada.
+    //
+    // E ela prende COSTURA, nao FORMA: os `\s*` absorvem reindentacao e quebra
+    // de linha. Se esta assertiva quebrasse ao reindentar, ela nao pertenceria
+    // a este arquivo -- ver a nota "ONDE ESTA A LINHA" no fim.
+    expect(secao).toMatch(/\.delete\(\s*\)\s*\.eq\(\s*"id"\s*,\s*registrationId\s*\)/);
+  });
+
   it("NAO remonta o resultado de paymentCheckView", () => {
     // ── O DECOY QUE DERROTAVA ESTA SUITE INTEIRA ──
     //
