@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { EMAIL_KINDS } from "./kinds";
+import { hashToken } from "./verification-token";
 import {
   canIssueVerificationToken,
   isVerificationStatus,
@@ -9,8 +10,10 @@ import {
   verificationCopy,
   verificationLinkFor,
   verificationOutcome,
+  verificationLookupPlan,
   verificationTokenColumns,
   VERIFICATION_STATUSES,
+  VERIFY_EMAIL_RPC,
   VERIFY_EMAIL_PATH,
   type VerificationOutcome,
 } from "./verification";
@@ -72,6 +75,59 @@ describe("verificationOutcome", () => {
     expect(isVerificationStatus("outro")).toBe(false);
     expect(isVerificationStatus(null)).toBe(false);
     expect(isVerificationStatus(1)).toBe(false);
+  });
+});
+
+describe("verificationLookupPlan", () => {
+  const TOKEN = "ab".repeat(32);
+
+  it("manda o HASH para o banco, nunca o valor em claro", () => {
+    // ── A ASSERTIVA QUE SE PAGA, E O QUE ELA CUSTOU PARA EXISTIR ──
+    //
+    // Esta decisao morava em `app/(public)/verify-email/[token]/actions.ts`.
+    // MEDIDO: trocar `hashToken(token)` por `token` no argumento da RPC passava
+    // os CINCO portoes -- 873 testes, 21 do contrato, `tsc` em zero, os dois
+    // scripts de banco --, porque `app/**` nao esta no `include` de nenhum
+    // deles.
+    //
+    // O dano e duplo. Funcional: o hash gravado nunca casa com o claro, entao
+    // TODO link responde "este link nao vale mais". E de sigilo: argumento de
+    // funcao aparece em `log_statement` e em `pg_stat_statements`, e um token em
+    // claro num desses e um link valido esperando ser lido -- exatamente o que o
+    // cabecalho da migration 20260824010000 diz estar evitando.
+    const plano = verificationLookupPlan(TOKEN);
+
+    expect(plano.lookup).toBe(true);
+    if (!plano.lookup) return;
+
+    expect(plano.args.p_token_hash).toBe(hashToken(TOKEN));
+    // As tres afirmacoes que separam "e o hash" de "e alguma string":
+    expect(plano.args.p_token_hash).not.toBe(TOKEN);
+    expect(plano.args.p_token_hash).not.toContain(TOKEN);
+    expect(plano.args.p_token_hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("nomeia o argumento como a funcao do banco o espera", () => {
+    // O nome saiu da rota e veio para ca justamente para ter esta assertiva.
+    // Errado, o PostgREST recusa a chamada e a tela responde `error` a todo
+    // mundo -- e nada em `app/**` veria.
+    const plano = verificationLookupPlan(TOKEN);
+    expect(plano.lookup).toBe(true);
+    if (!plano.lookup) return;
+    expect(Object.keys(plano.args)).toEqual(["p_token_hash"]);
+    expect(VERIFY_EMAIL_RPC).toBe("verify_registration_email");
+  });
+
+  it("token sem forma nao vira consulta, e vira `unknown` -- nunca `error`", () => {
+    // Link truncado, segmento vazio, colagem que perdeu o fim. Nenhum deles e
+    // defeito NOSSO, entao nenhum pode aparecer como falha do sistema. E nenhum
+    // chega ao banco: a forma e conferida antes de existir hash.
+    for (const cru of ["", "   ", "abc", "z".repeat(64), "A".repeat(64), null, undefined]) {
+      const plano = verificationLookupPlan(cru);
+      expect(plano.lookup, `deveria recusar: ${String(cru)}`).toBe(false);
+      if (plano.lookup) continue;
+      expect(plano.outcome).toEqual({ state: "unknown" });
+    }
   });
 });
 

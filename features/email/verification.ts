@@ -20,6 +20,7 @@
 
 import { linkTo } from "@/lib/email/site-url";
 import type { EmailKind } from "./kinds";
+import { hashToken, verificationTokenFrom } from "./verification-token";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // O link
@@ -147,6 +148,54 @@ export function verificationOutcome(result: VerificationQueryResult): Verificati
       return exhaustive;
     }
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// O que a rota faz com o token que chegou na URL
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * O nome da funcao do banco, aqui e nao na rota.
+ *
+ * Mesmo motivo do `VERIFY_EMAIL_PATH`: o unico lugar do repo onde este nome
+ * precisa aparecer e um so, e ele fica onde ha teste.
+ */
+export const VERIFY_EMAIL_RPC = "verify_registration_email";
+
+/**
+ * O PLANO da consulta: ou nao ha o que consultar, ou ha -- e entao o argumento
+ * ja vem pronto.
+ *
+ * ── POR QUE ISTO EXISTE, E POR QUE NAO PODE MORAR NA ROTA ──
+ *
+ * `app/**` nao e varrido por `include` nenhum deste repo, e nao ha job de teste
+ * no CI. MEDIDO nesta branch, com a decisao ainda dentro de
+ * `app/(public)/verify-email/[token]/actions.ts`: trocar `hashToken(token)` por
+ * `token` no argumento da RPC passava os CINCO portoes -- 873 testes, 21 do
+ * contrato, `tsc` em zero, os dois scripts de banco. E o dano e duplo: todo link
+ * do mundo passa a responder "este link nao vale mais" (o hash gravado nunca
+ * casa com o claro), e o valor em CLARO passa a viajar como argumento de funcao
+ * -- que e o que aparece em `log_statement` e em `pg_stat_statements`, e e
+ * exatamente o que o cabecalho da migration 20260824010000 diz estar evitando.
+ *
+ * Com o par `{ p_token_hash }` montado AQUI, a rota nao tem mais como escolher
+ * errado: ela nao escreve o nome do argumento nem chama o hash. O que sobra la
+ * e passar `plano.args` adiante, e ha assertiva de texto sobre isso em
+ * `route-wiring.test.ts`.
+ */
+export type VerificationLookupPlan =
+  | { lookup: false; outcome: VerificationOutcome }
+  | { lookup: true; args: { p_token_hash: string } };
+
+export function verificationLookupPlan(
+  rawToken: string | null | undefined,
+): VerificationLookupPlan {
+  // A FORMA e conferida antes de qualquer hash existir. Link truncado, segmento
+  // vazio, colagem que perdeu o fim: todos viram `unknown` -- "este link nao
+  // vale mais" --, e nunca `error`.
+  const token = verificationTokenFrom(rawToken);
+  if (!token) return { lookup: false, outcome: { state: "unknown" } };
+  return { lookup: true, args: { p_token_hash: hashToken(token) } };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
