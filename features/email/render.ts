@@ -4,6 +4,7 @@ import type { OutboxRow, Recipient, RegistrationSummary } from "./outbox";
 import { organizerNewRegistrationEmail } from "./templates/organizer-new-registration";
 import { paymentVerifiedEmail } from "./templates/payment-verified";
 import { registrationCommittedEmail } from "./templates/registration-committed";
+import { waitlistPromotedEmail } from "./templates/waitlist-promoted";
 
 /**
  * O MAPA de `kind` para template, e a fronteira entre o dreno e o texto.
@@ -44,8 +45,8 @@ export type RenderInput = {
    * (nao ha FK entre `email_outbox` e `championship_registrations`; ver
    * scripts/test-email-outbox.sh).
    *
-   * O template decide se ainda tem o que dizer sem ela. Nenhum dos TRES que
-   * tem corpo tem, e os tres devolvem null -- que ADIA a linha em vez de
+   * O template decide se ainda tem o que dizer sem ela. Nenhum dos QUATRO que
+   * tem corpo tem, e os quatro devolvem null -- que ADIA a linha em vez de
    * mata-la. (A contagem esta declarada por extenso em render.test.ts, e e la
    * que ela acende quando um template novo entra.)
    */
@@ -139,10 +140,36 @@ export const renderEmail: EmailRenderer = ({ kind, recipient, summary, verificat
       // podem prometer.
     }
 
-    // Os quatro declarados adiante do uso. Nenhum produtor deste repo os
-    // enfileira, entao nenhum destes chega aqui. Devolver null e o que faz a
-    // linha ser ADIADA se um dia chegar antes do template.
-    case "waitlist_promoted":
+    case "waitlist_promoted": {
+      // Mesmo motivo dos outros tres: sem resumo nao ha aviso possivel, porque
+      // nome e campeonato sao o corpo inteiro. Null ADIA, e adiar deixa a fila
+      // crescer -- que e visivel.
+      if (!summary) return null;
+      return para(
+        recipient,
+        waitlistPromotedEmail({
+          playerName: summary.playerName,
+          championshipName: summary.championshipName,
+        }),
+      );
+      // `verificationLink` NAO e repassado, e isso e DECISAO, nao esquecimento:
+      // `kindNeedsVerificationLink` so devolve true para
+      // `registration_committed`, entao este `kind` nem chega aqui com link. E
+      // se um dia chegar, emitir token para ele INVALIDARIA o link que a pessoa
+      // ja tem no comprovante -- a emissao sempre regrava o hash. Ver o
+      // docblock de templates/waitlist-promoted.ts.
+      //
+      // `isWaitlist` tambem nao entra: quem recebe este aviso ACABOU de sair da
+      // espera, e o campo do resumo e lido do banco em momento incerto em
+      // relacao a promocao (nao ha gatilho -- ver o docblock de
+      // `enqueueWaitlistPromotedEmail` em services/email-outbox.ts). Um ramo
+      // que dependesse dele poderia mandar o texto errado justamente para quem
+      // o e-mail e.
+    }
+
+    // Os TRES declarados adiante do uso -- os lembretes. Nenhum produtor deste
+    // repo os enfileira, entao nenhum destes chega aqui. Devolver null e o que
+    // faz a linha ser ADIADA se um dia chegar antes do template.
     case "reminder_payment_pending":
     case "reminder_waitlist":
     case "reminder_not_registered":

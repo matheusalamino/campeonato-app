@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFileSync } from "node:child_process";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { createSupabaseOutboxStore } from "@/services/email-outbox";
+import {
+  createSupabaseOutboxStore,
+  enqueueWaitlistPromotedEmail,
+} from "@/services/email-outbox";
 import type { OutboxStore } from "@/features/email/outbox";
 import { hashToken } from "@/features/email/verification-token";
 
@@ -39,14 +42,14 @@ import { hashToken } from "@/features/email/verification-token";
  * ── POR QUE DA PARA EXERCITAR O SERVICO AQUI, SE O `vitest.config.ts` DIZ QUE
  *    NAO DA ──
  *
- * Porque o obstaculo que aquele comentario nomeia nao vale para ESTE ponto de
+ * Porque o obstaculo que aquele comentario nomeia nao vale para ESTES pontos de
  * entrada. Ele diz que quase nenhuma funcao exportada do servico aceita cliente
- * de fora -- e conta: das 15 exportadas em `services/*.ts`, 9 montam o cliente
- * dentro, 5 usam um cliente de nivel de modulo, e UMA recebe por argumento.
+ * de fora -- e conta: das 16 exportadas em `services/*.ts`, 9 montam o cliente
+ * dentro, 5 usam um cliente de nivel de modulo, e DUAS recebem por argumento.
  *
- * Essa uma e `createSupabaseOutboxStore`, e e por ela que o contrato entra:
- * passa um cliente `service_role` de verdade, apontado para o Postgres local, e
- * nao dubla nada.
+ * As duas sao `createSupabaseOutboxStore` e `enqueueWaitlistPromotedEmail` (a
+ * segunda desde a T8), e e por elas que o contrato entra: passa um cliente
+ * `service_role` de verdade, apontado para o Postgres local, e nao dubla nada.
  *
  * (Aquela frase ja disse "toda funcao exportada monta o cliente la dentro", que
  * tinha contraexemplo, e depois "QUASE toda", que a contagem tambem desmente.
@@ -201,8 +204,25 @@ const REG_SEM_EMAIL = "bbbbbbbb-0000-4000-8000-0000000ec405";
 const CPF_C = "99700000403";
 const CPF_D = "99700000404";
 const CPF_E = "99700000405";
+
+/**
+ * A inscricao do cenario da promocao (T8), e ela NAO tem linha em
+ * `championship_registrations` -- de proposito.
+ *
+ * `enqueueWaitlistPromotedEmail` nao le a inscricao: ela so poe uma linha na
+ * fila, e nao ha FK entre `email_outbox` e `championship_registrations`. Criar
+ * a inscricao so para o cenario acrescentaria fixtura (e um jogador, e um
+ * campeonato) sem acrescentar prova -- e ainda dispararia o gatilho da
+ * inscricao, enfileirando linhas que nao sao deste cenario.
+ *
+ * O id entra em `REGS` assim mesmo, porque e por `dedupe_key` que a limpeza
+ * alcanca as linhas de `kind` DE VERDADE. A contagem de
+ * `championship_registrations` sobre `REGS` continua valendo: este id nunca
+ * esteve la, entao ele conta zero antes e depois.
+ */
+const REG_PROMOVIDA = "bbbbbbbb-0000-4000-8000-0000000ec406";
 const CPFS = [CPF_A, CPF_B, CPF_C, CPF_D, CPF_E];
-const REGS = [REG_A, REG_B, REG_PENDENTE, REG_VERIFICADA, REG_SEM_EMAIL];
+const REGS = [REG_A, REG_B, REG_PENDENTE, REG_VERIFICADA, REG_SEM_EMAIL, REG_PROMOVIDA];
 const CHAMPS = [CHAMP, CHAMP_VERIF];
 
 /**
@@ -319,8 +339,9 @@ function instante(valor: unknown): string | null {
  * projeto ja foi mordido por uma limpeza que cobria tres de cinco.
  *
  *  1. as linhas dos sete kinds de teste;
- *  2. as linhas que o GATILHO escreveu -- kind de VERDADE, apagadas por
- *     dedupe_key, que e o id da inscricao;
+ *  2. as linhas de kind DE VERDADE, apagadas por dedupe_key, que e o id da
+ *     inscricao. Sao as que o GATILHO da inscricao escreve, mais a que
+ *     `enqueueWaitlistPromotedEmail` escreve desde a T8;
  *  3. as inscricoes;
  *  4. os jogadores;
  *  5. o campeonato.
@@ -333,7 +354,7 @@ function instante(valor: unknown): string | null {
 async function limpar(): Promise<void> {
   const passos: Array<[string, PromiseLike<{ error: { message: string } | null }>]> = [
     ["fila por kind", db.from("email_outbox").delete().in("kind", KINDS)],
-    ["fila do gatilho", db.from("email_outbox").delete().in("dedupe_key", REGS)],
+    ["fila por dedupe_key", db.from("email_outbox").delete().in("dedupe_key", REGS)],
     ["inscricoes", db.from("championship_registrations").delete().in("championship_id", CHAMPS)],
     ["jogadores", db.from("players").delete().in("cpf", CPFS)],
     ["campeonatos", db.from("championships").delete().in("id", CHAMPS)],
@@ -1171,6 +1192,86 @@ describe("verify_registration_email, pelo catalogo", () => {
   });
 });
 
+describe("enqueueWaitlistPromotedEmail", () => {
+  /**
+   * ⚠️ Este cenario NAO promove ninguem, e a funcao que ele exercita tambem
+   * nao. Nao ha conceito de desistencia neste repo e nao ha chamador -- quem
+   * promove nasce no bloco A6b. O que se prova aqui e o ENFILEIRAMENTO.
+   */
+  it("enfileira UMA linha com a dedupe_key certa, e chamar de novo nao cria a segunda", async () => {
+    // A fotografia local: quantas linhas existem HOJE com esta dedupe_key.
+    // Deveria ser zero (o `beforeAll` ja limpou), e afirmar isso separa
+    // "entrou uma" de "ja havia uma".
+    expect(
+      await contarPorDedupe([REG_PROMOVIDA]),
+      "a fixtura da promocao ja tinha linha antes do cenario comecar",
+    ).toBe(0);
+
+    await enqueueWaitlistPromotedEmail(db, REG_PROMOVIDA);
+
+    const { data: primeira, error: erroPrimeira } = await db
+      .from("email_outbox")
+      .select("id,kind,dedupe_key,payload,status,attempts")
+      .eq("dedupe_key", REG_PROMOVIDA);
+    if (erroPrimeira) throw new Error(`leitura da fila falhou: ${erroPrimeira.message}`);
+
+    const linhas = (primeira ?? []) as Linha[];
+    expect(linhas, "a chamada deveria ter enfileirado exatamente UMA linha").toHaveLength(1);
+
+    const linha = linhas[0];
+    expect(linha.kind).toBe("waitlist_promoted");
+    expect(linha.dedupe_key).toBe(REG_PROMOVIDA);
+    // O payload leva IDENTIFICADOR, e e por ele que o dreno acha a inscricao.
+    // Com a chave escrita em camelCase o INSERT funciona igual, e a linha fica
+    // adiada para sempre sem erro nenhum.
+    expect(linha.payload).toEqual({ registration_id: REG_PROMOVIDA });
+    // Os DEFAULTs da tabela decidem estes dois. Uma linha nascendo 'sent'
+    // entraria na fila ja marcada como enviada, e o aviso nunca sairia.
+    expect(linha.status).toBe("pending");
+    expect(linha.attempts).toBe(0);
+
+    // ── A SEGUNDA CHAMADA, QUE E O PONTO DO CENARIO ──
+    //
+    // `ON CONFLICT (kind, dedupe_key) DO NOTHING`. Se o alvo do conflito
+    // perdesse o `kind`, esta segunda chamada continuaria devolvendo sucesso --
+    // mas o INSERT teria sido engolido por conflito com o COMPROVANTE, e nao
+    // por conflito consigo mesmo. Por isso a assertiva de baixo olha a
+    // CONTAGEM, e a de `promotion.test.ts` olha o alvo.
+    await enqueueWaitlistPromotedEmail(db, REG_PROMOVIDA);
+
+    const depois = await contarPorDedupe([REG_PROMOVIDA]);
+    expect(depois, "a segunda chamada criou uma linha a mais").toBe(1);
+
+    // E a linha e A MESMA, e nao uma que substituiu a primeira: com o `id`
+    // preservado, ninguem apagou e reinseriu por baixo.
+    const { data: segunda, error: erroSegunda } = await db
+      .from("email_outbox")
+      .select("id")
+      .eq("dedupe_key", REG_PROMOVIDA)
+      .single();
+    if (erroSegunda) throw new Error(`releitura da fila falhou: ${erroSegunda.message}`);
+    expect((segunda as { id: string }).id).toBe(linha.id);
+  });
+
+  it("recusa id vazio ANTES de falar com o banco", async () => {
+    // A guarda mora em `waitlistPromotedRow`, e ela e o que impede uma
+    // `dedupe_key` em branco de entrar: NOT NULL nao recusa "". Este cenario
+    // prova que a guarda esta no CAMINHO -- que o servico de fato passa por
+    // ela, e nao por um objeto montado a mao.
+    await expect(enqueueWaitlistPromotedEmail(db, "   ")).rejects.toThrow(
+      /registrationId vazio/,
+    );
+
+    // E nada entrou. A contagem TOTAL, e nao a por dedupe_key: uma chave em
+    // branco nao seria achada por `.in("dedupe_key", [...])` com o id de
+    // verdade, e o vazamento passaria despercebido.
+    expect(
+      await contarPorDedupe([""]),
+      "entrou linha com dedupe_key em branco na fila",
+    ).toBe(0);
+  });
+});
+
 // Ultimo do arquivo, e tem de continuar sendo: o vitest roda os cenarios na
 // ordem em que estao escritos, e este e o que AFIRMA que a limpeza aconteceu. O
 // gancho `afterAll` e backstop, nao prova -- no script irmao um trap com
@@ -1181,13 +1282,15 @@ describe("a limpeza", () => {
     await limpar();
 
     expect(await contarPorKinds(KINDS), "sobrou linha de teste na fila").toBe(0);
-    // Assertiva PROPRIA para as linhas do gatilho, porque elas tem kind DE
-    // VERDADE: a de cima nao as ve, e a do total so acusaria um numero
-    // diferente, sem dizer quem sobrou. Sao as unicas linhas deste arquivo que,
-    // esquecidas, ficariam numa fila de e-mail real esperando um dreno.
+    // Assertiva PROPRIA para as linhas de kind DE VERDADE -- as do gatilho da
+    // inscricao, e a que `enqueueWaitlistPromotedEmail` enfileira desde a T8.
+    // A de cima nao as ve (ela so enumera os kinds de teste), e a do total so
+    // acusaria um numero diferente, sem dizer quem sobrou. Sao as unicas linhas
+    // deste arquivo que, esquecidas, ficariam numa fila de e-mail real
+    // esperando um dreno.
     expect(
       await contarPorDedupe(REGS),
-      "sobrou linha do GATILHO na fila -- kind de verdade, dedupe_key de teste",
+      "sobrou linha de kind DE VERDADE na fila (gatilho ou promocao), com dedupe_key de teste",
     ).toBe(0);
     expect(await contarTabela("championship_registrations", "id", REGS)).toBe(0);
     expect(await contarTabela("players", "cpf", CPFS)).toBe(0);

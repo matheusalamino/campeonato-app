@@ -20,6 +20,7 @@ import {
   sentColumns,
 } from "@/features/email/outbox-columns";
 import type { ClaimedOutboxRow } from "@/features/email/outbox-columns";
+import { OUTBOX_DEDUPE_TARGET, waitlistPromotedRow } from "@/features/email/promotion";
 import { createVerificationToken } from "@/features/email/verification-token";
 import {
   canIssueVerificationToken,
@@ -40,9 +41,10 @@ import type { VerifiableRegistrationRow } from "@/features/email/verification";
  * ── MAS O STORE NAO ESTA MAIS NU (T5b) ──
  *
  * `services/email-outbox.contract.ts` exercita os NOVE metodos de
- * `createSupabaseOutboxStore` contra o Postgres local, sem dublar nada -- ela e
- * a unica funcao exportada daqui que RECEBE o cliente do Supabase por
- * argumento, e e por essa porta que o contrato entra. Ele mora numa segunda
+ * `createSupabaseOutboxStore` contra o Postgres local, sem dublar nada. Ela era
+ * a unica funcao exportada daqui que RECEBIA o cliente do Supabase por
+ * argumento; desde a T8 sao DUAS, com `enqueueWaitlistPromotedEmail`, e o
+ * contrato entra pelas duas. Ele mora numa segunda
  * suite, com `include` proprio, porque a principal nao pode precisar de banco.
  * Roda a mao, com o stack local de pe:
  *
@@ -238,6 +240,59 @@ export function createSupabaseOutboxStore(supabase: SupabaseClient): OutboxStore
       return plain;
     },
   };
+}
+
+/**
+ * Enfileira o AVISO de que uma inscricao saiu da lista de espera.
+ *
+ * ⚠️ **Esta funcao NAO promove ninguem.** Ela nao toca `is_waitlist`, nao le a
+ * inscricao e nao confere se a promocao de fato aconteceu -- so poe uma linha
+ * na fila de e-mail. Promover e do bloco A6b, que ainda nao existe: nao ha
+ * conceito de desistencia neste repo (`championship_registrations` tem
+ * `is_waitlist` e nada mais que registre saida), e portanto nao ha gatilho nem
+ * chamador. Na data deste arquivo NINGUEM chama esta funcao -- ela e a peca que
+ * o A6b vai usar, entregue com a rede junto.
+ *
+ * ── POR QUE TypeScript, E NAO GATILHO COMO OS OUTROS TRES ──
+ *
+ * Porque nao ha coluna que mude para o gatilho observar. `registration_committed`
+ * pendura-se no INSERT da inscricao e `payment_verified` no UPDATE daquela
+ * coluna; "saiu da espera" seria `is_waitlist` de true para false -- mas quem
+ * escreve essa transicao e justamente o A6b, que ainda nao decidiu como o faz.
+ * Um gatilho escrito agora fixaria essa decisao antes da hora.
+ *
+ * ── SO A CHAMADA MORA AQUI ──
+ *
+ * A linha (kind, dedupe_key, payload) e o alvo do `ON CONFLICT` sao de
+ * `features/email/promotion.ts`, onde ha teste de comportamento:
+ * `services/**` nao e coletado pelo `vitest.config.ts`. O que este arquivo faz
+ * e ENTREGAR ao Supabase.
+ *
+ * `ignoreDuplicates: true` e o que vira `ON CONFLICT (kind, dedupe_key) DO
+ * NOTHING`, o mesmo contrato dos gatilhos irmaos: promover a mesma inscricao
+ * duas vezes manda UM aviso so. A consequencia disso esta escrita no docblock
+ * de `promotion.ts`, e a prova contra o Postgres esta em
+ * `services/email-outbox.contract.ts`.
+ *
+ * Estoura em vez de engolir. Quem chamar isto vai estar no meio de uma
+ * promocao, e "o aviso nao entrou na fila" e coisa que o chamador precisa
+ * saber -- silencio aqui vira pessoa promovida que nunca soube.
+ */
+export async function enqueueWaitlistPromotedEmail(
+  supabase: SupabaseClient,
+  registrationId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("email_outbox")
+    .upsert(waitlistPromotedRow(registrationId), {
+      onConflict: OUTBOX_DEDUPE_TARGET,
+      ignoreDuplicates: true,
+    });
+  if (error) {
+    throw new Error(
+      `enfileiramento do aviso de promocao de ${registrationId} falhou: ${error.message}`,
+    );
+  }
 }
 
 async function atualizar(

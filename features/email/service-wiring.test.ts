@@ -152,6 +152,12 @@ describe("o select do resumo, nos dois lugares onde ele existe", () => {
       /createVerificationToken\(/,
       /canIssueVerificationToken\(/,
       /verificationTokenColumns\(/,
+      // As duas da T8. `enqueueWaitlistPromotedEmail` nao e metodo do store --
+      // e a SEGUNDA funcao exportada do servico que recebe o cliente por
+      // argumento --, mas corre o mesmo risco: a linha da fila montada a mao
+      // aqui nasceria sem portao nenhum.
+      /waitlistPromotedRow\(/,
+      /OUTBOX_DEDUPE_TARGET/,
     ]) {
       expect(servico, `a delegacao ${chamada} sumiu de services/email-outbox.ts`).toMatch(chamada);
     }
@@ -214,6 +220,21 @@ describe("o select do resumo, nos dois lugares onde ele existe", () => {
       // leitura e nao gravacao -- por isso o literal proibido tem o `:`.)
       "email_verification_token_hash:",
       "email_verified_at:",
+      // ── AS TRES COLUNAS DA ESCRITA NA FILA (T8) ──
+      //
+      // Elas entram na lista, ao contrario de `attempts:` e `sent_at:` da nota
+      // acima, porque aqui a pergunta e mesmo de ARQUITETURA e nao de
+      // corretude: a T8 acrescentou a PRIMEIRA escrita em `email_outbox` feita
+      // por este arquivo, e a linha dela e montada por `waitlistPromotedRow`
+      // (features/email/promotion.ts). Reinlinar o objeto aqui acende, mesmo
+      // que o objeto esteja certo.
+      //
+      // `dedupe_key:` e a mais cara das tres: escrita a mao com o valor errado
+      // -- o id do campeonato, por exemplo -- ela colidiria com a linha de
+      // outra pessoa e o `DO NOTHING` engoliria o INSERT sem erro nenhum.
+      "kind:",
+      "dedupe_key:",
+      "payload:",
     ];
 
     for (const literal of proibidos) {

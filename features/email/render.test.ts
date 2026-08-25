@@ -70,18 +70,23 @@ describe("renderEmail", () => {
     }
   });
 
-  it("monta corpo para EXATAMENTE estes tres kinds", () => {
+  it("monta corpo para EXATAMENTE estes quatro kinds", () => {
     // POR EXTENSO, e nao derivado de nada. E a assertiva que se paga, e ela JA
-    // SE PAGOU UMA VEZ: escrita na T5 declarando DOIS, ela ficou vermelha na T7
-    // no instante em que `payment_verified` ganhou template, e obrigou quem
-    // escreveu a T7 a vir aqui atualizar a lista CONSCIENTEMENTE. Isso e o
-    // desenho, e nao um incomodo -- template novo que ninguem declarou aqui e
-    // template que passou sem revisao de texto.
+    // SE PAGOU DUAS VEZES: escrita na T5 declarando DOIS, ficou vermelha na T7
+    // quando `payment_verified` ganhou template, e vermelha de novo na T8
+    // quando `waitlist_promoted` ganhou o seu. Nas duas ela obrigou quem
+    // acrescentou o template a vir aqui atualizar a lista CONSCIENTEMENTE. Isso
+    // e o desenho, e nao um incomodo -- template novo que ninguem declarou aqui
+    // e template que passou sem revisao de texto.
     //
-    // Quem chegar com o quarto: acrescente o nome ABAIXO e conte a mesma
+    // Quem chegar com o quinto: acrescente o nome ABAIXO e conte a mesma
     // historia neste comentario. Nao troque a lista literal por algo derivado
     // de `EMAIL_KINDS` nem por uma contagem -- derivar e o que faz a assertiva
     // parar de perguntar alguma coisa.
+    //
+    // A ORDEM tambem e prova: `EMAIL_KINDS.filter` preserva a ordem da
+    // declaracao, entao esta lista afirma QUAIS e em que posicao. Os tres que
+    // sobram (os lembretes) sao os tres ultimos de `EMAIL_KINDS`.
     //
     // ── POR QUE `typeof === "object"`, E NAO `!== null` ──
     //
@@ -100,6 +105,7 @@ describe("renderEmail", () => {
       "registration_committed",
       "organizer_new_registration",
       "payment_verified",
+      "waitlist_promoted",
     ]);
   });
 
@@ -110,6 +116,7 @@ describe("renderEmail", () => {
     expect(renderEmail(entrada("registration_committed", { summary: null }))).toBeNull();
     expect(renderEmail(entrada("organizer_new_registration", { summary: null }))).toBeNull();
     expect(renderEmail(entrada("payment_verified", { summary: null }))).toBeNull();
+    expect(renderEmail(entrada("waitlist_promoted", { summary: null }))).toBeNull();
   });
 
   it("o comprovante leva o link de verificacao que RECEBEU", () => {
@@ -194,7 +201,29 @@ describe("renderEmail", () => {
     expect(m?.text).not.toMatch(/\bGOL\b/);
   });
 
-  it("poe cada campo do resumo no campo certo dos TRES templates", () => {
+  it("o aviso de promocao NAO leva link, nem quando recebe um", () => {
+    // ── A DECISAO ESCRITA, DO LADO DO DRENO ──
+    //
+    // `kindNeedsVerificationLink` devolve true SO para
+    // `registration_committed`, entao na pratica este `kind` nunca chega com
+    // link. Esta assertiva e a rede do OUTRO lado: se um dia alguem
+    // acrescentar `waitlist_promoted` la sem pensar, o template continua nao
+    // usando o campo -- e o vermelho aparece aqui, e nao na caixa de entrada
+    // de alguem.
+    //
+    // O motivo de nao levar: a emissao de token SORTEIA e REGRAVA o hash (ver
+    // `issueVerificationToken` em services/email-outbox.ts), entao emitir um
+    // aqui invalidaria o link que a pessoa recebeu no comprovante e talvez
+    // ainda nao tenha usado. O comprovante e o convite natural.
+    const m = renderEmail(entrada("waitlist_promoted", { verificationLink: LINK }));
+
+    expect(m).not.toBeNull();
+    expect(m?.html).not.toContain(LINK);
+    expect(m?.text).not.toContain(LINK);
+    expect(m?.html).not.toMatch(/href=/i);
+  });
+
+  it("poe cada campo do resumo no campo certo dos QUATRO templates", () => {
     // ── A JUNTA QUE ESTA ASSERTIVA EXISTE PARA PRENDER ──
     //
     // `renderEmail` copia o resumo para os dados do template campo a campo, e
@@ -240,6 +269,15 @@ describe("renderEmail", () => {
     expect(conferido?.subject).toContain("— NomeDoCampeonato");
     expect(conferido?.text).not.toContain("Olá, NomeDoCampeonato");
     expect(conferido?.subject).not.toContain("— NomeDoJogador");
+
+    // E o quarto, pelo mesmo motivo: `waitlistPromotedEmail` recebe os mesmos
+    // dois `string | null`, e troca-los nao tem sintoma de tipo nenhum -- o
+    // aviso passaria a cumprimentar a pessoa pelo nome do campeonato.
+    const promovido = renderEmail(entrada("waitlist_promoted", { summary: resumo }));
+    expect(promovido?.text).toContain("Olá, NomeDoJogador!");
+    expect(promovido?.subject).toContain("— NomeDoCampeonato");
+    expect(promovido?.text).not.toContain("Olá, NomeDoCampeonato");
+    expect(promovido?.subject).not.toContain("— NomeDoJogador");
   });
 
   it("o comprovante repassa a lista de espera do resumo", () => {

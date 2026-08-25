@@ -13,7 +13,7 @@ export default defineConfig({
     //
     // O que segura e o resto: quase nenhuma funcao exportada do servico aceita
     // um cliente de fora, entao a primeira assertiva de verdade comecaria
-    // dublando o banco. CONTADO em `services/*.ts`, 15 funcoes exportadas:
+    // dublando o banco. CONTADO em `services/*.ts`, 16 funcoes exportadas:
     //
     //   9  montam o cliente DENTRO da funcao (`createAdminClient()`,
     //      `createClient()`) — public-registration (7), championship-capacity,
@@ -21,9 +21,10 @@ export default defineConfig({
     //   5  usam um cliente de NIVEL DE MODULO, montado no import — pior para
     //      teste, porque nem chamar a funcao e preciso (match-events, players,
     //      registrations);
-    //   1  RECEBE o cliente por argumento: `createSupabaseOutboxStore(supabase)`.
+    //   2  RECEBEM o cliente por argumento: `createSupabaseOutboxStore(supabase)`
+    //      e `enqueueWaitlistPromotedEmail(supabase, id)`.
     //
-    // Essa ultima e a porta por onde o contrato de banco entra. Esta frase ja
+    // Essas duas sao a porta por onde o contrato de banco entra. Esta frase ja
     // disse "toda" (falso, ha o contraexemplo) e depois "QUASE toda" (tambem
     // falso: 9 de 15 nao e "quase toda"). O numero esta acima para nao precisar
     // de adverbio.
