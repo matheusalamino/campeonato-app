@@ -1011,14 +1011,27 @@ describe("drainOutbox", () => {
     }
   });
 
-  it("linha MORTA por descadastro nao gasta token", async () => {
-    // A quarta guarda mata em vez de adiar, e o efeito sobre o token e o mesmo:
+  it("linha MORTA por falta de destino nao gasta token", async () => {
+    // As guardas que MATAM em vez de adiar, e o efeito sobre o token e o mesmo:
     // e-mail que nao vai sair nao pode invalidar o link de um que ja saiu.
-    const lembrete = linha({ id: "a", kind: "reminder_waitlist", dedupeKey: "reg-1" });
-    const { store, registro } = fakeStore([lembrete], { resumos: { "reg-1": resumo } });
-    await drainOutbox(deps(store, registro, { isOptedOut: async () => true }));
+    //
+    // ── POR QUE `registration_committed` E NAO UM LEMBRETE ──
+    //
+    // A morte por descadastro so alcanca `kind` de massa, e nenhum deles pede
+    // link. MEDIDO: com a emissao hoistada para ANTES das guardas -- a mutacao
+    // que este bloco existe para pegar --, uma versao deste cenario montada com
+    // `reminder_waitlist` ficava VERDE, porque `kindNeedsVerificationLink`
+    // recusava o kind antes de a ordem importar. A mutacao tem de tocar o caso
+    // que a assertiva exercita.
+    //
+    // `no_recipient` e a guarda que mata um kind que PEDE link: resumo sem
+    // endereco nenhum.
+    const semEndereco = { ...resumo, contactEmail: null, playerEmail: null };
+    const { store, registro } = fakeStore([linha()], { resumos: { "reg-1": semEndereco } });
+    const r = await drainOutbox(deps(store, registro));
 
-    expect(registro.dead.map((d) => d.id)).toEqual(["a"]);
+    expect(r.reasons.no_recipient).toBe(1);
+    expect(registro.dead.map((d) => d.id)).toEqual(["row-1"]);
     expect(registro.tokensPedidos).toEqual([]);
   });
 
