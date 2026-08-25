@@ -81,7 +81,15 @@ import { hashToken } from "@/features/email/verification-token";
  */
 const LOOPBACK = /^https?:\/\/(127\.0\.0\.1|\[::1\]|localhost)(:\d+)?$/;
 
-function credenciaisDoStackLocal(): { url: string; key: string } {
+/**
+ * A mesma trava, para a string de conexao do Postgres. Ela tem forma diferente
+ * da API (`postgresql://usuario:senha@host:porta/base`), entao a regex acima nao
+ * serve -- e reaproveita-la com um `startsWith` deixaria passar
+ * `postgresql://...@127.0.0.1.exemplo.com/`.
+ */
+const LOOPBACK_DB = /^postgres(ql)?:\/\/[^@]*@(127\.0\.0\.1|\[::1\]|localhost):\d+\//;
+
+function credenciaisDoStackLocal(): { url: string; key: string; dbUrl: string } {
   let saida: string;
   try {
     saida = execFileSync("supabase", ["status", "-o", "env"], { encoding: "utf8" });
@@ -98,6 +106,7 @@ function credenciaisDoStackLocal(): { url: string; key: string } {
   };
   const url = pegar("API_URL");
   const key = pegar("SERVICE_ROLE_KEY");
+  const dbUrl = pegar("DB_URL");
   if (!url || !key) {
     throw new Error(
       "Nao achei API_URL ou SERVICE_ROLE_KEY na saida de `supabase status -o env`. " +
@@ -110,7 +119,13 @@ function credenciaisDoStackLocal(): { url: string; key: string } {
         "Ele escreve na fila de e-mail e dispara o gatilho da inscricao.",
     );
   }
-  return { url, key };
+  if (!LOOPBACK_DB.test(dbUrl)) {
+    throw new Error(
+      `Recusando falar com o Postgres em ${dbUrl.replace(/:[^:@]*@/, ":***@")}: ` +
+        "este contrato so fala com o stack LOCAL.",
+    );
+  }
+  return { url, key, dbUrl };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -204,6 +219,27 @@ const CHAMPS = [CHAMP, CHAMP_VERIF];
  */
 let db: SupabaseClient;
 let store: OutboxStore;
+let dbUrl = "";
+
+/**
+ * Uma leitura do CATALOGO do Postgres, por `psql`.
+ *
+ * ── POR QUE NAO PELO CLIENTE DO SUPABASE ──
+ *
+ * Porque o PostgREST nao expoe `pg_catalog`: `pg_proc`, `proconfig` e `proacl`
+ * sao invisiveis por aquele caminho. E sao justamente eles que respondem as
+ * perguntas que nenhum cenario de COMPORTAMENTO alcanca -- se a funcao tem
+ * `SET search_path`, se e `SECURITY DEFINER`, e quem tem EXECUTE.
+ *
+ * MEDIDO: removendo `SET search_path = public` da funcao, os 21 cenarios de
+ * comportamento ficavam VERDES. O codigo estava certo e nada o prendia.
+ *
+ * Usa a MESMA `DB_URL` de `supabase status -o env`, com trava de loopback
+ * propria -- ver `LOOPBACK_DB`.
+ */
+function catalogo(sql: string): string {
+  return execFileSync("psql", [dbUrl, "-At", "-c", sql], { encoding: "utf8" }).trim();
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Ferramentas
@@ -315,7 +351,9 @@ let sabbathDentro = new Date(0);
 let sabbathFora = new Date(0);
 
 beforeAll(async () => {
-  const { url, key } = credenciaisDoStackLocal();
+  const credenciais = credenciaisDoStackLocal();
+  const { url, key } = credenciais;
+  dbUrl = credenciais.dbUrl;
   db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   store = createSupabaseOutboxStore(db);
 
@@ -963,6 +1001,35 @@ describe("verify_registration_email", () => {
 
     // O endereco DIGITADO venceu o do cadastro, e so depois do clique.
     expect(await emailDoCadastro(CPF_C)).toBe("digitado-c@teste.local");
+
+    // ── O ESCOPO DA PROPAGACAO, E POR QUE ELE PRECISA DE ASSERTIVA PROPRIA ──
+    //
+    // A assertiva de cima prova que o cadastro CERTO mudou. Nao prova que so ele
+    // mudou. MEDIDO nesta branch: alargando o `WHERE id = v_player_id` do
+    // `UPDATE public.players` para `WHERE id IS NOT NULL`, os 21 cenarios
+    // ficavam VERDES -- e o banco local terminava com 64 de 64 jogadores
+    // carregando o e-mail de UMA pessoa so. Nenhum cenario olhava para fora da
+    // propria fixtura.
+    //
+    // (A mutacao ingenua -- `UPDATE` sem `WHERE` -- nem chega a rodar: o
+    // `pg_safeupdate` do Supabase a recusa. A que passa e esta, e e por ela que
+    // esta assertiva foi escrita.)
+    expect(await emailDoCadastro(CPF_D), "o cadastro de OUTRO jogador mudou").toBe(
+      "cadastro-d@teste.local",
+    );
+    expect(await emailDoCadastro(CPF_E), "o cadastro de OUTRO jogador mudou").toBe(
+      "cadastro-e@teste.local",
+    );
+    // E a contagem, que pega o dano em massa mesmo quando ele nao toca nenhum
+    // dos CPFs listados acima: um `UPDATE` de escopo aberto colapsa os enderecos
+    // de todo mundo num so.
+    const distintos = Number(catalogo("select count(distinct email) from public.players;"));
+    const total = Number(catalogo("select count(*) from public.players;"));
+    expect(
+      distintos,
+      `os ${total} jogadores ficaram com ${distintos} endereco(s) distinto(s) -- ` +
+        "a propagacao escapou do jogador desta inscricao",
+    ).toBe(total);
   });
 
   it("o SEGUNDO clique no mesmo link diz 'already', e nao 'unknown'", async () => {
@@ -1027,6 +1094,67 @@ describe("verify_registration_email", () => {
     const claro = await store.issueVerificationToken(REG_SEM_EMAIL);
     expect(claro).not.toBeNull();
     expect(await verificar(hashToken(claro as string))).toBe("verified");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// O catalogo: o que nenhum cenario de comportamento alcanca
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * As propriedades de SEGURANCA de `verify_registration_email`, lidas do
+ * `pg_catalog`.
+ *
+ * Nenhuma delas tem sintoma no caminho feliz -- e por isso que precisam de
+ * assertiva propria. MEDIDO: removendo `SET search_path = public` da funcao, os
+ * 21 cenarios de comportamento ficavam VERDES.
+ */
+describe("verify_registration_email, pelo catalogo", () => {
+  const REGPROC = "'public.verify_registration_email(text)'::regprocedure";
+
+  it("fixa o search_path", () => {
+    // Sem `SET search_path`, a funcao resolve nomes pelo search_path de QUEM
+    // CHAMA. Numa funcao `SECURITY DEFINER`, isso e a escalada classica: um
+    // schema antecedente com uma `players` falsa passa a receber a gravacao,
+    // com os privilegios do dono.
+    //
+    // As referencias de tabela ja sao qualificadas (`public.`), o que fecha o
+    // caminho por outra via -- mas as duas defesas sao independentes, e esta e a
+    // que sobrevive a alguem escrever `FROM players` sem prefixo amanha.
+    const config = catalogo(
+      `select coalesce(array_to_string(proconfig, ','), '') from pg_proc where oid = ${REGPROC};`,
+    );
+    expect(config, "a funcao perdeu o SET search_path").toContain("search_path=public");
+  });
+
+  it("continua SECURITY DEFINER", () => {
+    // Sem o definer, o INSERT/UPDATE roda com o papel de quem chamou e a RLS de
+    // `championship_registrations` (ligada) volta a valer. Nao e furo de
+    // seguranca -- e o oposto: a funcao para de funcionar, e a tela responde
+    // `error`. Como o `service_role` ignora RLS, nenhum cenario deste arquivo
+    // notaria.
+    expect(catalogo(`select prosecdef::text from pg_proc where oid = ${REGPROC};`)).toBe(
+      "true",
+    );
+  });
+
+  it("da EXECUTE ao service_role e a mais ninguem", () => {
+    // `REVOKE ... FROM PUBLIC` nao fecha nada sozinho neste banco: `anon` e
+    // `authenticated` recebem EXECUTE nominalmente por ALTER DEFAULT PRIVILEGES.
+    // E o GRANT ao `service_role` e explicito de proposito -- `CREATE OR REPLACE`
+    // NAO reaplica as default privileges, entao numa base onde alguem tenha
+    // revogado o privilegio, reaplicar a migration sem o GRANT deixaria a funcao
+    // existindo e inalcancavel.
+    const papeis = catalogo(
+      "select coalesce(string_agg(grantee, ',' order by grantee), '') " +
+        "from information_schema.role_routine_grants " +
+        "where specific_schema = 'public' and routine_name = 'verify_registration_email';",
+    ).split(",");
+
+    expect(papeis).toContain("service_role");
+    expect(papeis).not.toContain("anon");
+    expect(papeis).not.toContain("authenticated");
+    expect(papeis).not.toContain("PUBLIC");
   });
 });
 
