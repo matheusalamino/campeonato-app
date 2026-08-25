@@ -14,8 +14,10 @@
 #      indice parcial do dreno;
 #   3. concorrencia -- `FOR UPDATE SKIP LOCKED`, que so aparece com DUAS
 #      conexoes ao mesmo tempo;
-#   4. quem ESCREVE na fila -- o gatilho da inscricao e o `contact_email` que
-#      commit_registration passou a gravar;
+#   4. quem ESCREVE na fila -- os DOIS gatilhos de
+#      championship_registrations (o AFTER INSERT da inscricao e o AFTER UPDATE
+#      do pagamento conferido), o `contact_email` que commit_registration
+#      passou a gravar, e quem tem permissao de marcar o pagamento;
 #   5. quem TIRA da fila -- `claim_email_outbox_batch`, o recolhimento do que
 #      ficou parado em 'sending', e quem tem permissao de chamar.
 #
@@ -119,6 +121,12 @@ EMAIL_CADASTRO="cadastro-velho@teste.local"
 # uma execucao paralela levaria estes jogadores embora no meio da suite.
 CPF_T="99800000301"
 CPF_T2="99800000302"
+
+# O `sub` do token authenticated NAO-ADMIN do cenario do check de pagamento.
+# Ele NAO existe em auth.users e NAO tem linha em `profiles` -- e e exatamente
+# isso que o faz nao-admin: `is_admin()` procura `profiles.id = auth.uid()` com
+# role='admin'. Nada e gravado com este id; ele so viaja dentro do JWT.
+SUB_SEM_PERFIL="00000000-0000-4000-8000-00000000dead"
 
 falhou=0
 checar() {
@@ -736,8 +744,11 @@ $DB -c "
   UPDATE players SET preferred_position = 'ATA' WHERE cpf = '$CPF_T2';
   UPDATE championship_registrations SET is_waitlist = true WHERE id = '$reg_rpc';
 " > /dev/null
-# UPDATE, e nao INSERT, tambem de proposito: o gatilho e AFTER INSERT (medido em
-# `\d championship_registrations`), entao isto nao acrescenta linha a fila e as
+# UPDATE, e nao INSERT, tambem de proposito: nenhum dos dois gatilhos desta
+# tabela reage a ESTAS colunas -- `trg_enqueue_registration_emails` e AFTER
+# INSERT, e `trg_enqueue_payment_verified` e AFTER UPDATE **OF
+# payment_verified**, que so dispara quando aquela coluna esta no SET. Medido em
+# `\d championship_registrations`. Entao isto nao acrescenta linha a fila e as
 # contagens dos cenarios de baixo continuam valendo.
 
 SELECT_DRENO="id,is_waitlist,contact_email,championships(name),players(email,name,preferred_position)"
@@ -803,6 +814,202 @@ saida=$($DB -c "
 checar "a reinsercao do mesmo id passa sem erro" "sem_erro" "$(erro_estado "$saida")"
 checar "e nao acrescentou linha nenhuma a fila" "2" \
   "$($DB -c "SELECT count(*) FROM email_outbox WHERE dedupe_key='$REG_FILA';")"
+
+echo "== o check de pagamento: quem pode marcar =="
+# ── POR QUE ESTE CENARIO PASSA PELO PostgREST, E NAO PELO $DB ────────────────
+#
+# Porque pelo $DB ele passaria COM O DEFEITO NO LUGAR. O `$DB` conecta como
+# `postgres`, que e dono de email_outbox e tem `rolbypassrls` -- ou seja,
+# contorna as duas barreiras que este cenario existe para provar. Marcar o
+# pagamento por ali funciona ate com o gatilho sem SECURITY DEFINER.
+#
+# O caminho de verdade e outro: o admin muta pelo cliente do navegador, em
+# sessao `authenticated` (ver `markPaymentVerified` em PlayersSection.tsx). Nela
+# o INSERT do gatilho esbarra em DUAS barreiras independentes de email_outbox --
+# o REVOKE nominal e a RLS com zero policies --, e falha de gatilho ABORTA o
+# UPDATE. Sem o definer, marcar o pagamento nao deixa so de mandar e-mail:
+# deixa de SALVAR, e o admin ve um erro.
+#
+# ── O QUE A RECUSA DA RLS PARECE, E POR QUE MEDIR O CODIGO HTTP NAO SERVE ────
+#
+# MEDIDO: `anon` e `authenticated` TEM o GRANT de UPDATE nesta tabela (vem por
+# ALTER DEFAULT PRIVILEGES), entao nao ha erro de permissao. Quem recusa e a
+# RLS, e ela recusa FILTRANDO: o PostgREST responde 200 com `[]`, e a coluna
+# nao muda. Uma assertiva sobre o codigo HTTP ficaria verde com a RLS aberta.
+# Por isso o que se mede aqui e a REPRESENTACAO das linhas afetadas e o valor
+# da coluna depois.
+JWT_SECRET_LOCAL=$(supabase status -o env 2>/dev/null | sed -n 's/^JWT_SECRET="\(.*\)"$/\1/p')
+
+oficina=$(mktemp -d)
+
+# O extrator do access_token, em arquivo em vez de `node -e` inline: a citacao
+# de JSON dentro de sh dentro de node e onde este tipo de linha quebra calada.
+cat > "$oficina/token.mjs" <<'JS'
+let corpo = "";
+process.stdin.on("data", (c) => (corpo += c));
+process.stdin.on("end", () => {
+  try {
+    process.stdout.write(JSON.parse(corpo).access_token || "");
+  } catch {
+    process.stdout.write("");
+  }
+});
+JS
+
+# O `authenticated` NAO-ADMIN, cunhado com o segredo do stack local.
+#
+# Cunhado, e nao criado em auth.users, de proposito: o que faz alguem ser
+# nao-admin aqui e NAO TER linha em `profiles` com role='admin' -- e isso
+# `is_admin()` le do `sub` do JWT. Um token assinado com o segredo local, com
+# `role: authenticated` e um `sub` sem perfil, E uma sessao authenticated
+# nao-admin para todos os efeitos do PostgREST e da RLS -- e nao deixa usuario
+# de teste para tras em auth.users.
+#
+# Ha assertiva logo abaixo conferindo que os tres tokens sao quem dizem ser.
+# Sem ela, um token expirado ou mal assinado "recusaria" pelo motivo errado e o
+# cenario ficaria verde com a RLS aberta.
+cat > "$oficina/cunhar.mjs" <<'JS'
+import { createHmac } from "node:crypto";
+const seg = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+const cabecalho = seg({ alg: "HS256", typ: "JWT" });
+const agora = Math.floor(Date.now() / 1000);
+const corpo = seg({
+  sub: process.argv[3],
+  role: "authenticated",
+  aud: "authenticated",
+  iat: agora,
+  exp: agora + 3600,
+});
+const assinatura = createHmac("sha256", process.argv[2])
+  .update(`${cabecalho}.${corpo}`)
+  .digest("base64url");
+process.stdout.write(`${cabecalho}.${corpo}.${assinatura}`);
+JS
+
+ADMIN_TOKEN=$(curl -s -X POST "$API_URL/auth/v1/token?grant_type=password" \
+  -H "apikey: $ANONK" -H "Content-Type: application/json" \
+  -d '{"email":"admin@local.test","password":"Admin123!"}' | node "$oficina/token.mjs" || true)
+NAOADMIN_TOKEN=$(node "$oficina/cunhar.mjs" "$JWT_SECRET_LOCAL" "$SUB_SEM_PERFIL" || true)
+rm -rf "$oficina"
+oficina=""
+
+# O admin local vem de scripts/seed-auth-local.sh. Sem ele o cenario inteiro
+# nao vale nada, e esta assertiva e a que diz isso em vez de deixar as de baixo
+# ficarem verdes por token vazio.
+checar "o token do admin local foi emitido" "sim" \
+  "$([ -n "$ADMIN_TOKEN" ] && echo sim || echo nao)"
+
+is_admin_de() {
+  # $1 = token. Devolve o que a RLS vai enxergar.
+  curl -s -X POST "$API_URL/rest/v1/rpc/is_admin" \
+    -H "apikey: $ANONK" -H "Authorization: Bearer $1" \
+    -H "Content-Type: application/json" -d '{}'
+}
+# O CONTROLE das tres recusas de baixo: prova que os tokens sao distintos e que
+# cada um chega ao banco como quem se diz. Com um token invalido, todos os tres
+# dariam "false" e as recusas nao provariam nada.
+checar "os tres tokens chegam ao banco como quem dizem ser" "true|false|false" \
+  "$(is_admin_de "$ADMIN_TOKEN")|$(is_admin_de "$NAOADMIN_TOKEN")|$(is_admin_de "$ANONK")"
+
+pv_patch() {
+  # $1 = token. Marca o pagamento pelo caminho do PostgREST e devolve a
+  # REPRESENTACAO das linhas afetadas -- `[]` quando a RLS filtrou tudo.
+  curl -s -X PATCH "$API_URL/rest/v1/championship_registrations?id=eq.$REG_FILA" \
+    -H "apikey: $ANONK" -H "Authorization: Bearer $1" \
+    -H "Content-Type: application/json" -H "Prefer: return=representation" \
+    -d '{"payment_verified":true}'
+}
+pv_coluna() { $DB -c "SELECT payment_verified FROM championship_registrations WHERE id='$REG_FILA';"; }
+pv_fila()   { $DB -c "SELECT count(*) FROM email_outbox WHERE kind='payment_verified' AND dedupe_key='$REG_FILA';"; }
+
+checar "a inscricao do check comeca sem pagamento conferido, e sem aviso na fila" "f|0" \
+  "$(pv_coluna)|$(pv_fila)"
+
+# As duas recusas. A coluna DEPOIS de cada tentativa e a metade que carrega
+# peso: o `[]` sozinho tambem sairia de um id inexistente.
+checar "o anon nao marca pagamento, e nao mexe na coluna" "[]|f|0" \
+  "$(pv_patch "$ANONK")|$(pv_coluna)|$(pv_fila)"
+checar "o authenticated NAO-ADMIN tambem nao, e tambem nao mexe" "[]|f|0" \
+  "$(pv_patch "$NAOADMIN_TOKEN")|$(pv_coluna)|$(pv_fila)"
+
+echo "== o admin marca, e o gatilho enfileira UMA linha =="
+pv_patch "$ADMIN_TOKEN" > /dev/null
+checar "o admin marcou o pagamento pelo caminho de verdade" "t" "$(pv_coluna)"
+checar "e nasceu UMA linha payment_verified na fila" "1" "$(pv_fila)"
+checar "com o payload apontando para a inscricao" "1" \
+  "$($DB -c "SELECT count(*) FROM email_outbox
+              WHERE kind='payment_verified' AND dedupe_key='$REG_FILA'
+                AND payload->>'registration_id' = '$REG_FILA';")"
+# A fila da inscricao passa a ter tres linhas: as duas do INSERT mais esta.
+checar "as tres linhas da inscricao sao as esperadas" \
+  "organizer_new_registration|payment_verified|registration_committed" \
+  "$($DB -c "SELECT string_agg(kind, '|' ORDER BY kind) FROM email_outbox WHERE dedupe_key='$REG_FILA';")"
+
+echo "== a prova do WHEN, por CONTAGEM DE EXECUCAO da funcao =="
+# ── LEIA ESTA SECAO ANTES DE MEXER NO GATILHO ───────────────────────────────
+#
+# A assertiva OBVIA do `WHEN` -- marcar duas vezes e contar linhas -- PASSA SEM
+# O `WHEN`. Ela esta logo abaixo, com o rotulo dizendo isso, porque apagar um
+# teste cego nao ensina ninguem: sem o `WHEN` a funcao EXECUTA na segunda vez, e
+# o `ON CONFLICT (kind, dedupe_key) DO NOTHING` engole o INSERT. Contagem
+# identica, defeito no lugar.
+pv_patch "$ADMIN_TOKEN" > /dev/null
+checar "marcar de novo nao duplica (ATENCAO: fica verde SEM o WHEN tambem)" "1" "$(pv_fila)"
+
+# ── A ASSERTIVA QUE DISCRIMINA ──
+#
+# Tirando a linha da fila, o `ON CONFLICT` deixa de ter o que engolir. Ai a
+# contagem da fila VIRA a contagem de execucoes da funcao:
+#
+#   0 linha  = a funcao nao rodou nenhuma vez  (com o WHEN)
+#   1 linha  = a funcao rodou uma vez          (sem o WHEN)
+#
+# A situacao nao e hipotetica: e exatamente o que acontece depois de o dreno
+# mandar o e-mail e alguem limpar a fila. Sem o `WHEN`, um UPDATE que nao muda
+# nada reenfileira, e a pessoa recebe o aviso outra vez.
+$DB -c "DELETE FROM email_outbox WHERE kind='payment_verified' AND dedupe_key='$REG_FILA';" > /dev/null
+checar "a linha do aviso saiu da fila" "0" "$(pv_fila)"
+$DB -c "UPDATE championship_registrations SET payment_verified = true WHERE id='$REG_FILA';" > /dev/null
+checar "com o WHEN, reescrever o MESMO valor executa a funcao ZERO vez" "0" "$(pv_fila)"
+
+# ── O CONTROLE, e sem ele o zero de cima nao vale nada ──
+#
+# Um gatilho DERRUBADO tambem produz zero ali. O que separa "o WHEN barrou" de
+# "nao ha gatilho" e provar que a funcao AINDA EXECUTA quando a transicao de
+# verdade acontece. Com a linha ainda fora da fila, false -> true tem de
+# recoloca-la.
+$DB -c "UPDATE championship_registrations SET payment_verified = false WHERE id='$REG_FILA';" > /dev/null
+$DB -c "UPDATE championship_registrations SET payment_verified = true  WHERE id='$REG_FILA';" > /dev/null
+checar "e na transicao de verdade a funcao executa UMA vez (a linha voltou)" "1" "$(pv_fila)"
+
+echo "== desmarcar e marcar de novo QUEIMA o aviso, e nao manda outro =="
+# A consequencia que quem opera precisa saber, e que a tela avisa antes do
+# clique (PAYMENT_CHECK_CONFIRM, em features/registration/payment-check.ts).
+# Aqui a funcao EXECUTA -- a transicao acontece de verdade --, e quem segura o
+# segundo e-mail e o `ON CONFLICT`, porque a `dedupe_key` e a mesma inscricao.
+# O id da linha ANTES do ciclo. E ele que separa "a linha sobreviveu" de "a
+# linha foi trocada por outra igual" -- uma contagem de 1 nao distingue as duas,
+# e so a primeira significa que o aviso nao vai sair de novo.
+pv_id_antes=$($DB -c "SELECT id FROM email_outbox WHERE kind='payment_verified' AND dedupe_key='$REG_FILA';")
+$DB -c "UPDATE championship_registrations SET payment_verified = false WHERE id='$REG_FILA';" > /dev/null
+$DB -c "UPDATE championship_registrations SET payment_verified = true  WHERE id='$REG_FILA';" > /dev/null
+checar "o ciclo desmarcar/marcar nao acrescenta uma segunda linha" "1" "$(pv_fila)"
+checar "e a linha da fila e a MESMA de antes, nao uma nova" "$pv_id_antes" \
+  "$($DB -c "SELECT id FROM email_outbox WHERE kind='payment_verified' AND dedupe_key='$REG_FILA';")"
+
+# ── Quem pode executar a funcao do gatilho ──
+#
+# Defesa em profundidade, e NAO a trava que faz o gatilho funcionar -- a
+# distincao foi medida: com o EXECUTE revogado de `authenticated`, o UPDATE
+# daquela sessao ainda dispara o gatilho. O PostgreSQL cobra EXECUTE de quem
+# CRIA o gatilho, e nao de quem o faz disparar. As duas metades da assertiva
+# importam: so "o service_role consegue" passaria identico com a funcao aberta.
+checar "o gatilho do pagamento nao e executavel por anon nem authenticated" "true|false|false" \
+  "$($DB -c "SELECT has_function_privilege('service_role','public.enqueue_payment_verified_email()','EXECUTE')::text
+             || '|' || has_function_privilege('anon','public.enqueue_payment_verified_email()','EXECUTE')::text
+             || '|' || has_function_privilege('authenticated','public.enqueue_payment_verified_email()','EXECUTE')::text;")"
+checar "e ele e SECURITY DEFINER, que e o que faz o UPDATE do admin salvar" "true" \
+  "$($DB -c "SELECT prosecdef::text FROM pg_proc WHERE proname='enqueue_payment_verified_email';")"
 
 echo "== a limpeza devolve a tabela ao estado de antes =="
 limpar

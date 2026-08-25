@@ -12,6 +12,7 @@ import { Player } from "@/types/player";
 type RegistrationResponse = {
   id: string;
   final_overall: number | null;
+  payment_verified: boolean | null;
   player: {
     id: string;
     name: string;
@@ -22,6 +23,7 @@ type RegistrationResponse = {
 type ChampionshipPlayer = {
   id: string;
   final_overall: number | null;
+  payment_verified: boolean | null;
   player: Player;
 };
 
@@ -40,12 +42,18 @@ export default function ChampionshipPlayersPage() {
     async function loadPlayers() {
       startLoading();
 
+      // `payment_verified` faz parte do select de proposito: sem ela o campo
+      // chega `undefined` a PlayersSection e TODA inscricao aparece como nao
+      // conferida -- sem erro e sem sintoma, porque esta string nao passa por
+      // typecheck nenhum. Quem a prende e
+      // features/registration/players-admin-wiring.test.ts.
       const { data, error } = await supabase
         .from("championship_registrations")
         .select(
           `
           id,
           final_overall,
+          payment_verified,
           player:players!inner (
             id,
             name,
@@ -67,6 +75,7 @@ export default function ChampionshipPlayersPage() {
         data?.map((item) => ({
           id: item.id,
           final_overall: item.final_overall,
+          payment_verified: item.payment_verified,
           player: item.player,
         })) || [];
 
