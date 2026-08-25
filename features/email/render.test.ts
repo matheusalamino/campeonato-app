@@ -109,6 +109,83 @@ describe("renderEmail", () => {
     ]);
   });
 
+/**
+ * A FRASE que SO UM template diz, e que nenhum dos outros tres diz.
+ *
+ * ── O BURACO QUE ESTA TABELA FECHA, MEDIDO ──
+ *
+ * As assertivas que a T8 escreveu para `waitlist_promoted` conferiam so o que
+ * os QUATRO templates tem em comum: a saudacao (`Ola, {nome}!`), o campeonato
+ * depois do travessao no assunto, e a ausencia de link. Nenhuma delas olhava o
+ * que aquele e-mail DIZ.
+ *
+ * Resultado MEDIDO na revisao da T8: trocar `waitlistPromotedEmail` por
+ * `paymentVerifiedEmail` dentro do `case "waitlist_promoted"` de render.ts --
+ * e a troca inversa, no `case "payment_verified"` -- passava os CINCO portoes,
+ * 946 testes verdes. Os dois templates recebem os mesmos dois `string | null`,
+ * entao a troca nao tem sintoma de tipo nenhum.
+ *
+ * O dano nao e cosmetico: quem sai da lista de espera receberia "A organizacao
+ * conferiu o seu pagamento" -- afirmacao falsa sobre dinheiro --, e quem teve o
+ * pagamento conferido receberia "Voce saiu da lista de espera", sobre uma fila
+ * em que talvez nunca esteve.
+ *
+ * ── POR QUE MATRIZ, E NAO UMA ASSERTIVA POR TEMPLATE ──
+ *
+ * Uma positiva sozinha ("o aviso de promocao fala da espera") prende o caso
+ * dela e deixa o vizinho solto. A matriz afirma as duas metades para os quatro:
+ * cada kind DIZ a sua frase e NAO DIZ nenhuma das outras tres. Assim qualquer
+ * troca, em qualquer direcao, acende -- inclusive a que ainda nao existe,
+ * quando entrar o quinto template.
+ *
+ * As frases sao curtas e vem do corpo, nao do assunto: o assunto ja tem rede
+ * propria em cada `*.test.ts` de template, e o corpo e o que a pessoa le.
+ */
+const ASSINATURA: ReadonlyArray<{ kind: EmailKind; frase: RegExp }> = [
+  { kind: "registration_committed", frase: /sua inscrição está confirmada/i },
+  { kind: "organizer_new_registration", frase: /acabou de se inscrever/i },
+  { kind: "payment_verified", frase: /conferiu o seu pagamento/i },
+  { kind: "waitlist_promoted", frase: /saiu da lista de espera/i },
+];
+
+describe("cada kind monta o SEU template", () => {
+  it("diz a frase que so ele diz, e nenhuma das outras tres", () => {
+    for (const { kind, frase } of ASSINATURA) {
+      const m = renderEmail(entrada(kind));
+
+      expect(
+        m?.text,
+        `renderEmail("${kind}") nao disse a frase que so ele diz (${frase}). ` +
+          "Ou o texto do template mudou -- e ai atualize a frase AQUI, " +
+          "conscientemente --, ou este `case` esta montando o template errado.",
+      ).toMatch(frase);
+
+      for (const outro of ASSINATURA) {
+        if (outro.kind === kind) continue;
+        expect(
+          m?.text,
+          `renderEmail("${kind}") disse a frase de "${outro.kind}". Os dois ` +
+            "recebem os mesmos `string | null`, entao a troca nao tem sintoma " +
+            "de tipo -- e o e-mail sai afirmando a coisa errada para a pessoa " +
+            "errada.",
+        ).not.toMatch(outro.frase);
+      }
+    }
+  });
+
+  it("cobre TODO kind que tem corpo, e nao so os que alguem lembrou", () => {
+    // Sem esta linha, um template novo entra sem assinatura e a matriz acima
+    // segue verde por nao saber que ele existe. Ela amarra a tabela a MESMA
+    // lista declarada em "monta corpo para EXATAMENTE estes quatro kinds".
+    const comCorpo = EMAIL_KINDS.filter((kind) => {
+      const m = renderEmail(entrada(kind));
+      return typeof m === "object" && m !== null;
+    });
+
+    expect(ASSINATURA.map((a) => a.kind)).toEqual(comCorpo);
+  });
+});
+
   it("adia o comprovante quando nao sabe de quem e a inscricao", () => {
     // Sem resumo, o corpo inteiro faltaria: nome, campeonato e situacao saem
     // todos dele. Null ADIA a linha (ver `no_body` em drainOutbox), e a fila
