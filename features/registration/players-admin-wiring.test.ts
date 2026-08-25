@@ -140,12 +140,56 @@ describe("app/(protected)/championship/players/PlayersSection.tsx", () => {
     // ja estara gasta em todas. Nenhum outro portao deste repo ve isso.
     //
     // E `pg_safeupdate` NAO e rede aqui: medido em 2026-08-25, ele e carregado
-    // pelo `session_preload_libraries` do papel `authenticator`. Ele valeria
-    // neste caminho, mas o UPDATE nao esta sem WHERE -- esta com o WHERE
-    // errado, que e outra coisa.
+    // pelo `session_preload_libraries` do papel `authenticator`, entao vale sim
+    // no caminho do PostgREST -- sem `.eq` nenhum ele recusa com
+    // `21000 UPDATE requires a WHERE clause`. So que o defeito alcancavel aqui
+    // nao e o WHERE AUSENTE: e o WHERE ERRADO, e contra esse ele nao faz nada.
+    //
+    // ── A VARIAVEL, E NAO SO A COLUNA ──
+    //
+    // MEDIDO: a versao anterior parava em `.eq("id",` e deixava passar
+    // `.eq("id", championshipId)` -- variavel errada, coluna certa. Aquilo
+    // atravessava os CINCO portoes (`tsc` 0 linhas, 919 testes verdes), e o
+    // efeito e pior que carimbar demais: o PATCH casa ZERO linha, o PostgREST
+    // nao devolve erro, e o admin ve `toast.success` sem que nada tenha sido
+    // marcado. Falha silenciosa com aviso de sucesso.
+    //
+    // Por isso o padrao prende o NOME que a funcao recebe. Renomear o
+    // parametro obriga a vir aqui -- que e o preco certo a pagar.
     expect(secao).toMatch(
-      /\.update\(\s*markPaymentVerifiedPatch\(\)\s*\)\s*\.eq\(\s*"id"\s*,/,
+      /\.update\(\s*markPaymentVerifiedPatch\(\)\s*\)\s*\.eq\(\s*"id"\s*,\s*registrationId\s*\)/,
     );
+  });
+
+  it("NAO remonta o resultado de paymentCheckView", () => {
+    // ── O DECOY QUE DERROTAVA ESTA SUITE INTEIRA ──
+    //
+    // Encontrado na revisao da T7. Este trecho satisfaz TODA positiva e TODA
+    // negativa desta suite, typecheca, e devolve a decisao de mao unica para
+    // dentro do `.tsx`:
+    //
+    //     const pagamento = {
+    //       ...paymentCheckView({ paymentVerified: reg.payment_verified }),
+    //       canMark: true,
+    //     };
+    //
+    // `paymentCheckView(` continua escrito, nenhum literal proibido aparece, e
+    // mesmo assim o botao passa a ser oferecido para quem JA foi conferido --
+    // exatamente o desfazer-que-nao-desfaz que features/registration/payment-check.ts
+    // existe para nao oferecer.
+    //
+    // As duas negativas abaixo o matam: a primeira proibe espalhar o resultado,
+    // a segunda proibe reescrever qualquer um dos tres campos como chave de
+    // objeto. O codigo legitimo so LE (`pagamento.canMark`, `pagamento.label`),
+    // e nenhuma das tres palavras aparece como chave hoje -- conferido.
+    //
+    // ⚠️ Continua sendo DENYLIST, com o teto que toda denylist tem: um decoy
+    // que construa o objeto campo a campo, sem espalhar e com outros nomes,
+    // ainda passa. Ver a nota "O QUE FICA FORA DE ALCANCE" no fim do arquivo.
+    expect(secao).not.toMatch(/\.\.\.\s*paymentCheckView/);
+    expect(secao).not.toMatch(/\bcanMark\s*:/);
+    expect(secao).not.toMatch(/\bverified\s*:/);
+    expect(secao).not.toMatch(/\blabel\s*:/);
   });
 
   it("muta a tabela das inscricoes, e nao outra", () => {
@@ -168,6 +212,53 @@ describe("app/(protected)/championship/players/PlayersSection.tsx", () => {
     expect(secao).not.toMatch(/markPaymentUnverified|unmarkPayment|desmarcar/i);
   });
 
+  /**
+   * ── O QUE FICA FORA DE ALCANCE, E A DECISAO DE PARAR AQUI ──
+   *
+   * DECIDIDO na revisao da T7, e escrito aqui porque este e o arquivo que a
+   * proxima pessoa abre quando quiser mexer nesta tela.
+   *
+   * A revisao plantou SEIS mutacoes dentro de `PlayersSection.tsx` e todas
+   * atravessaram os cinco portoes. UMA delas -- `.eq("id", championshipId)`,
+   * variavel errada -- esta MORTA, pela assertiva `o UPDATE fica numa inscricao
+   * SO` acima; era a mais cara e custava uma linha de regex. O decoy do spread
+   * tambem esta morto, logo acima.
+   *
+   * As outras seguem vivas, e a decisao e NAO persegui-las com mais assertiva
+   * de texto:
+   *
+   *   - o check parando de ler a coluna (`paymentVerified: true` fixo);
+   *   - os ramos do `canMark` invertidos no JSX;
+   *   - o modal perdendo o paragrafo de irreversibilidade;
+   *   - o botao deixando de ser so do admin.
+   *
+   * ── POR QUE PARAR ──
+   *
+   * Porque as quatro sao sobre o JSX -- qual ramo renderiza, qual elemento
+   * existe --, e assertiva de TEXTO nao alcanca isso: ela leria a marcacao como
+   * string, e qualquer reescrita legitima do JSX a quebraria. Falso vermelho
+   * contra codigo certo e o modo de falha que mata uma rede, porque a proxima
+   * pessoa a desliga (ver o docblock de features/testing/sem-comentario.ts, que
+   * ja pagou esse preco duas vezes).
+   *
+   * O que essas quatro pedem e RENDERIZAR o componente e asseverar sobre a
+   * arvore -- e isso nao existe neste repo: `app/**` esta fora do `include` do
+   * `vitest.config.ts`, nenhum glob alcanca `.test.tsx`, nao ha
+   * `@testing-library/react` nas dependencias, e nao ha job de teste no CI
+   * (`.github/workflows` so tem `migrate.yml`).
+   *
+   * Ou seja: o buraco e ESTRUTURAL e vale um bloco proprio -- ligar `.test.tsx`
+   * e um renderizador --, nao mais quatro regex nesta suite. Ver a memoria
+   * "Portao cego: .test.tsx e o CI", que ja registra o conserto de uma linha no
+   * `include`.
+   *
+   * ── ONDE ESTA A LINHA, PARA QUEM CHEGAR DEPOIS ──
+   *
+   * Vale assertiva de texto aqui quando ela prende uma COSTURA -- um nome, um
+   * argumento, uma chamada, um literal que nao pode voltar. Nao vale quando
+   * prende FORMA de marcacao. Se a sua assertiva quebraria ao reindentar o JSX,
+   * ela nao pertence a este arquivo.
+   */
   it("continua mutando pelo cliente do navegador, como removePlayer", () => {
     // A escolha de desenho: o check segue o padrao vizinho em vez de inventar
     // uma server action so para ele. Se um dia mudar, que mude para os dois --

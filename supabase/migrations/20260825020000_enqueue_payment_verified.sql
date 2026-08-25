@@ -12,7 +12,8 @@
 -- `outbox.test.ts`) e o `ADD COLUMN` da propria 20260803000000. A tela do
 -- admin nao mencionava pagamento em lugar nenhum.
 --
--- Esta migration cria SOMENTE o gatilho. O controle que passou a escrever a
+-- Esta migration cria o gatilho e a funcao dele -- mais dois REVOKE e dois
+-- COMMENT --, e nada do lado da tela. O controle que passou a escrever a
 -- coluna e o check do admin em
 -- `app/(protected)/championship/players/PlayersSection.tsx` -- mas quem garante
 -- o enfileiramento e o PostgreSQL, e nao aquela tela: QUALQUER caminho que

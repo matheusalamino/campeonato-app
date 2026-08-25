@@ -972,14 +972,43 @@ checar "a linha do aviso saiu da fila" "0" "$(pv_fila)"
 $DB -c "UPDATE championship_registrations SET payment_verified = true WHERE id='$REG_FILA';" > /dev/null
 checar "com o WHEN, reescrever o MESMO valor executa a funcao ZERO vez" "0" "$(pv_fila)"
 
-# ── O CONTROLE, e sem ele o zero de cima nao vale nada ──
+# ── O TERCEIRO ESTADO, e por que a contagem de cima sozinha NAO o pega ──
 #
-# Um gatilho DERRUBADO tambem produz zero ali. O que separa "o WHEN barrou" de
-# "nao ha gatilho" e provar que a funcao AINDA EXECUTA quando a transicao de
-# verdade acontece. Com a linha ainda fora da fila, false -> true tem de
-# recoloca-la.
+# Ha um mutante do `WHEN` que passa pelas duas assertivas anteriores:
+#
+#     WHEN (OLD.payment_verified IS DISTINCT FROM NEW.payment_verified)
+#
+# "dispara em qualquer mudanca". MEDIDO: com ele no lugar, o script inteiro
+# ficava 60/60 VERDE. A contagem de cima mede a reescrita do MESMO valor
+# (true -> true), e este mutante tambem nao dispara ali; e o controle logo
+# abaixo passa pelo caminho do `false`, onde ele dispara igual ao gatilho certo
+# -- com o `ON CONFLICT` escondendo a diferenca.
+#
+# O que ele faz de verdade, no cenario exato que o `WHEN` existe para cobrir
+# (linha ja drenada, e alguem DESMARCA o pagamento):
+#
+#     apos MARCAR      fila = 1
+#     apos o DRENO     fila = 0
+#     apos DESMARCAR   fila = 1   <-- e a coluna vale FALSE
+#
+# Ou seja: DESMARCAR o pagamento enfileira o aviso "Pagamento conferido". A
+# pessoa e informada de que o pagamento foi conferido no instante exato em que
+# ele foi DESconferido. Com o gatilho de verdade o mesmo roteiro da zero.
+#
+# Esta e a assertiva que separa os TRES estados. Ela so significa alguma coisa
+# com a linha FORA da fila -- com a linha la, o `ON CONFLICT` devolve 1 nos tres
+# casos e a assertiva vira decoracao.
 $DB -c "UPDATE championship_registrations SET payment_verified = false WHERE id='$REG_FILA';" > /dev/null
-$DB -c "UPDATE championship_registrations SET payment_verified = true  WHERE id='$REG_FILA';" > /dev/null
+checar "DESMARCAR nao enfileira aviso de pagamento conferido" "0" "$(pv_fila)"
+checar "e a coluna de fato desmarcou (o UPDATE aconteceu)" "f" "$(pv_coluna)"
+
+# ── O CONTROLE, e sem ele os zeros de cima nao valem nada ──
+#
+# Um gatilho DERRUBADO tambem produz zero nas duas assertivas anteriores. O que
+# separa "o WHEN barrou" de "nao ha gatilho" e provar que a funcao AINDA EXECUTA
+# quando a transicao de verdade acontece. Com a linha ainda fora da fila e a
+# coluna em false, marcar tem de recoloca-la.
+$DB -c "UPDATE championship_registrations SET payment_verified = true WHERE id='$REG_FILA';" > /dev/null
 checar "e na transicao de verdade a funcao executa UMA vez (a linha voltou)" "1" "$(pv_fila)"
 
 echo "== desmarcar e marcar de novo QUEIMA o aviso, e nao manda outro =="

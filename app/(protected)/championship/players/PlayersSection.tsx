@@ -154,9 +154,21 @@ export default function PlayersSection({
   // Mesmo padrao de removePlayer: mutacao pelo cliente do navegador, sessao
   // `authenticated`. Quem autoriza NAO e esta funcao nem o `role` do props --
   // e a RLS de championship_registrations (`creg admin write`, com is_admin()
-  // em USING e WITH CHECK). O `.eq("id", ...)` e o que mantem o UPDATE numa
-  // linha so: sem ele a RLS deixaria passar o carimbo em TODAS as inscricoes,
-  // porque o admin tem permissao sobre todas.
+  // em USING e WITH CHECK). O `.eq("id", registrationId)` e o que mantem o
+  // UPDATE numa linha so.
+  //
+  // O risco aqui e o WHERE ERRADO, e nao o WHERE AUSENTE. Um `.eq` mais largo
+  // (`championship_id`, por exemplo) carimba o campeonato inteiro, porque o
+  // admin tem permissao sobre todas -- MEDIDO: um PATCH com `id=in.(a,b)`
+  // carimba 2 inscricoes e enfileira 2 avisos. Ja sem `.eq` nenhum, o
+  // `pg_safeupdate` recusa com `400 / 21000 UPDATE requires a WHERE clause` e
+  // zero linha e tocada; ele e carregado pelo papel `authenticator`, entao vale
+  // sim neste caminho -- so nao protege contra o filtro errado.
+  //
+  // A variavel esta presa por assertiva em
+  // features/registration/players-admin-wiring.test.ts: trocar
+  // `registrationId` por `championshipId` casa ZERO linha, o PostgREST nao
+  // devolve erro, e o toast de sucesso aparece sem nada ter sido marcado.
   async function markPaymentVerified(registrationId: string) {
     startLoading();
 
@@ -352,7 +364,7 @@ export default function PlayersSection({
                   ) : (
                     <span
                       className="bg-emerald-900/60 border border-emerald-600 text-emerald-300 px-4 py-1.5 rounded-lg text-sm"
-                      title="O aviso por e-mail ja foi enfileirado para este jogador."
+                      title="O aviso por e-mail já foi enfileirado para este jogador."
                     >
                       {pagamento.label}
                     </span>

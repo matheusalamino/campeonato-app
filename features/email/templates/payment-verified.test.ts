@@ -143,6 +143,25 @@ describe("paymentVerifiedEmail", () => {
     // Quem precisar mesmo escrever "vaga" aqui tem de passar por esta linha, e
     // e essa parada obrigatoria que a assertiva compra -- ler o docblock de
     // payment-verified.ts antes de afrouxa-la.
+    //
+    // ── O TETO, MEDIDO, PARA NINGUEM CONFIAR DEMAIS NESTA LINHA ──
+    //
+    // Denylist so pega o que esta na lista. Estas duas ACRESCENTADAS como
+    // paragrafo passam VERDE, e prometem vaga sem nenhuma palavra proibida:
+    //
+    //     "Você já pode considerar sua participação certa."
+    //     "Sua presença no campeonato já é certa."
+    //
+    // ⚠️ E MEDIR ISSO TEM ARMADILHA. Testando por SUBSTITUICAO do paragrafo
+    // "Sua inscrição está completa...", as duas ficam VERMELHAS -- mas pela
+    // assertiva `diz o que isso significa`, que perdeu a frase dela, e nao por
+    // esta aqui. Vermelho pelo motivo errado leria como "a denylist pegou".
+    // Para medir o teto de verdade, ACRESCENTE um paragrafo em vez de trocar
+    // um.
+    //
+    // Nao ha conserto barato: revisao de texto de e-mail e humana, e esta
+    // assertiva e piso, nao teto. O que ela garante e que as redacoes OBVIAS da
+    // promessa nao entram calada.
     const m = paymentVerifiedEmail(DADOS);
 
     for (const corpo of corpos(m)) {
