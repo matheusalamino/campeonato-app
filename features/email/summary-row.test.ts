@@ -4,16 +4,18 @@ import { summariesById, summaryFromRow, type RegistrationSummaryRow } from "./su
 /**
  * A traducao coluna -> campo, que ate a revisao da T5 nao tinha rede NENHUMA.
  *
- * Ela morava em `services/email-outbox.ts`, e `vitest.config.ts` nao coleta
- * `services/**`. MEDIDO com o codigo la: `isWaitlist: !linha.is_waitlist` e a
- * troca de `contactEmail` por `playerEmail` passavam por todos os portoes
- * de entao --
- * 806 testes verdes, `tsc` em zero, os dois scripts de banco verdes.
+ * As tres mutacoes que motivaram esta suite, e o que cada uma quebrava, estao
+ * escritas UMA VEZ, no docblock de `summary-row.ts` -- que e onde elas se
+ * aplicam. Nao as repita aqui: esta narrativa ja viveu em quatro arquivos, e
+ * foi copiando-a que a conta errada dos "seis metodos do store" se espalhou por
+ * cinco sitios.
  *
- * As duas redes que a T5 ja tinha nao alcancavam isto, e vale saber por que:
- * elas provam a STRING do `select` (que as sete colunas sao pedidas -- `id`,
- * a chave, mais as seis do resumo -- e que voltam preenchidas do banco). Coluna pedida e coluna lida sao coisas
- * diferentes -- entre uma e outra ha esta funcao.
+ * O que vale registrar aqui, porque e sobre o ALCANCE destas assertivas e nao
+ * sobre a funcao: as duas redes que a T5 ja tinha nao chegavam ate ela. Elas
+ * provam a STRING do `select` -- que as sete colunas sao pedidas (`id`, a
+ * chave, mais as seis do resumo) e que voltam preenchidas do banco. Coluna
+ * PEDIDA e coluna LIDA sao coisas diferentes, e entre uma e outra ha esta
+ * funcao.
  */
 
 /** Uma linha COMPLETA e com todo campo DISTINTO dos vizinhos. A distincao e o
