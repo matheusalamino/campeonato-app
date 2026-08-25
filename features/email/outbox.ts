@@ -447,8 +447,16 @@ export async function drainOutbox(deps: DrainDeps): Promise<DrainReport> {
     // banco, e o hash precisa estar gravado antes de o link ir no texto.
     //
     // `regId` nulo (payload sem `registration_id`) nao emite nada: nao ha
-    // inscricao para verificar. A linha ainda sai, sem o bloco do link -- e sem
-    // resumo ela nem chega a ter corpo, e cai em `no_body`.
+    // inscricao para verificar.
+    //
+    // MEDIDO com sonda, porque a versao anterior desta frase errava o motivo:
+    // uma linha assim NAO chega ate aqui. Sem `registration_id` nao ha resumo,
+    // sem resumo `recipientFor` devolve null, e a guarda `no_recipient` MATA a
+    // linha antes de qualquer emissao -- o relatorio volta
+    // `{ failedPermanent: 1, reasons: { no_recipient: 1 } }`, e nao `no_body`.
+    // A guarda continua escrita porque o dia em que um `kind` de organizador
+    // passar a pedir link (o destino dele nao depende do resumo) ela e o que
+    // sobra.
     const verificationLink =
       kindNeedsVerificationLink(kind) && regId
         ? await emitirLinkDeVerificacao(store, regId, decision.siteUrl)

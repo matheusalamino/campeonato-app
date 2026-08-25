@@ -55,10 +55,13 @@ export type RenderInput = {
    * emite e `store.issueVerificationToken`, chamado pelo dreno depois de as
    * guardas dizerem que envia -- ver `emitirLinkDeVerificacao` em outbox.ts.
    *
-   * Nulo em tres situacoes, e nenhuma e defeito: `kind` que nao pede link (todos
-   * menos `registration_committed`), inscricao ja verificada, e inscricao sem
-   * `contact_email`. Nos tres o comprovante sai inteiro, so sem o bloco do
-   * convite.
+   * Nulo sempre que nao ha link a oferecer, e nenhum dos casos e defeito. Os
+   * conhecidos hoje, sem promessa de ser lista fechada: `kind` que nao pede link
+   * (todos menos `registration_committed`), inscricao ja verificada, inscricao
+   * sem `contact_email`, linha sem `registration_id` no payload, e inscricao que
+   * sumiu depois de a linha entrar na fila (nao ha FK entre `email_outbox` e
+   * `championship_registrations`). Em todos, o comprovante sai inteiro -- so sem
+   * o bloco do convite.
    */
   verificationLink: string | null;
 };

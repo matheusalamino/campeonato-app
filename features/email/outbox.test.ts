@@ -935,9 +935,14 @@ describe("drainOutbox", () => {
   // ───────────────────────────────────────────────────────────────────────────
 
   it("monta o link com o token emitido, na base de link do envio", async () => {
-    // A fiacao inteira, de uma vez: pede o token PARA A INSCRICAO DA LINHA,
-    // monta o caminho `/verify-email/<claro>` sobre a base que a decisao de
-    // envio devolveu, e entrega isso ao render.
+    // A fiacao, num lote de UMA linha: monta o caminho `/verify-email/<claro>`
+    // sobre a base que a decisao de envio devolveu, e entrega isso ao render.
+    //
+    // Com uma linha so, este cenario NAO distingue "o token desta inscricao" de
+    // "o token de qualquer uma" -- e esta frase ja prometia que sim. Quem
+    // discrimina isso e `da a cada inscricao o link da SUA inscricao`, logo
+    // abaixo, com duas inscricoes distintas. MEDIDO: emitir sempre o token da
+    // primeira do lote deixava ESTE cenario verde.
     //
     // Trocar `decision.siteUrl` por outra string aqui manda todo mundo para o
     // ambiente errado, e o `tsc` nao ve: sao duas strings.
@@ -991,9 +996,14 @@ describe("drainOutbox", () => {
     expect(registro.renderizados[1].verificationLink).not.toContain("TOKEN-DE-A");
   });
 
-  it("SO o comprovante pede token; o aviso da organizacao nao", async () => {
+  it("no par comprovante/aviso, so o comprovante pede token", async () => {
     // Um token gasto pelo aviso interno nao e desperdicio: ele MATA o link que
     // o jogador acabou de receber, porque o banco guarda um hash por inscricao.
+    //
+    // O nome deste cenario dizia "SO o comprovante", e o corpo exercita DOIS dos
+    // sete kinds. Quem varre os sete e `kindNeedsVerificationLink`, em
+    // verification.test.ts (`so o comprovante pede token`), que filtra
+    // `EMAIL_KINDS` inteiro. Aqui o que se prende e o par passando pelo DRENO.
     const comprovante = linha({ id: "a", kind: "registration_committed", dedupeKey: "reg-1" });
     const aviso = linha({ id: "b", kind: "organizer_new_registration", dedupeKey: "reg-1" });
     const { store, registro } = fakeStore([comprovante, aviso], {
@@ -1033,8 +1043,15 @@ describe("drainOutbox", () => {
     // nada no lugar. O e-mail antigo passaria a levar a "este link nao vale
     // mais", sem que ninguem tivesse feito nada.
     //
-    // As tres condicoes de ADIAR, uma a uma: elas fazem a linha voltar para a
-    // fila sem chamar o render, e portanto sem emitir.
+    // Tres das QUATRO condicoes de adiar, uma a uma: elas fazem a linha voltar
+    // para a fila sem chamar o render, e portanto sem emitir.
+    //
+    // A quarta -- `no_body`, template faltando -- fica de fora por construcao, e
+    // nao por esquecimento: ela so e descoberta DEPOIS do render, e o render so
+    // roda depois da emissao. Quer dizer que `no_body` adia uma linha cujo token
+    // JA foi gasto. Nao ha defeito nisso hoje (os dois kinds enfileirados tem
+    // template), mas o dia em que houver, a linha volta para a fila com o link
+    // anterior ja morto -- e o proximo disparo emite outro.
     for (const [nome, over] of [
       ["sabado", {}],
       ["cota", {}],

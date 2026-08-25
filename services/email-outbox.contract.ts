@@ -811,9 +811,14 @@ describe("markFailedPermanent", () => {
  * suite principal). O que resta no servico e a ORDEM -- ler a inscricao,
  * decidir, sortear, gravar -- e uma ordem so se prova contra o banco.
  *
- * Os quatro cenarios abaixo cobrem exatamente os quatro caminhos daquele
- * metodo, e o segundo (`emitir duas vezes troca o hash`) e o que transforma a
+ * Os CINCO cenarios abaixo cobrem os cinco caminhos daquele metodo -- emitir,
+ * reemitir, ja verificada, sem `contact_email`, e inscricao que nao existe --, e
+ * o segundo (`emitir duas vezes troca o hash`) e o que transforma a
  * consequencia mais cara em coisa PROVADA em vez de suposta.
+ *
+ * (Esta frase ja disse "os quatro", contando os cenarios pela lista do plano em
+ * vez de pelos que estao escritos abaixo. O commit `4f3f94d` carrega o mesmo
+ * erro na mensagem, e mensagem de commit nao se reescreve.)
  */
 describe("issueVerificationToken", () => {
   /** A linha da inscricao, crua. `select("*")` de proposito: o que estes
@@ -963,10 +968,18 @@ describe("issueVerificationToken", () => {
  * `verify_registration_email` (migration 20260824010000), chamada direto.
  *
  * Ela nao e metodo do store -- quem a chama e
- * `app/(public)/verify-email/[token]/actions.ts` --, e esta e a unica suite
- * deste repo que fala com o Postgres local. Sem estes cenarios, a propriedade
- * central da funcao (as duas gravacoes caem JUNTAS) nao teria prova nenhuma:
- * `app/**` esta fora de todo `include`.
+ * `app/(public)/verify-email/[token]/actions.ts` --, e esta e a unica suite de
+ * VITEST que fala com o Postgres local. (Nao e o unico portao que fala: os dois
+ * scripts de `scripts/` conversam com o mesmo banco por `psql` e por PostgREST.
+ * Esta frase ja disse "a unica suite deste repo", que os desmente.)
+ *
+ * O que estes cenarios provam e que as duas gravacoes ACONTECEM, e que a
+ * segunda alcanca so o jogador desta inscricao. NAO provam a atomicidade: para
+ * isso seria preciso forcar a segunda a falhar com a primeira ja feita, e nao ha
+ * como injetar essa falha por este caminho. A atomicidade vem do PostgreSQL --
+ * as duas rodam dentro da mesma funcao, e uma excecao desfaz as duas --, e quem
+ * a garante e o banco, nao uma assertiva escrita aqui. Sem estes cenarios, nem o
+ * ACONTECEM teria prova: `app/**` esta fora de todo `include`.
  */
 describe("verify_registration_email", () => {
   async function verificar(hash: string | null): Promise<string> {

@@ -15,10 +15,11 @@ import { createHash, randomBytes } from "node:crypto";
  * features/email/outbox.ts), e o valor em claro entra no `RenderInput` ja
  * montado como link.
  *
- * ── AS DUAS FUNCOES DAQUI SAO PURAS DE PROPOSITO ──
+ * ── AS TRES FUNCOES DAQUI SAO PURAS DE PROPOSITO ──
  *
  * Sem `process.env`, sem relogio, sem I/O. `createVerificationToken` le o CSPRNG
- * do node e nada mais; `hashToken` e determinismo puro. E o que torna a mutacao
+ * do node e nada mais; `hashToken` e `verificationTokenFrom` sao determinismo
+ * puro. E o que torna a mutacao
  * possivel: uma funcao que lesse o ambiente daria resultado diferente conforme a
  * maquina, e ai um vermelho nao provaria nada sobre o codigo.
  */

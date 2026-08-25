@@ -132,7 +132,7 @@ describe("o select do resumo, nos dois lugares onde ele existe", () => {
     // Seis das oito juntas NUAS da varredura estavam em seis dos OITO metodos
     // que `OutboxStore` declarava ENTAO -- os seis que carregam traducao. Hoje
     // sao nove, e o nono (`issueVerificationToken`) tambem delega: a lista
-    // abaixo cobre as duas traducoes dele. `services/**` nao e coletado pelo
+    // abaixo cobre as TRES delegacoes dele -- o sorteio, a regra e as colunas. `services/**` nao e coletado pelo
     // vitest, entao traducao escrita la nasce sem portao.
     //
     // O que NAO se conclui dai: que o `include` seja a causa. A T5b mediu
