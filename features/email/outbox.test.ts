@@ -95,6 +95,81 @@ describe("startOfUtcDay", () => {
       "2026-08-24T00:00:00.000Z",
     );
   });
+
+  /**
+   * ── A UTC-IDADE, QUE E O PONTO DA FUNCAO, E QUE NAO TINHA REDE ──
+   *
+   * O docblock de `startOfUtcDay` chama a ancoragem em UTC de load-bearing: o
+   * teto de 300/dia do Brevo vira em UTC, e nao no fuso do campeonato. MEDIDO:
+   * trocar `Date.UTC(at.getUTCFullYear(), ...)` por
+   * `new Date(at.getFullYear(), ...)` deixava os CINCO portoes verdes.
+   *
+   * E o caminho obvio de asseverar isso nao funciona: `vitest.config.ts` fixa
+   * `env: { TZ: "UTC" }`, e com o fuso do processo em UTC o local e o UTC sao a
+   * MESMA coisa -- o certo e o defeituoso devolvem identico. Rodar
+   * `TZ=America/Sao_Paulo npx vitest` tambem nao adianta: o config sobrescreve.
+   *
+   * Entao o fuso e trocado AQUI DENTRO, e devolvido no `finally`. Nao e truque:
+   * e a unica forma de a assertiva enxergar a diferenca que ela existe para
+   * medir, sem tirar o `TZ` fixo do config -- que serve a outra cicatriz
+   * (lib/datetime-br.ts).
+   */
+  describe("ancora o dia em UTC, e nao no fuso do processo", () => {
+    function comFuso(tz: string, corpo: () => void): void {
+      const original = process.env.TZ;
+      try {
+        process.env.TZ = tz;
+        corpo();
+      } finally {
+        // Devolver SEMPRE: o worker do vitest e reaproveitado entre arquivos, e
+        // um fuso vazado daqui iria contaminar assertiva de outra pessoa.
+        process.env.TZ = original;
+      }
+    }
+
+    it("atras de UTC: o instante que ainda e ontem no fuso local", () => {
+      comFuso("America/Sao_Paulo", () => {
+        const at = new Date("2026-08-24T02:00:00.000Z");
+
+        // SENTINELA, e ela e obrigatoria. Se a troca de fuso em runtime parar
+        // de funcionar -- outro Node, outra plataforma --, local volta a ser
+        // igual a UTC e a assertiva de baixo passaria com o codigo DEFEITUOSO,
+        // silenciosamente. Esta linha faz esse dia virar vermelho em vez de
+        // virar cobertura falsa.
+        expect(
+          at.getDate(),
+          "a troca de TZ em runtime nao teve efeito: com o fuso local igual a " +
+            "UTC, a assertiva abaixo NAO distingue Date.UTC de new Date(local) " +
+            "e esta rede morreria vazia. Confira o suporte do Node a " +
+            "process.env.TZ nesta plataforma.",
+        ).toBe(23);
+
+        expect(startOfUtcDay(at).toISOString()).toBe("2026-08-24T00:00:00.000Z");
+      });
+    });
+
+    it("a frente de UTC: o instante que ja e amanha no fuso local", () => {
+      // Os dois lados, porque um so nao prende a direcao: um defeito que
+      // somasse o deslocamento em vez de ignora-lo passaria por metade.
+      comFuso("Asia/Tokyo", () => {
+        const at = new Date("2026-08-24T20:00:00.000Z");
+
+        expect(at.getDate(), "a troca de TZ em runtime nao teve efeito").toBe(25);
+
+        expect(startOfUtcDay(at).toISOString()).toBe("2026-08-24T00:00:00.000Z");
+      });
+    });
+
+    it("devolve o fuso ao sair, para nao contaminar quem roda depois", () => {
+      const antes = process.env.TZ;
+      comFuso("Asia/Tokyo", () => {
+        expect(process.env.TZ).toBe("Asia/Tokyo");
+      });
+      expect(process.env.TZ).toBe(antes);
+      // E o efeito de verdade voltou junto, nao so a variavel.
+      expect(new Date("2026-08-24T20:00:00.000Z").getUTCDate()).toBe(24);
+    });
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
