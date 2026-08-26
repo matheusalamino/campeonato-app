@@ -1,0 +1,77 @@
+# Os portoes que este repo tinha e nunca cobrava numa PR.
+#
+# Antes deste arquivo, `.github/workflows/` tinha SO o `migrate.yml`: a suite
+# inteira, o typecheck e os scripts de banco s'o rodavam se alguem os rodasse a
+# mao. A PR #84 (bloco C1, 61 commits) subiu com dois checks, os dois da Vercel.
+#
+# ── O QUE ENTRA AQUI, E O QUE FICA DE FORA DE PROPOSITO ──────────────────────
+#
+# ENTRA o que e deterministico e nao depende de banco: a suite do vitest e o
+# `tsc`. Sao 1002 testes em 82 arquivos na data deste arquivo, e eles nao tocam
+# rede nem Postgres por DESENHO -- o `vitest.config.ts` inclui `lib/**`,
+# `features/**` e `scripts/**`, e o teste que fala com o banco vive numa config
+# separada (`vitest.contract.config.ts`), fora do `include` desta.
+#
+# NAO entra `npm run lint`. O repo tem 119 problemas pre-existentes (45 erros,
+# 74 avisos, medido em 2026-08-23), entao um job de lint nasceria vermelho e
+# seria ignorado no mesmo dia. Portao ignorado e pior que portao nenhum.
+#
+# NAO entram os tres portoes que precisam de Postgres vivo:
+#
+#   npx vitest run --config vitest.contract.config.ts   (26 cenarios)
+#   sh scripts/test-email-outbox.sh                     (62 assertivas)
+#   sh scripts/test-registration-slots.sh               (82 assertivas)
+#
+# E o motivo NAO e o custo de subir o Supabase no CI. E o RELOGIO:
+# `reserve_registration_slot` e `commit_registration` chamam `is_sabbath(now())`
+# e nao tem relogio injetavel, entao do por do sol de sexta ao de sabado essas
+# suites falham por DESENHO -- esta escrito no cabecalho do proprio
+# `test-registration-slots.sh`, com a medicao. Um portao vermelho 24 horas por
+# semana ensina todo mundo a ignorar o vermelho, e ai ele deixa de proteger nas
+# outras 144.
+#
+# O caminho para traze-los para ca NAO e mexer neste arquivo: e dar relogio
+# injetavel aquelas duas RPCs. Enquanto isso nao existir, eles seguem sendo
+# portao LOCAL, e quem abre PR do bloco de inscricao roda os tres a mao.
+name: Testes
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop
+      - main
+
+# Uma PR empurrada tres vezes em um minuto nao precisa de tres execucoes: a
+# ultima e a unica que diz algo sobre o que sera mergeado.
+concurrency:
+  group: testes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: Suite e typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # `npm ci` e nao `npm install`: ele obedece ao package-lock e falha se o
+      # lock estiver fora de sincronia com o package.json, o que e uma coisa a
+      # menos para descobrir em producao.
+      - name: Instalar dependencias
+        run: npm ci
+
+      # O typecheck vem ANTES da suite de proposito. O vitest NAO typecheca --
+      # ele transpila e roda --, entao um erro de tipo passa verde por ali e so
+      # aparece no `next build`. Rodando primeiro, o vermelho aponta para a
+      # causa mais barata de consertar.
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Suite
+        run: npm test
