@@ -10,8 +10,17 @@ import { normalizePreferredPosition } from "@/features/players/position";
  * `vitest.config.ts`, no comentario do `include`). Fora do hook a funcao e
  * pura, e a fronteira passa a ter teste de verdade em vez de leitura de texto.
  *
- * Esta e a UNICA fronteira do app onde dado nao-tipado vira `CanonicalPosition`:
- * `r` chega como `any` do Supabase. Por isso a posicao passa por
+ * Aqui `r` chega como `any` do Supabase, e a posicao vira `CanonicalPosition`.
+ *
+ * ⚠️ Esta NAO e a unica fronteira do app que faz essa conversao -- uma versao
+ * anterior deste comentario dizia que era. MEDIDO em 2026-08-26, chamadores de
+ * `normalizePreferredPosition` em producao: este mapeador, `lib/public/types.ts`
+ * (o rotulo), `EditPlayerForm.tsx`, o `RegistrationWizard.tsx` (em dois pontos)
+ * e `app/api/import-players/route.ts` (em dois pontos) -- e a importacao de CSV
+ * e a que recebe o dado MENOS tipado de todos, porque `row["Posicao"]` e celula
+ * arbitraria de planilha.
+ *
+ * O que vale para todas, e e a razao de existir esta linha: Por isso a posicao passa por
  * `normalizePreferredPosition` em vez de ser copiada: e o que troca PROMESSA ao
  * compilador por GARANTIA de runtime.
  *

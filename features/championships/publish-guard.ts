@@ -10,14 +10,36 @@
  * capacidade que tiver.
  *
  * O que a linha precisa ter e derivado do que as duas RPCs LEEM, e nao da regra
- * do formulario. `reserve_registration_slot` (20260819040000) e
- * `commit_registration` (20260819050000) abrem com o mesmo SELECT:
+ * do formulario.
+ *
+ * ⚠️ ATUALIZADO em 2026-08-26. Este bloco descrevia as versoes de
+ * 20260819040000 / 20260819050000 e dizia "cinco colunas, e so estas. Nada de
+ * `teams_count`, `players_per_team`". **O A6 substituiu as duas funcoes** e a
+ * frase virou falsa sem ninguem editar a linha. MEDIDO no catalogo, as vivas
+ * (20260820030000 e 20260820040000) leem DEZ:
  *
  *   status, max_players, max_waitlist_players,
- *   registration_start_date, registration_end_date
+ *   registration_start_date, registration_end_date,
+ *   teams_count, players_per_team, goalkeepers_per_team,
+ *   waitlist_goalkeepers, waitlist_outfield
  *
- * Cinco colunas, e so estas. Nada de `teams_count`, `players_per_team`,
- * `gala_night_date` ou `tournament_start_date`.
+ * ── E POR QUE ESTE GUARDA CONTINUA CERTO OLHANDO SO `max_players` ───────────
+ *
+ * Porque a capacidade derivada do formato **so morde quando o formato esta
+ * preenchido**. As duas RPCs fazem
+ *
+ *   v_cap_total   := coalesce(v_teams, 0) * coalesce(v_per_team, 0);
+ *   v_quota_binds := v_cap_total > 0;
+ *
+ * entao com `teams_count` nulo a cota simplesmente NAO VALE, e quem governa
+ * volta a ser `max_players` / `max_waitlist_players` -- exatamente o que esta
+ * funcao confere. MEDIDO em BEGIN … ROLLBACK, com `max_players = 80` (o guarda
+ * aprova) e `teams_count = NULL`: a reserva foi CONCEDIDA, igual ao controle com
+ * o formato preenchido. Ou seja, a lista de colunas envelheceu; a conclusao do
+ * guarda, nao.
+ *
+ * Segue de fora, e a frase vale: nada de `gala_night_date` ou
+ * `tournament_start_date`.
  *
  * MEDIDO no banco local em 2026-08-23, o campeonato do seed movido a
  * `subscribing` dentro de um BEGIN … ROLLBACK:

@@ -52,9 +52,22 @@ export type RankingEntry = {
 };
 
 /**
- * Codigo -> palavra por extenso. O UNICO conversor de exibicao do app: e daqui
- * que as telas publicas, os formularios do admin e o wizard de inscricao tiram
- * a palavra que o usuario le.
+ * Codigo -> palavra por extenso, para posicao de JOGADOR: e daqui que as telas
+ * publicas, os formularios do admin e o wizard de inscricao tiram a palavra que
+ * o usuario le.
+ *
+ * ⚠️ NAO e o unico conversor de exibicao do app -- uma versao anterior desta
+ * frase dizia que era, e o proprio arquivo a desmentia oitenta linhas abaixo, ao
+ * nomear o irmao. MEDIDO em 2026-08-26:
+ *
+ *   `potLabel` (features/draft/pot-position.ts) converte posicao de POTE, cujo
+ *   vocabulario inclui `EXT` e por isso nao cabe neste mapa -- o motivo esta
+ *   escrito la, e e o mesmo que separa os dois desde o A8;
+ *
+ *   e cinco telas indexam `POSITION_LABELS[...]` DIRETO, sem passar por esta
+ *   funcao (PlayerForm, EditPlayerForm x2, RegistrationWizard x2). Elas podem:
+ *   ja tem o codigo estreitado em maos, e o `??` desta funcao existe para o caso
+ *   contrario -- quando o valor vem `string` e pode nao ser codigo nenhum.
  *
  * Tipado por `CanonicalPosition`, e nao por `string`, e a diferenca e o que o
  * `tsc` pega: com `Record<string, string>` um codigo novo sem rotulo COMPILAVA
